@@ -123,6 +123,10 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
   messages.test.js                jede messageId aus §6/§7 hat einen deutschen Text, keine Waisen
   url.test.js                     Trailing Slash, /index.php, http abgelehnt
   credentials.test.js             basic_text -> nicht persistieren, Keyring -> Base64-Blob
+  skeleton.test.js                S01-Gerüstfakten: package.json (type/main/scripts/gepinnte
+                                  electron-Version/keine Extra-devDeps), vite base './',
+                                  relative Asset-Pfade im Build, Preload exponiert nur
+                                  appVersion ohne Channel-Durchgriff, src/shared/ fehlt
   mainWindow.test.js              BROWSER_WINDOW_OPTIONS: contextIsolation/sandbox/nodeIntegration
   ocsClient.test.js               gemockte fetch: 100/401/403/429/HTML/Netzfehler, Header-Pflicht
   ocsUsers.test.js                endpunktspezifische Codes -> messageId, user.update 1-2 Schritte

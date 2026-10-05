@@ -26,12 +26,13 @@ größte Korrektheitsverpflichtung des Ziels ist und vollständig spezifiziert v
 ## Hinweise zur Umsetzung
 
 - **Elektron-Version:** `>= 28` ist die Untergrenze (ESM im Main-Prozess). Der Coder pinnt in S01
-  die aktuelle stabile Major-Version exakt und trägt sie hier ein: _(offen bis S01)_
+  die aktuelle stabile Major-Version exakt und trägt sie hier ein: `44.5.1`
 - **S01 versteckte Abhängigkeiten** (vom Gate benannt, nicht übersehen): ESM-Main hat kein
   `__dirname` — Preload-Pfad und `dist/renderer/index.html` über `import.meta.url` auflösen;
-  `base: './'` in `vite.config.js`, sonst bleibt das gepackte Fenster weiß; SweetAlert2 muss
-  schon installiert sein, weil `renderer/main.js` es importiert; `mainWindow.test.js` braucht
-  einen `electron`-Modul-Mock und muss einen absoluten Preload-Pfad tolerieren.
+  `base: './'` in `vite.config.js`, sonst bleibt das gepackte Fenster weiß; von SweetAlert2 wird
+  in S01 nur das CSS importiert (ein unbenutzter Modulimport bricht `npm run lint`);
+  `mainWindow.test.js` importiert `src/main/windowOptions.js` **direkt, ohne `electron`-Mock**,
+  und muss einen absoluten Preload-Pfad tolerieren.
 - **Preload ist CommonJS** (`src/preload/index.cjs`), weil `sandbox: true` keine ESM-Preloads
   erlaubt. Rest ESM mit `"type": "module"` plus ESLint-Override für diese eine Datei.
 - Die Schrittliste in `docs/SPEC-CRITIQUE.md` ist **veraltet** (nennt `groups.members` und ein
