@@ -1,634 +1,520 @@
-# Architektur: Nextcloud User Manager
+# Architektur
 
-Stand 2026-10-05. Bindend für Coder und Reviewer. Grundlage: `GOAL.md`, `DECISIONS.md`,
-`RESEARCH-OCS.md`, `RESEARCH-UPN.md`, `REVIEW-NOTES.md`.
+Stand 2026-10-05. Bindend für Coder und Reviewer. Quellen: `CLAUDE.md`, `docs/GOAL.md`,
+`docs/DECISIONS.md` (hat Vorrang bei Widersprüchen), `docs/RESEARCH-OCS.md`,
+`docs/RESEARCH-UPN.md`, `docs/SPEC-CRITIQUE.md`, `docs/REVIEW-NOTES.md`.
 
 ## 1. Überblick
 
-Electron-App mit drei Prozessrollen: Main (alle I/O: HTTP, Dateien, safeStorage), Preload
-(schmale, aufgezählte contextBridge-API), Renderer (Vue 3, nur UI + Zustand im Speicher).
-Netzwerk, Secrets und Persistenz liegen ausschließlich im Main-Prozess.
-Die gesamte Fachlogik ohne I/O (Username-Generierung, CSV, Validierung, Quota-Parsing,
-Passwortbildung, Batch-/Import-Pläne, OCS-Fehlertexte) liegt in `src/shared/` und wird
-direkt mit Vitest getestet — ohne Electron, ohne HTTP.
-Es gibt keinen Router, keinen Store und keine Komponenten-Bibliothek: eine `App.vue` schaltet
-zwischen sechs Views, Zustand hält je ein Composable pro Domäne.
-Einzige bewusste Abstraktion: `users-list-adapter.js` (Bulk-Details mit Fallback auf
-Einzelabfragen, laut DECISIONS.md "Abruf der Userliste").
-IPC ist ein fester Vertrag (Abschnitt 4), jeder Aufruf liefert `{ ok, data }` oder
-`{ ok: false, error }` — über die IPC-Grenze wird nie geworfen.
+Drei Prozesse, kein Framework dazwischen. Der **Renderer** (Vue 3, Vite) hält die geladene
+Userliste im Speicher, rechnet Vorschauen und Vorschläge mit **puren Modulen** (`src/shared/`)
+und ruft über eine **namentlich aufgelistete Preload-API** den **Main-Prozess**. Nur Main spricht
+HTTP (Node-`fetch`), kennt das App-Passwort und greift auf das Dateisystem zu.
+Alle Mengenoperationen — auch Einzel-User-Aktionen und der CSV-Import — laufen durch *eine*
+Action-Pipeline mit fester Parallelität 4. Es gibt keinen Store, keinen Router, keine
+Persistenzschicht, keine Queue-Klasse, kein Event-Bus, keine State Machine.
+Neue Laufzeit-Abhängigkeiten gegenüber `CLAUDE.md`: **keine**.
 
-## 2. Verzeichnisbaum
+## 2. Verzeichnisstruktur
 
 ```
-package.json                     Deps + Scripts dev/test/lint/build, "type": "module"
-vite.config.js                   Renderer-Build (root src/renderer, base './', outDir dist/renderer)
-vitest.config.js                 Testumgebung node, include tests/**/*.test.js
-eslint.config.js                 Flat Config: js + vue, ESM, Node/Browser-Globals getrennt
-electron-builder.yml             Linux-Target (AppImage), Dateien dist/ + src/main + src/preload
-.gitignore                       node_modules, dist, release, *.log
-scripts/dev.js                   startet Vite-Dev-Server und Electron, setzt VITE_DEV_SERVER_URL
-docs/                            GOAL, DECISIONS, RESEARCH-*, REVIEW-NOTES, ARCHITECTURE, PLAN
+package.json                      scripts: dev, test, lint, build (Namen exakt wie CLAUDE.md)
+vite.config.js                    Renderer-Build, root = src/renderer, out = dist/renderer
+electron-builder.yml              Linux-Target (AppImage) für npm run build
+eslint.config.js                  Flat config, ESM
+vitest.config.js                  Umgebung node, Tests aus tests/
 
 src/main/
-  index.js                       app-Lifecycle, BrowserWindow mit Security-Flags, Laden des Renderers
-  ipc.js                         einziger Ort mit ipcMain.handle: registriert alle Kanäle aus Abschnitt 4
-  session.js                     In-Memory-Verbindung (baseUrl, adminUser, Passwort) für die Laufzeit
-  credentials.js                 safeStorage-Prüfung, Verschlüsseln/Entschlüsseln, credentials.json
-  store.js                       atomares Lesen/Schreiben der JSON-Dateien in userData
-  logger.js                      Level-Logger auf stdout + userData/app.log, mit Redaction
-  files.js                       Datei-Dialoge (CSV öffnen/speichern) über dialog + fs
-  ocs/client.js                  fetch-Wrapper: Basic Auth, OCS-Header, Envelope-Parsing, 429-Backoff
-  ocs/users.js                   User-Endpunkte, jeder mit endpunkt-spezifischem Fehler-Mapping
-  ocs/groups.js                  Gruppen-Endpunkte, dito
-  ocs/users-list-adapter.js      GET /cloud/users/details mit Fallback auf IDs + Einzelabfragen
-  batch/runner.js                Job-Ausführung: Parallelität 5, Fortschritt, Abbruch, Teilfehler
-  batch/operations.js            Operation-Typ -> ein API-Call pro User (reine Zuordnung, kein Loop)
-  import/service.js              Import-Orchestrierung: Vorschau bauen, User anlegen, Ergebnis liefern
+  index.js                        app-Bootstrap, BrowserWindow (contextIsolation/sandbox an,
+                                  nodeIntegration aus), single-instance, lädt ipc.js und tls.js
+  ipc.js                          EINZIGER Ort mit ipcMain.handle/on; registriert die Kanäle aus §3
+  session.js                      Sitzungszustand im Speicher: Credentials, userListMode-Memo,
+                                  Zertifikatsausnahme, Stop-Flags je jobId. Keine Platte
+  credentials.js                  safeStorage-Backendprüfung + JSON-Datei in app.getPath('userData')
+  tls.js                          certificate-error-Handler, Fingerprint, Ausnahme-Freigabe
+  log.js                          dbg(string) — no-op wenn app.isPackaged; nimmt nur Strings
+  files.js                        dialog.showOpenDialog/showSaveDialog + Lesen/Schreiben von CSV
+  ocs/client.js                   Request-Builder (Basic Auth, OCS-APIRequest, format=json),
+                                  Envelope-Unwrap, Result-Typ, Retry/Backoff
+  ocs/errors.js                   mapOcsError(result, endpointMap, fallbackId) — nimmt die Map mit
+  ocs/connection.js               testConnection(): /cloud/users?limit=1 + Fehlerklassifikation
+  ocs/users.js                    User-Endpunkte, jede Funktion mit EIGENER Fehlercode-Map
+  ocs/groups.js                   Gruppen-Endpunkte, jede Funktion mit EIGENER Fehlercode-Map
+  ocs/userList.js                 users/details-Probe, Session-Memo, N+1-Fallback mit Fortschritt
+  actions/pipeline.js             runJob(): Pool 4, Stop-Flag, Fortschritts-Events, Ergebnisliste
+  actions/operations.js           Action-ID -> OCS-Aufrufe (ein bis zwei Schritte je Item)
 
-src/shared/                      reine Logik, keine Imports aus electron/node:fs/fetch
-  constants.js                   BATCH_CONCURRENCY=5, MAX_USERNAME_LENGTH=64, QUOTA_WARN_RATIO=0.9, u.a.
-  username.js                    Normalisierung + Zusammensetzung + Kürzung + Kollisionssuffix
-  csv-parse.js                   Delimiter-Erkennung, Zeilen-/Quote-Parsing, Import- und Usernamen-Listen
-  csv-export.js                  Zeilen -> CSV-Text (BOM, Quoting), Reportformate für Batch und Import
-  validate.js                    Server-URL, Geburtsdatum, E-Mail, Anzeigename, Nextcloud-Usernamen
-  quota.js                       defensives Quota-Parsing, Formatierung, Summen, 90-%-Prüfung
-  password.js                    Initialpasswort bilden, Mindest-Policy prüfen
-  import-plan.js                 CSV-Zeilen + bestehende User -> Vorschauzeilen mit Status
-  batch-plan.js                  Dry-Run-Plan, Ergebnis-Aggregation, Bestätigungsregeln
-  ocs-errors.js                  je Endpunkt eine Funktion statuscode/HTTP -> deutsche Meldung
+src/preload/
+  index.js                        contextBridge.exposeInMainWorld('api', { ...explizite Methoden })
 
-src/preload/index.cjs            contextBridge.exposeInMainWorld('api', ...), CJS wegen sandbox:true
+src/shared/                       PURE MODULE: kein import von node:*, electron, fetch, fs
+  username.js                     normalizeComponent, buildUsername, normalizeOrder (1:1-Port)
+  usernameRules.js                Zeichensatz, reservierte Namen, Länge 64, Nachnamen-Kürzung
+  birthdate.js                    parseBirthdate -> ddmmyyyy, Kalenderprüfung, Zukunftsprüfung
+  password.js                     validatePrefix, buildInitialPassword, checkMinLength
+  csvImport.js                    Import-CSV (Vorname;Nachname;Geburtsdatum) -> Zeilen + Fehler
+  csvUserList.js                  Username-Liste (ein Name je Zeile, optionaler Header) -> IDs
+  importPlan.js                   Stufen 10-16 aus §6: Zeilen -> Vorschauzeilen mit Status
+  quota.js                        defensiver Quota-Reader + Presets + formatQuotaForApi
+  pool.js                         runPool(items, worker, { concurrency, shouldStop })
+  dryRun.js                       planActions(): Änderungen / keine Änderung / ausgeschlossen
+  resultCsv.js                    Ergebniszeilen -> CSV-Text (fixe Spalten aus §5)
+  userView.js                     Normalisierung Roh-OCS-User -> Renderer-Shape (§4)
+  filters.js                      Suche, Filter, Sortierung (localeCompare 'de'), fastVoll-Liste
+  url.js                          normalizeBaseUrl: https erzwingen, Pfad säubern
+  messages.js                     messageId -> deutscher Text (einzige UI-Textquelle)
 
 src/renderer/
-  index.html                     Vite-Entry, CSP-Meta, lädt main.js
-  main.js                        createApp(App).mount, importiert theme.css und swal2-CSS
-  App.vue                        Layout: Sidebar + aktive View, globaler Verbindungsbanner
-  styles/theme.css               Dark-Theme-Variablen, Tabellen-/Formular-/swal2-Overrides
-  lib/api.js                     dünner Zugriff auf window.api + Fehler-zu-swal2-Helfer
-  lib/confirm.js                 swal2-Presets: confirm, warn, countConfirm, toast (dark)
-  lib/format.js                  Anzeige-Formatierung (Bytes, Datum, Prozent) für Templates
-  composables/useConnection.js   Verbindungsstatus, Test, Speichern, safeStorage-Warnung
-  composables/useUsers.js        Userliste laden, Suche/Filter/Sortierung/Auswahl, Einzel-CRUD
-  composables/useGroups.js       Gruppenliste, Mitglieder, Anlegen/Löschen/Zuordnen
-  composables/useBatch.js        Dry-Run, Start, Fortschritts-Listener, Abbruch, Report-Export
-  composables/useImport.js       CSV wählen, Vorschau, Import starten, Ergebnis-Export
-  composables/useDashboard.js    Kennzahlen, "fast voll"-Liste, Job-Historie
-  views/ConnectionView.vue       URL/Admin/App-Passwort, "Verbindung testen", Speichern
-  views/DashboardView.vue        StatCards, "fast voll"-Tabelle, letzte Batch-Jobs
-  views/UsersView.vue            Usertabelle mit Such-/Filterleiste, Mehrfachauswahl, Einzelaktionen
-  views/GroupsView.vue           Gruppenliste + Mitgliederpanel
-  views/BatchView.vue            Zielauswahl, Operationsformular, Vorschau, Fortschritt, Report
-  views/ImportView.vue           CSV-Auswahl, Importoptionen, Vorschautabelle, Ergebnis
-  components/NavSidebar.vue      Navigation zwischen den Views + Verbindungsanzeige
-  components/StatCard.vue        einzelne Dashboard-Kennzahl
-  components/DataTable.vue       generische Tabelle: Spalten, Sortierung, Auswahl-Checkboxen
-  components/UserFormDialog.vue  Formular für Anlegen/Bearbeiten eines Users
-  components/QuotaField.vue      Quota-Eingabe (Presets + Freitext + "unbegrenzt")
-  components/PreviewTable.vue    Dry-Run-/Import-Vorschau mit Statusfarben
-  components/ProgressPanel.vue   Fortschrittsbalken, ok/Fehler-Zähler, Abbrechen-Button
-  components/ResultReport.vue    Ergebnisliste pro User + CSV-Export-Button
+  index.html                      Einstiegspunkt Vite
+  main.js                         createApp, importiert theme.css und SweetAlert2
+  App.vue                         dunkle Shell, Sidebar, Zertifikats-Banner, aktive View
+  state.js                        reaktive refs: connection, users, groups, jobs(5), ladezustände
+  styles/theme.css                Dark-Theme-Tokens, kein Light-Pfad
+  views/ConnectView.vue           Server-URL, Admin, App-Passwort, Verbindung testen
+  views/DashboardView.vue         vier Speicherwerte, Userzahlen, fast-voll-Liste, Jobverlauf
+  views/UsersView.vue             Tabelle, Suche/Filter/Sortierung, Mehrfachauswahl, Aktionsleiste
+  views/GroupsView.vue            Gruppen anlegen/löschen, Mitglieder, User zu/ab
+  views/ImportView.vue            CSV wählen, Optionen, Vorschautabelle, Anlegen, Export
+  components/UserTable.vue        Tabelle inkl. "alle auswählen" = aktuelles Filterergebnis
+  components/ActionBar.vue        Aktionsauswahl, Dry-Run-Aufruf, Bestätigungen (swal2)
+  components/JobProgress.vue      Fortschritt, Abbrechen, Ergebnisbericht, CSV-Export
+  components/StateBlock.vue       Loading / Empty / Error für Tabelle, Gruppen, Dashboard
+  components/QuotaCell.vue        Anzeige aus quota.js-Output, nie aus Rohdaten
 
 tests/
-  username.test.js               Testtabelle aus RESEARCH-UPN Abschnitt 11 + Kürzung + Kollision
-  csv-parse.test.js              Delimiter, Quotes, BOM, CRLF, Header-Mapping, Fehlerzeilen
-  csv-export.test.js             Quoting, Trennzeichen, Report-Spalten
-  validate.test.js               URL-Normalisierung, beide Datumsformate, Nextcloud-Usernamen
-  quota.test.js                  "none"/-3/null/fehlend/Skalar/Objekt, Summen, 90-%-Grenze
-  password.test.js               Passwortbildung und Policy
-  import-plan.test.js            neu/Kollision/gekürzt/Fehler, dateiinterne + serverseitige Kollisionen
-  batch-plan.test.js             Plan-Erzeugung, Aggregation inkl. rateLimited, Löschbestätigung
-  ocs-errors.test.js             endpunkt-spezifische Codes, HTTP-Fälle, Unbekannt-Fallback
-  ocs-client.test.js             fetch gemockt: Header, Envelope, meta.statuscode, 429-Backoff
-  ocs-users.test.js              fetch gemockt: Parameter, Rückgabe-Shapes, Fehlerpfade
-  users-list-adapter.test.js     fetch gemockt: Bulk-Erfolg, Bulk-Fehler -> Fallback, Teilausfall
-  batch-runner.test.js           Parallelität, Teilfehler, Abbruch, 429-Reihenfolge (API gemockt)
-  credentials.test.js            electron gemockt: basic_text-Warnpfad, Roundtrip, Redaction
-  fixtures/
-    users-details.json           OCS-Antwort des Details-Endpunkts (inkl. kaputter Quota-Felder)
-    users-list.json              OCS-Antwort nur IDs
-    user-single.json             Einzeluser mit Skalar-Quota
-    groups.json                  Gruppenliste und Mitglieder
-    error-102.json               Fehler-Envelope "User existiert schon"
-    import-ok.csv                CSV mit `;`, Umlauten, beiden Datumsformaten
-    import-broken.csv            CSV mit Fehlerzeilen (fehlende Felder, falsches Datum, CJK-Name)
-    usernames.csv                reine Usernamen-Liste für Batch-Zielauswahl
+  username.test.js                alle 14 Zeilen RESEARCH-UPN §11 + 5 Fixtures §10
+  usernameRules.test.js           Zeichensatz, reservierte Namen, Kürzungsalgorithmus
+  birthdate.test.js               beide Formate, 31.02.2010, Zukunft, Müll
+  password.test.js                Prefix-Validierung, Passwortbildung, Mindestlänge
+  csvImport.test.js               je ein Fall pro Datei-/Zeilenfehler aus §6
+  csvUserList.test.js             mit/ohne Header, Leerzeilen, Duplikate
+  importPlan.test.js              Kollision, Kürzung-vor-Kollision, Re-Import, Status-Matrix
+  quota.test.js                   alle sechs Shapes aus RESEARCH-OCS §4
+  pool.test.js                    Parallelität 4, Stop-Flag, jedes Item genau einmal
+  dryRun.test.js                  No-Ops, Selbstschutz, Ausschlüsse, Zählwerk
+  resultCsv.test.js               Spalten, Trennzeichen, Maskierung, Passwortspalte
+  filters.test.js                 Suche, Sortierung mit Umlauten, fastVoll-Prädikat
+  url.test.js                      Trailing Slash, /index.php, http abgelehnt
+  ocsClient.test.js               gemockte fetch: 100/401/403/429/HTML/Netzfehler, Header-Pflicht
+  ocsUsers.test.js                endpunktspezifische Codes -> messageId
+  ocsGroups.test.js               102/103/101 je Endpunkt
+  userList.test.js                details-Probe, Fallback-Trigger, Session-Memo
+  pipeline.test.js                50 Items, 7 Fehler, ein 429, Abbruch bei 20
+  fixtures/                       siehe §9
 ```
 
-### Abhängigkeiten (jede neue mit Begründung)
+## 3. IPC-Vertrag (vollständig und abschließend)
 
-| Paket | Typ | Begründung |
-|---|---|---|
-| `electron` | dev | Laufzeit der Desktop-App, von CLAUDE.md vorgegeben |
-| `vue` | prod | UI-Framework, von CLAUDE.md vorgegeben |
-| `vite`, `@vitejs/plugin-vue` | dev | Renderer-Build und HMR, von CLAUDE.md vorgegeben |
-| `sweetalert2` | prod | Dialoge/Bestätigungen, von CLAUDE.md vorgegeben |
-| `vitest` | dev | Testrunner, von CLAUDE.md vorgegeben |
-| `eslint`, `eslint-plugin-vue` | dev | Lint für JS und Vue-SFCs |
-| `electron-builder` | dev | einziger Schritt für `npm run build` zu einer lauffähigen Linux-AppImage |
+Preload exponiert genau diese Methoden. **Kein generisches `invoke(channel, ...)`.**
+Alle `invoke`-Kanäle werfen nie; sie liefern `Result = { ok: true, ...}` oder
+`{ ok: false, messageId, message, httpStatus?, ocsCode? }`.
+**Das App-Passwort ist in keinem Rückgabewert, keinem Event und keiner Meldung enthalten —
+auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 
-Keine HTTP-Bibliothek (globales `fetch` in Electron/Node), kein CSV-Paket (eigener Parser,
-weil Fehlerzeilen-Toleranz und Header-Mapping ohnehin projektspezifisch sind), kein
-State-Manager, kein Router, keine UI-Bibliothek, kein TypeScript.
+| Methode | Richtung | Argument | Rückgabe | Fehlerfälle |
+|---|---|---|---|---|
+| `connection.test` | invoke | `{ baseUrl, adminUser, appPassword }` | `{ ok, adminUserId, isAdmin }` | URL ungültig, 401, 403/997, 429, HTML-Antwort, Netz, Zertifikat |
+| `connection.connect` | invoke | `{ baseUrl, adminUser, appPassword, remember }` | `{ ok, status }` | wie oben + `secret_nicht_gespeichert` |
+| `connection.connectSaved` | invoke | – | `{ ok, status }` | `kein_gespeicherter_zugang`, 401 -> `gespeichertes_passwort_abgelehnt` |
+| `connection.status` | invoke | – | `{ connected, baseUrl, adminUserId, secretStorage, certException }` | – |
+| `connection.savedHint` | invoke | – | `{ hasSaved, baseUrl, adminUser }` | – |
+| `connection.forgetSaved` | invoke | – | `{ ok }` | Schreibfehler |
+| `connection.disconnect` | invoke | – | `{ ok }` | – |
+| `users.list` | invoke | `{ refresh }` | `{ ok, users: UserView[], mode, fetchedAt }` | 401, 429, Netz, `details_und_fallback_fehlgeschlagen` |
+| `users.onLoadProgress` | main->renderer | – | `{ done, total }` | – (nur im N+1-Fallback) |
+| `groups.list` | invoke | – | `{ ok, groups: GroupView[] }` | 401, 429, Netz |
+| `groups.members` | invoke | `{ groupId }` | `{ ok, members: string[] }` | `gruppe_nicht_gefunden`, `antwort_shape_unbekannt` |
+| `groups.create` | invoke | `{ groupId }` | `{ ok }` | 101/102/103 je Endpunkt-Map |
+| `groups.delete` | invoke | `{ groupId }` | `{ ok }` | 101/102, `admin_gruppe_geschuetzt` |
+| `actions.run` | invoke | `{ jobId, action, items, params }` | `{ ok, results: ItemResult[], summary }` | nie global fehlerhaft; Fehler stehen je Item |
+| `actions.stop` | invoke | `{ jobId }` | `{ ok }` | unbekannte jobId |
+| `actions.onProgress` | main->renderer | – | `{ jobId, done, total, result }` | – |
+| `tls.onCertificatePrompt` | main->renderer | – | `{ requestId, host, fingerprint, subject, issuer, validTo }` | – |
+| `tls.respondCertificate` | invoke | `{ requestId, akzeptiert }` | `{ ok }` | abgelaufene requestId |
+| `files.openCsv` | invoke | `{ zweck: 'import' \| 'userliste' }` | `{ ok, path, text }` | `abgebrochen`, `datei_zu_gross` (>5 MB), Lesefehler |
+| `files.saveCsv` | invoke | `{ vorschlag, inhalt }` | `{ ok, path }` | `abgebrochen`, Schreibfehler |
 
-## 3. Prozessgrenze
+Nicht vorhanden und auch nicht nachzurüsten: Kanäle für Joblisten-Persistenz, Einzel-User-Kanäle
+(laufen über `actions.run`), Shell-/Pfad-Zugriffe, `openPath`.
+Der Jobverlauf (letzte 5, DECISIONS 33) liegt in `renderer/state.js` im Speicher — kein Kanal nötig.
 
-**Main** (`src/main/**`, Node-Vollzugriff): Fenster und Lifecycle, alle HTTP-Requests zur
-Nextcloud, App-Passwort im Speicher und in safeStorage, alle Dateizugriffe (CSV lesen/schreiben,
-JSON in `userData`, Logfile), Batch-Job-Ausführung und -Abbruch, Fehler-Mapping nach Deutsch.
+## 4. Datenmodell
 
-**Preload** (`src/preload/index.cjs`, sandboxed): nichts außer `contextBridge` +
-`ipcRenderer.invoke`/`.on` für die in Abschnitt 4 aufgezählten Kanäle. Keine Logik, keine
-Schleifen, kein generischer `invoke(channel, args)`. CommonJS-Datei, weil Electron ESM-Preloads
-nur mit `sandbox: false` lädt — Sandbox bleibt an, also `.cjs`.
-
-**Renderer** (`src/renderer/**`): Darstellung, Formularzustand, Suche/Filter/Sortierung/Auswahl
-auf schon geladenen Listen, swal2-Dialoge, Aufrufe der Preload-API. Darf nicht: Netzwerk,
-Dateisystem, `require`, Secrets halten. Importiert aus `src/shared/` nur reine Funktionen
-(Formatierung, Validierung für Sofort-Feedback im Formular); die verbindliche Validierung
-läuft trotzdem erneut im Main.
-
-`BrowserWindow`-Flags: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`,
-`webSecurity: true`, `preload: src/preload/index.cjs`. `index.html` setzt eine CSP
-(`default-src 'self'`; `style-src 'self' 'unsafe-inline'` für swal2; `connect-src 'none'`),
-`setWindowOpenHandler` verweigert alle neuen Fenster, `will-navigate` wird blockiert.
-
-## 4. Preload-API (IPC-Vertrag)
-
-Alle Methoden sind `async` und liefern **immer**
-`{ ok: true, data }` oder `{ ok: false, error: { kind, message, code } }`.
-`kind` ∈ `'validation' | 'auth' | 'network' | 'rate_limit' | 'api' | 'not_connected' | 'unknown'`.
-`message` ist immer deutsch und UI-fertig. `code` ist der OCS-Statuscode oder HTTP-Status, falls
-vorhanden. Kanalnamen sind `"<namespace>:<method>"` (z. B. `users:list`).
+`UserView` (einzige Form, die der Renderer sieht; erzeugt von `shared/userView.js`):
 
 ```js
-window.api = {
-  connection: {
-    // {baseUrl, adminUser, appPassword} -> data {serverName, version, backend}
-    test(input),
-    // speichert nach erfolgreichem Test; acceptPlainText muss true sein, wenn backend 'basic_text'
-    save({ baseUrl, adminUser, appPassword, acceptPlainText }),  // data {saved:true, backend}
-    // beim App-Start: entschlüsselt und aktiviert die Session, ohne Passwort zurückzugeben
-    restore(),            // data {connected, baseUrl, adminUser, backend} | ok:false
-    status(),             // data {connected, baseUrl, adminUser, backend, plainTextWarning}
-    forget()              // data {cleared:true}
-  },
-
-  users: {
-    list(),               // data {users:[UserRow], source:'details'|'fallback', partial:[{id,reason}]}
-    get(userId),          // data UserRow
-    create({ userId, password, displayName, email, quota, groups }),  // data {userId}
-    update(userId, { displayName, email, quota }),  // data {applied:[key], failed:[{key,message}]}
-    setPassword(userId, password),                  // data {userId}
-    setEnabled(userId, enabled),                    // data {userId, enabled}
-    remove(userId),                                 // data {userId}
-    addToGroup(userId, groupId),                    // data {userId, groupId}
-    removeFromGroup(userId, groupId)                // data {userId, groupId}
-  },
-
-  groups: {
-    list(),               // data {groups:[{id, userCount|null}]}
-    members(groupId),     // data {groupId, members:[userId]}
-    create(groupId),      // data {groupId}
-    remove(groupId)       // data {groupId}
-  },
-
-  batch: {
-    // reiner Dry-Run, kein Schreibzugriff
-    preview({ operation, userIds, params }),  // data {changes:[Change], skipped:[Skip], total}
-    start({ operation, userIds, params }),    // data {jobId}
-    cancel(jobId),                            // data {jobId, cancelling:true}
-    // Push-Kanäle; Rückgabe ist die Unsubscribe-Funktion
-    onProgress(cb),   // cb({jobId, done, total, ok, failed, rateLimited, currentUserId})
-    onFinished(cb)    // cb({jobId, cancelled, summary, results:[BatchResult]})
-  },
-
-  importUsers: {
-    chooseFile(),                 // data {path, name, text}  (Dialog + Datei lesen im Main)
-    preview({ text, order, passwordPrefix, groups, quota }),
-                                  // data {rows:[PlanRow], summary:{neu, kollision, gekuerzt, fehler}}
-    start({ rows, groups, quota }),  // data {jobId}  (Fortschritt über batch.onProgress/onFinished)
-    exportResult({ rows, defaultName })  // data {path} | ok:false kind 'validation' bei Abbruch
-  },
-
-  reports: {
-    exportBatchResult({ jobId, results, defaultName })  // data {path}
-  },
-
-  jobs: {
-    history()   // data {jobs:[{id, type, startedAt, finishedAt, total, ok, failed, rateLimited, cancelled}]}
-  },
-
-  settings: {
-    get(),                    // data {usernameOrder, usersPageSize}
-    set(partialSettings)      // data Settings
-  }
-}
+{ userid, displayname, email: string|null, enabled: boolean,
+  groups: string[], quota: QuotaInfo, istVerbundenerAdmin: boolean }
 ```
 
-Shapes:
+`GroupView`: `{ id, memberCount }` — `memberCount` wird clientseitig aus `UserView.groups`
+gezählt, nicht per Request (DECISIONS 34: Liste ist ohnehin komplett geladen).
 
-```
-UserRow      { id, displayName, email, enabled, groups:[string], quota: QuotaInfo }
-QuotaInfo    { unlimited:bool, known:bool, totalBytes:number|null, usedBytes:number|null,
-               relative:number|null, raw }
-Change       { userId, operation, from, to, note }           // Dry-Run-Zeile
-Skip         { userId, reason }                              // z. B. "bereits deaktiviert"
-BatchResult  { userId, status:'ok'|'error'|'rate_limited'|'skipped'|'cancelled', message }
-PlanRow      { line, firstName, lastName, birthDate, displayName, username, password,
-               status:'new'|'collision_resolved'|'truncated'|'error', reason }
-```
+`QuotaInfo` (Output von `shared/quota.js`, der **einzige** erlaubte Quota-Zugang für
+Dashboard, Tabelle, Filter und Dry-Run):
 
-Das App-Passwort kommt nur in `connection.test`/`connection.save` **hinein** und niemals heraus.
-Initialpasswörter verlassen den Main nur in den `importUsers.preview`/`start`-Shapes und im
-Ergebnis-CSV — nie im Log, nie in der Job-Historie.
-
-## 5. Modulverantwortlichkeiten
-
-### 5.1 `src/shared/` (reine Logik, unit-getestet)
-
-`constants.js`
 ```js
-export const BATCH_CONCURRENCY = 5;         // DECISIONS: fix, nicht konfigurierbar
-export const MAX_USERNAME_LENGTH = 64;      // RESEARCH-OCS 7: UNVERIFIZIERT, defensiv
-export const QUOTA_WARN_RATIO = 0.9;        // GOAL: "fast voll"
-export const JOB_HISTORY_LIMIT = 20;
-export const RESERVED_USERNAMES = [...];    // RESEARCH-OCS 7
-export const USERNAME_ALLOWED = /^[a-zA-Z0-9 _.@'-]+$/;
-export const RATE_LIMIT_BACKOFF_MS = [1000, 4000, 10000];
+{ kind: 'limited' | 'unlimited' | 'unknown',
+  limitBytes: number|null, usedBytes: number|null, usagePercent: number|null, roh: unknown }
 ```
 
-`username.js` — 1:1-Port laut RESEARCH-UPN 1-3.
+Abbildung aller belegten Shapes:
+
+| Eingang | kind | limitBytes | usedBytes |
+|---|---|---|---|
+| `{ quota: -3, used: 12 }` oder `"none"` oder `-3` | `unlimited` | `null` | 12 bzw. `null` |
+| `{ free, used, total, relative, quota: 1073741824 }` | `limited` | 1073741824 | `used` |
+| Skalar `0` / `"0"` | `unknown` | `null` | `null` |
+| `null` / Feld abwesend / `{ total: null }` | `unknown` | `null` | `null` |
+| `"1 GB"` / `"100MB"` / numerischer String | `limited` | geparste Bytes | wie geliefert |
+| negative Werte ≠ -3 | `unknown` | `null` | `null` |
+
+`usagePercent` nur wenn `kind === 'limited' && limitBytes > 0 && usedBytes != null`.
+Skalar `0` ist bewusst `unknown`, nicht `limited: 0`: Nextcloud liefert 0 auch für
+"kein Kontingent gesetzt", eine Prozentrechnung wäre undefiniert. Dadurch fällt der Fall
+automatisch aus der >90-%-Liste und aus der Summe der begrenzten Kontingente heraus.
+
+## 5. Action-Pipeline
+
+Ein Pfad für alles (DECISIONS 51). `actions.run` bekommt eine Liste von Items; eine
+Einzelaktion ist eine Liste der Länge 1, der Import eine Liste von Vorschauzeilen.
+
+Action-IDs: `user.enable`, `user.disable`, `user.delete`, `user.setQuota`, `user.update`
+(displayname/email, Einzelansicht), `user.setPassword`, `user.addToGroup`,
+`user.removeFromGroup`, `user.create`.
+
+`operations.js` liefert pro Action `{ label, steps(item, params) -> Step[] }`.
+Fast alle Actions haben **einen** Schritt. Einzige Ausnahme: `user.create` =
+`POST /cloud/users` (userid, password, displayName, quota) und danach je Zielgruppe
+`POST /cloud/users/{id}/groups`. *Begründung:* das Verhalten von `groups[]` im Create-Call bei
+Gruppenfehlern ist unverifiziert; getrennte Schritte machen einen Teilfehler benennbar statt
+den Gesamtzustand unklar zu lassen.
+
+Ablauf in `pipeline.js`:
+1. Items in `shared/pool.js` mit `concurrency: 4` (DECISIONS 41, Konstante `CONCURRENCY = 4`).
+2. Vor jedem Dispatch `session.shouldStop(jobId)` prüfen. Gesetzt -> restliche Items ohne
+   Request als `nicht ausgeführt` verbuchen. **Gewählt: Stop-Dispatch-Flag, kein AbortController** —
+   DECISIONS 42 verlangt ausdrücklich, dass laufende Requests fertiglaufen; ein Signal würde sie abbrechen.
+3. Pro Schritt Retry-Politik aus `ocs/client.js`: HTTP 429 -> bis zu 2 Wiederholungen mit 2 s / 6 s;
+   Netzfehler und 5xx -> genau eine Wiederholung. Ein 429 wird erst nach erschöpften Retries ein
+   Fehler. **Kein Pausendialog** (DECISIONS: gestrichen) — erschöpfte Retries sind ein normaler
+   Item-Fehler mit eigener Begründung `server_blockt_vorerst`, der Job läuft weiter.
+4. Nach jedem Item `actions.onProgress`. Jedes Item erscheint **genau einmal** im Ergebnis.
+
+`ItemResult`:
+
 ```js
-normalizeNameComponent(text): string            // Schritte 1-8, Reihenfolge bindend
-normalizeUsernameOrder(value): 'givenFirst'|'surnameFirst'
-buildUsername(firstName, lastName, order): string      // '' wenn eine Komponente leer
-truncateUsername(name, maxLength = MAX_USERNAME_LENGTH): { username, truncated }
-collisionUsername(base, ddmmyyyy, maxLength = MAX_USERNAME_LENGTH): { username, truncated }
-isReservedUsername(name): boolean
-normalizeForComparison(name): string            // toLowerCase, für Kollisionsvergleich
-```
-Kürzung + Kollision: `collisionUsername` kürzt den **Basisteil** so, dass
-`base + '.' + ddmmyyyy` die Maximallänge hält; die Kollisionsprüfung läuft immer auf dem
-endgültigen (gekürzten) Wert.
-
-`csv-parse.js`
-```js
-detectDelimiter(text): ';' | ','
-parseCsv(text, delimiter): { header: string[], rows: string[][] }   // BOM, CRLF, ""-Quoting
-parseImportCsv(text): { rows: [{line, firstName, lastName, birthDateRaw}], errors: [{line, reason}] }
-parseUsernameList(text): { usernames: string[], errors: [{line, reason}] }
-```
-Header-Mapping case- und whitespace-insensitiv auf `vorname`, `nachname`, `geburtsdatum`;
-fehlende Pflichtspalte ist ein Dateifehler, fehlender Zellwert ein Zeilenfehler.
-
-`validate.js`
-```js
-validateServerUrl(raw): { ok, baseUrl } | { ok:false, reason }   // https erzwingen, Pfad abschneiden
-parseBirthDate(raw): { ok, iso, ddmmyyyy } | { ok:false, reason } // 'dd.mm.yyyy' | 'yyyy-mm-dd'
-validateEmail(raw): { ok } | { ok:false, reason }
-validateDisplayName(raw): { ok, value } | { ok:false, reason }
-validateNextcloudUsername(name): { ok } | { ok:false, reason }    // Zeichen, Länge, reserviert, nur Punkte
-validateGroupId(raw): { ok, value } | { ok:false, reason }
+{ userid, aktion, status: 'ok'|'fehler'|'nicht ausgeführt'|'teilweise',
+  grund: string, httpStatus: number|null, ocsCode: number|null,
+  schritte?: [{ name, status, grund }] }
 ```
 
-`quota.js` — defensiv, siehe Abschnitt 8.
-```js
-parseQuotaField(raw): QuotaInfo        // Skalar | Objekt | 'none' | -3 | null | undefined
-parseQuotaInput(text): { ok, apiValue } | { ok:false, reason }   // '5 GB', '1024', 'unbegrenzt' -> 'none'
-formatBytes(bytes): string                                        // '1,5 GB', '—' bei null
-formatQuota(info): string
-isNearlyFull(info, ratio = QUOTA_WARN_RATIO): boolean             // false wenn unknown/unlimited
-sumQuotas(infos): { usedBytes, quotaBytes, unlimitedCount, unknownCount }
-```
+`teilweise` nur wenn mindestens ein Schritt `ok` und mindestens einer `fehler` ist
+(praktisch: User angelegt, Gruppenzuweisung fehlgeschlagen). Kein Rollback, keine Kompensation.
 
-`password.js`
-```js
-buildInitialPassword(prefix, ddmmyyyy, suffix = '!'): string      // '<Prefix><ddmmyyyy><Suffix>'
-validatePasswordPolicy(pw): { ok } | { ok:false, reason }         // min. 10 Zeichen
-validatePasswordPrefix(prefix): { ok } | { ok:false, reason }     // nicht leer, ASCII
-```
+**Dry-Run** (`shared/dryRun.js`, pur, kein Re-Fetch — rechnet nur auf der geladenen Liste):
+`planActions(action, auswahl, params, { adminUserId })` ->
+`{ aenderungen: [...], keineAenderung: [...], ausgeschlossen: [{ userid, grund }] }`.
+- `keineAenderung`: schon aktiv/deaktiviert, schon in Gruppe, nicht in Gruppe, Kontingent identisch.
+- `ausgeschlossen`: `nicht gefunden` (nur bei Username-CSV-Auswahl, DECISIONS 37) und
+  `eigener Admin-Zugang` bei `user.delete`/`user.disable` (DECISIONS 43, Selbstschutz).
+  Der Selbstschutz sitzt **in diesem puren Modul**, damit Einzel- und Batchweg ihn gemeinsam
+  erben und er testbar ist.
+- "Alles auswählen" liefert immer nur das aktuelle Filterergebnis.
 
-`import-plan.js`
-```js
-buildImportPlan({ rows, existingUsernames, order, passwordPrefix, passwordSuffix }): {
-  rows: PlanRow[], summary: { neu, kollision, gekuerzt, fehler }
-}
-```
-Reihenfolge je Zeile: Datum parsen -> Username bauen -> kürzen -> gegen bestehende **und**
-bereits geplante Namen case-insensitiv prüfen -> bei Kollision Geburtsdatum anhängen -> bei
-erneuter Kollision Status `error` mit Grund. Passwort pro Zeile aus `password.js`.
-Anzeigename `Vorname Nachname` in Originalschreibweise.
+**Bestätigungen** (swal2): jede Aktion zeigt den Dry-Run. Bei `user.delete` zusätzlich Eingabe der
+Dezimalzahl aus `aenderungen.length` (DECISIONS 44): getrimmter exakter Stringvergleich,
+Button bis zur Übereinstimmung deaktiviert, kein Versuchslimit, auch bei n = 1.
+Einzellöschung läuft über denselben Dialog, zeigt zusätzlich die `userid`.
 
-`batch-plan.js`
-```js
-buildBatchPlan({ operation, users, params }): { changes: Change[], skipped: Skip[] }
-requiresCountConfirmation(operation): boolean          // true nur für 'delete'
-summarizeBatchResult(results): { total, ok, failed, rateLimited, skipped, cancelled }
-```
+**Ergebnis-CSV** (`shared/resultCsv.js`): UTF-8 mit BOM, Trennzeichen `;`, CRLF, Spalten
+`userid;aktion;status;grund;httpStatus;ocsCode` (DECISIONS 48) — identisch für Batch-Bericht und
+Import-Export, Fehler- und `nicht ausgeführt`-Zeilen enthalten. Der Import-Export hängt eine
+**siebte** Spalte `passwort` an, nur gefüllt bei `ok`/`teilweise`; DECISIONS 10 fordert den Export
+von Username + Initialpasswort, die ersten sechs Spalten bleiben wie entschieden.
+Export auch nach Abbruch. Vor dem Speichern des Passwort-Exports swal2-Warnung, nur
+nutzergewählter Pfad, kein Default im App-Verzeichnis, kein Auto-Open (DECISIONS 49).
 
-`ocs-errors.js` — **eine Funktion pro Endpunkt, keine globale Tabelle** (RESEARCH-OCS 5).
-```js
-createUserError(statuscode, httpStatus, message): AppError
-updateUserError(statuscode, httpStatus, message): AppError
-userStateError(statuscode, httpStatus, message): AppError     // enable/disable/delete
-groupMembershipError(statuscode, httpStatus, message): AppError
-createGroupError(statuscode, httpStatus, message): AppError
-deleteGroupError(statuscode, httpStatus, message): AppError
-readError(statuscode, httpStatus, message): AppError          // GET-Endpunkte
-transportError(cause): AppError                               // DNS, TLS, Timeout
-// AppError = { kind, code, message }  (message deutsch)
-```
+## 6. Username-Generierung und Import-Pipeline
 
-`csv-export.js`
-```js
-toCsv(header, rows, delimiter = ';'): string          // UTF-8 BOM, Quoting bei ; " \n
-importResultToCsv(rows): string                       // Zeile;Vorname;Nachname;Username;Initialpasswort;Status;Grund
-batchResultToCsv(results): string                     // Username;Status;Meldung
-```
+Reihenfolge der Stufen, von CSV-Bytes zur Vorschauzeile. Stufen 1-9 in `shared/csvImport.js`,
+10-16 in `shared/importPlan.js`. Beide ohne I/O; die Bytes kommen aus `files.openCsv`.
 
-### 5.2 `src/main/`
+1. UTF-8 dekodieren, BOM entfernen (Excel erzeugt eine).
+2. CRLF und CR auf LF normalisieren, abschließende Leerzeilen verwerfen.
+3. Trennzeichenerkennung an der Headerzeile: häufigeres von `;` und `,` gewinnt;
+   **bei Gleichstand `;`** (deutsches Excel); kommt keines vor -> Dateifehler `header_fehlt`.
+4. Header prüfen: genau `Vorname`, `Nachname`, `Geburtsdatum`, getrimmt, case-insensitiv.
+5. Zeilenobergrenze 2000 (DECISIONS 46) -> sonst Dateifehler `zeilenlimit`.
+6. Je Zeile splitten. **Kein RFC4180-Quoting** (DECISIONS 45): enthält ein Feld ein `"` in
+   unbalancierter Zahl -> Zeilenfehler `quote_unbalanciert`. Falsche Spaltenzahl -> `spaltenzahl`.
+7. Felder trimmen; leerer Vor- oder Nachname -> `vorname_leer` / `nachname_leer`.
+8. Geburtsdatum: `dd.mm.yyyy` oder `yyyy-mm-dd` (DECISIONS 14), intern immer `ddmmyyyy`
+   (DECISIONS 40). Nicht parsbar -> `datum_format`; kalendarisch ungültig (31.02.2010) ->
+   `datum_ungueltig`; in der Zukunft -> `datum_zukunft`.
+9. Dublette innerhalb der Datei (Vorname+Nachname+ddmmyyyy, normalisiert) -> `doppelzeile`.
+10. `normalizeComponent` auf Vor- und Nachname (Regex-Kette exakt in der Reihenfolge
+    RESEARCH-UPN §1, Schritte 1-8, 1:1 portiert). Ist eine Komponente `''` ->
+    `name_nicht_abbildbar`.
+11. `buildUsername(vn, nn, order)` mit `.` als Trenner; `order` aus dem Import-Dialog
+    (`givenFirst` Default, `surnameFirst`), unbekannte Werte fallen auf `givenFirst` zurück.
+12. Zeichensatzprüfung gegen `[a-z0-9.]` (Generatorausgabe ist per Konstruktion konform) und
+    gegen reservierte Namen aus RESEARCH-OCS §7 -> `username_reserviert`, `username_zeichen`.
+13. **Längenregel (vor der Kollisionsprüfung):** ist der Name länger als `MAX_USERID = 64`,
+    wird die **Nachnamen-Komponente** zeichenweise von rechts gekürzt, bis er passt
+    (DECISIONS 27). Erfolgt eine Kürzung, Flag `gekuerzt`. Passt es auch bei einem
+    Restzeichen des Nachnamens nicht -> `username_zu_lang`.
+14. **Eindeutigkeit** case-insensitiv (DECISIONS 19) gegen bestehende Nextcloud-User
+    *und* die bereits in diesem Lauf vergebenen Namen:
+    - frei -> Status `neu`.
+    - belegt -> `.ddmmyyyy` an die **gewählte** Reihenfolge anhängen (DECISIONS 39), dann
+      **Stufe 13 erneut** anwenden (Nachnamen weiter kürzen, Suffix bleibt unangetastet) und
+      **danach Eindeutigkeit erneut prüfen**:
+      - frei -> Status `kollision_aufgeloest`.
+      - noch belegt (gleicher Name *und* gleiches Geburtsdatum) -> Zeilenfehler
+        `benutzer_existiert_bereits`, kein Zählersuffix (DECISIONS 26).
+15. `displayname = "${Vorname} ${Nachname}"` in Originalschreibweise (DECISIONS 16).
+    `email` bleibt leer (DECISIONS 11).
+16. Initialpasswort `` `${prefix}${ddmmyyyy}!` `` (DECISIONS 9/28/29). Prefix: Pflicht,
+    3-20 Zeichen, `[A-Za-z0-9]`, erster Buchstabe groß (DECISIONS 30); Ergebnis lokal auf
+    ≥ 10 Zeichen prüfen. Der vergebene Username wird in das Set der Stufe 14 eingetragen.
 
-`ocs/client.js` — abhängig von `session.js`, `ocs-errors.js`, `logger.js`.
-```js
-ocsRequest({ method, path, query, form, mapError }): Promise<{ data, meta }>   // wirft AppError
-```
-Setzt `Authorization: Basic`, `OCS-APIRequest: true`, `Accept: application/json`,
-`?format=json`, `AbortSignal.timeout(30000)`. Prüft **HTTP-Status und `ocs.meta.statuscode`**.
-Bei HTTP 429 (oder `Retry-After`): Backoff nach `RATE_LIMIT_BACKOFF_MS`, danach
-`kind:'rate_limit'`. Bei 401/403: `kind:'auth'`. Nicht-JSON-Antwort (HTML/Redirect, typisch bei
-fehlendem OCS-Header) -> `kind:'api'` mit Hinweistext. `mapError` wird vom Aufrufer übergeben,
-damit das Mapping endpunkt-spezifisch bleibt.
+Vorschauzeilen-Status (fixe Liste): `neu`, `kollision_aufgeloest`, `fehler`.
+Zusatz-Flag: `gekuerzt` (kombinierbar mit `neu` und `kollision_aufgeloest`).
 
-`ocs/users.js`, `ocs/groups.js` — eine exportierte Funktion pro Endpunkt aus RESEARCH-OCS 2/3,
-jede mit dem passenden `ocs-errors`-Mapper. Keine Schleifen über Nutzer, keine Retries außer dem
-429-Backoff des Clients.
+Zeilen- und Dateifehler, abschließende Enumeration mit UI-Text aus `shared/messages.js`:
 
-`ocs/users-list-adapter.js` — **einzige erlaubte Abstraktion**.
-```js
-fetchUserRows(): Promise<{ users: UserRow[], source: 'details'|'fallback', partial: [{id,reason}] }>
-```
-Versucht `GET /cloud/users/details`; bei HTTP 404/400, unerwartetem Shape oder leerer
-`users`-Map fällt es auf `GET /cloud/users` + `GET /cloud/users/{id}` mit Parallelität 5 zurück.
-Einzelne fehlgeschlagene Detailabfragen landen in `partial` und werden im UI als
-"unvollständig" markiert, statt den ganzen Abruf zu verwerfen. Normalisiert in beiden Pfaden
-über `quota.parseQuotaField`.
-
-`batch/operations.js`
-```js
-operationFor(operation): (userId, params) => Promise<void>    // genau ein API-Call pro User
-```
-Unterstützte `operation`-Werte: `'delete' | 'enable' | 'disable' | 'addToGroup' |
-'removeFromGroup' | 'setQuota' | 'createUser'`.
-
-`batch/runner.js`
-```js
-startJob({ type, items, params, onProgress }): { jobId }
-cancelJob(jobId): boolean
-```
-Worker-Pool mit `BATCH_CONCURRENCY = 5`. Pro Item ein `BatchResult`. `rate_limited`-Items werden
-nach Abschluss der übrigen genau einmal wiederholt; bleibt es dabei, zählen sie als
-`rateLimited`, nicht als `failed`. `cancelJob` setzt ein Flag: laufende Requests werden
-abgewartet, nicht gestartete Items erhalten `status:'cancelled'`. Fortschritt wird gedrosselt
-(max. alle 150 ms) per `webContents.send('batch:progress', ...)` gesendet.
-
-`import/service.js`
-```js
-previewImport({ text, order, passwordPrefix, groups, quota }): Promise<PreviewResult>
-runImport({ rows, groups, quota }): Promise<{ jobId }>
-```
-`previewImport` holt bestehende Usernamen (nur IDs, `GET /cloud/users`), parst die CSV und ruft
-`buildImportPlan`. Schlägt der Abruf fehl, wird **abgebrochen** (keine Vorschau ohne
-Kollisionsbasis). `runImport` übergibt nur Zeilen mit Status ≠ `error` an `batch/runner.js` mit
-`operation:'createUser'`; Gruppen und Quota werden direkt in `POST /cloud/users` mitgegeben.
-
-`credentials.js`
-```js
-encryptionState(): { available: boolean, backend: string, plainText: boolean }
-saveCredentials({ baseUrl, adminUser, appPassword, acceptPlainText }): void   // wirft bei plainText ohne accept
-loadCredentials(): { baseUrl, adminUser, appPassword, backend } | null
-clearCredentials(): void
-```
-
-`session.js`
-```js
-setSession({ baseUrl, adminUser, appPassword }): void
-getSession(): { baseUrl, adminUser, appPassword }    // wirft AppError kind 'not_connected'
-publicSession(): { connected, baseUrl, adminUser, backend, plainTextWarning }
-clearSession(): void
-```
-
-`store.js`
-```js
-readJson(name, fallback): object       // defekte Datei -> fallback + Warnlog
-writeJson(name, value): void           // Schreiben in .tmp + rename
-appendJob(entry): void                 // vorne einfügen, auf JOB_HISTORY_LIMIT kürzen
-readJobs(): object
-readSettings(): object
-writeSettings(partial): object
-```
-
-`logger.js`
-```js
-log.info(msg, meta), log.warn(...), log.error(...)
-redact(value): value                   // entfernt password/appPassword/Authorization/initialPassword
-```
-
-## 6. Datenfluss
-
-### (a) Verbindung testen und Credentials speichern
-1. `ConnectionView` validiert die URL lokal über `validate.validateServerUrl` (Sofort-Feedback).
-2. `api.connection.test({baseUrl, adminUser, appPassword})` -> `ipc.js`.
-3. Main validiert erneut, setzt eine temporäre Session, ruft `GET /cloud/users?limit=1` mit
-   OCS-Header; prüft HTTP-Status und `ocs.meta.statuscode`.
-4. Fehler -> `{ok:false, error}` mit `kind` `auth`/`network`/`api`/`rate_limit`; Renderer zeigt
-   swal2-Fehler. Erfolg -> `{ok:true, data:{backend, ...}}`.
-5. Ist `backend === 'basic_text'` oder `isEncryptionAvailable() === false`, zeigt der Renderer
-   eine swal2-Warnung mit expliziter Bestätigung und ruft erst dann
-   `api.connection.save({..., acceptPlainText:true})` (DECISIONS: warnen + speichern erlauben).
-6. Main verschlüsselt das Passwort mit `safeStorage.encryptString`, schreibt `credentials.json`,
-   aktiviert die Session. Die Rückgabe enthält **kein** Passwort.
-7. Beim nächsten App-Start ruft `App.vue` `api.connection.restore()`; schlägt das Entschlüsseln
-   fehl (Keyring gewechselt), wird die Datei verworfen und der Verbindungsdialog gezeigt.
-
-### (b) Batch-Job mit Dry-Run, Fortschritt und Abbruch
-1. `UsersView` liefert die Auswahl (IDs) an `BatchView`; alternativ liest
-   `api.importUsers.chooseFile` + `csv-parse.parseUsernameList` eine Usernamen-Liste.
-2. `api.batch.preview({operation, userIds, params})` -> Main lädt die betroffenen Userzeilen und
-   ruft `batch-plan.buildBatchPlan`.
-3. `PreviewTable` zeigt `changes` und `skipped`. Bestätigung per swal2; bei
-   `operation:'delete'` zusätzlich `countConfirm`: der Admin muss die Anzahl eintippen
-   (`batch-plan.requiresCountConfirmation`).
-4. `api.batch.start(...)` -> `runner.startJob`, Rückgabe `{jobId}` sofort.
-5. `runner` arbeitet mit 5 parallelen Requests und sendet `batch:progress`
-   (`done/total/ok/failed/rateLimited`); `ProgressPanel` rendert daraus.
-6. `api.batch.cancel(jobId)` setzt das Abbruchflag; restliche Items werden `cancelled`.
-7. Am Ende sendet Main `batch:finished` mit `results` + `summary`, schreibt den Metadatensatz per
-   `store.appendJob` (max. 20 Jobs, keine Passwörter); `ResultReport` bietet
-   `api.reports.exportBatchResult` an -> `csv-export.batchResultToCsv` + Speicherdialog.
-
-### (c) CSV-Import von Datei bis Ergebnis-Export
-1. `ImportView` -> `api.importUsers.chooseFile()`: Main öffnet den Dialog, liest die Datei als
-   UTF-8 und gibt `{path, name, text}` zurück (Renderer sieht nie das Dateisystem).
-2. Admin setzt Reihenfolge (`vorname.nachname` / `nachname.vorname`), Passwort-Prefix,
-   optionale Zielgruppen und Quota.
-3. `api.importUsers.preview(...)`: Main holt bestehende Usernamen, parst die CSV
-   (`parseImportCsv`), baut den Plan (`buildImportPlan`).
-4. `PreviewTable` zeigt pro Zeile Status `new` / `collision_resolved` / `truncated` / `error`
-   farbig; Fehlerzeilen rot und vom Import ausgeschlossen (DECISIONS: gute Zeilen importieren).
-5. swal2-Bestätigung mit Anzahl der anzulegenden User -> `api.importUsers.start({rows, groups, quota})`.
-6. Fortschritt und Abschluss laufen über dieselben `batch:progress`/`batch:finished`-Kanäle.
-7. `api.importUsers.exportResult({rows, defaultName})`: Main erzeugt `importResultToCsv`
-   (inkl. Initialpasswort und Fehlerzeilen mit Grund) und schreibt die Datei über den
-   Speicherdialog. Danach wird der Plan im Renderer-Zustand verworfen; die Passwörter existieren
-   nur noch in dieser CSV.
-
-## 7. Fehlerbehandlung und Logging
-
-- **Einheitliches Fehlerobjekt** `{ kind, code, message }`. Erzeugt wird es ausschließlich in
-  `src/shared/ocs-errors.js` (API-Fehler) oder aus `validate.js`-Ergebnissen (Eingabefehler).
-- **Pro Endpunkt gemappt, keine globale Tabelle.** `createUserError` kennt 101-111,
-  `updateUserError` kennt 101/107/112/113, `createGroupError` kennt 101-103 usw. Codes, die ein
-  Endpunkt laut Research nicht definiert, fallen in einen generischen Text mit angezeigtem Code
-  (`"Unerwarteter API-Fehler (Code 113)"`). Die laut Research unbestätigten Codes 996-999 werden
-  nicht interpretiert; stattdessen zählt der HTTP-Status (401/403 -> `auth`, 404 -> `api`,
-  5xx -> `api` mit Servertext).
-- **HTTP 429:** `client.js` wartet nach `RATE_LIMIT_BACKOFF_MS` (1 s, 4 s, 10 s; ein vorhandener
-  `Retry-After` schlägt das vor). Danach `kind:'rate_limit'`. Im Batch wird das Item einmal am
-  Jobende wiederholt und sonst als `rate_limited` ausgewiesen — eigene Spalte im Report, nicht in
-  `failed` gezählt. Der UI-Text nennt den Brute-Force-Schutz als wahrscheinliche Ursache.
-- **Teilfehler im Batch:** jedes Item hat ein eigenes `BatchResult`; der Job läuft immer bis zum
-  Ende durch (außer bei Abbruch). `summarizeBatchResult` liefert die fünf Zähler, die Historie
-  speichert nur diese Zahlen.
-- **Mehrfeld-Updates** (`users.update`) sind je Feld ein `PUT`; Teilerfolg wird als
-  `{applied, failed}` zurückgegeben, nicht als Gesamtfehler.
-- **Logging:** `logger.js` schreibt nach `userData/app.log` (bei >1 MB einmalige Rotation nach
-  `app.log.1`) und auf stdout. Geloggt werden Methode, Pfad, HTTP-Status, `meta.statuscode`,
-  Dauer, Job-Kennzahlen. `redact()` entfernt vor jeder Ausgabe die Schlüssel `password`,
-  `appPassword`, `initialPassword`, `Authorization` sowie das aktuelle Session-Passwort als
-  Teilstring. Der Renderer loggt nichts über IPC; unerwartete Renderer-Fehler landen in einem
-  swal2-Dialog.
-- Unbehandelte Fehler im Main: `process.on('unhandledRejection')` loggt und zeigt einen
-  swal2-Fehler im Fenster, beendet die App aber nicht.
-
-## 8. Quota-Modell (defensiv, RESEARCH-OCS 4)
-
-`parseQuotaField(raw)` ist die einzige Stelle, die Quota-Rohdaten interpretiert:
-
-| Rohwert | Ergebnis |
+| id | deutsche Meldung |
 |---|---|
-| `"none"`, `-3`, `"-3"` | `{ unlimited:true, known:true, totalBytes:null }` |
-| Zahl > 0 (Skalar) | `{ unlimited:false, known:true, totalBytes:n, usedBytes:null, relative:null }` |
-| `0` (Skalar) | `{ unlimited:false, known:false, ... }` — 0 ist in Nextcloud ambivalent, nie als "voll" werten |
-| Objekt mit `quota` und `used` | Werte einzeln geprüft; `free`/`total` dürfen fehlen oder `null` sein |
-| `null`, `undefined`, `""`, NaN, nicht-numerischer String | `{ known:false, unlimited:false, totalBytes:null, usedBytes:null }` |
-| `relative` vorhanden und 0-100 | übernommen, sonst aus `used/total` berechnet, sonst `null` |
+| `datei_leer` | Die Datei ist leer. |
+| `nur_header` | Die Datei enthält nur die Kopfzeile. |
+| `header_fehlt` | Kopfzeile fehlt oder Spalten heißen nicht Vorname, Nachname, Geburtsdatum. |
+| `zeilenlimit` | Mehr als 2000 Zeilen. Bitte die Datei aufteilen. |
+| `spaltenzahl` | Zeile hat nicht genau 3 Spalten. |
+| `quote_unbalanciert` | Unvollständiges Anführungszeichen. Anführungszeichen werden nicht unterstützt. |
+| `vorname_leer` | Vorname fehlt. |
+| `nachname_leer` | Nachname fehlt. |
+| `name_nicht_abbildbar` | Aus diesem Namen lässt sich kein Username bilden. |
+| `datum_format` | Geburtsdatum muss dd.mm.yyyy oder yyyy-mm-dd sein. |
+| `datum_ungueltig` | Dieses Datum existiert nicht. |
+| `datum_zukunft` | Geburtsdatum liegt in der Zukunft. |
+| `doppelzeile` | Identische Zeile kommt in der Datei mehrfach vor. |
+| `username_zu_lang` | Username ist auch nach Kürzen des Nachnamens zu lang. |
+| `username_reserviert` | Dieser Username ist in Nextcloud reserviert. |
+| `username_zeichen` | Username enthält unerlaubte Zeichen. |
+| `benutzer_existiert_bereits` | Benutzer existiert bereits (gleicher Name und gleiches Geburtsdatum). |
 
-Konsequenzen: `isNearlyFull` liefert nur `true`, wenn `known && !unlimited && totalBytes > 0` und
-`usedBytes/totalBytes >= 0.9`. `sumQuotas` summiert ausschließlich `known && !unlimited`-Werte
-und führt `unlimitedCount` und `unknownCount` separat; das Dashboard zeigt diese Zahlen explizit
-an ("x User ohne auswertbares Kontingent"), statt sie stillschweigend als 0 zu summieren.
-`parseQuotaInput` schreibt beim Setzen `"none"` für unbegrenzt und sonst den normalisierten Text
-(`"5 GB"`); Rohbytes werden als Zahl gesendet.
+Zielgruppen im Import-Dialog: nur vom Server gelesene Gruppen, plus ausdrückliche Aktion
+"Gruppe neu anlegen" vor dem Lauf (DECISIONS 47), damit OCS `104` nicht mitten im Import auftritt.
+Das Geburtsdatum erscheint in der Vorschau und im Export, sonst nirgends; es wird nicht geloggt.
+Die Passwortliste wird beim Verlassen der Importansicht aus `state.js` entfernt.
 
-**Annahme (unverifiziert):** `GET /cloud/users/details` liegt unter
-`/ocs/v1.php/cloud/users/details` und liefert `data.users` als Map `userId -> Userobjekt`.
-Der Adapter prüft diese Form und degradiert bei Abweichung auf den Fallback-Pfad.
-**Annahme (unverifiziert):** `MAX_USERID_LENGTH = 64`.
-**Annahme (unverifiziert):** `GET /cloud/groups/{groupid}` liefert `data.users` als Array von
-IDs; der Leser akzeptiert auch `data.members` und eine Map und normalisiert auf ein Array.
+## 7. OCS-Client
 
-## 9. Persistenz (`app.getPath('userData')`)
+`request({ method, path, query, form })` in `ocs/client.js`:
+- Basis `${baseUrl}/ocs/v1.php` + `path`; `format=json` immer in der Query.
+- Header auf **jedem** Request: `OCS-APIRequest: true`, `Accept: application/json`,
+  `Authorization: Basic base64(user:appPassword)`. Credentials kommen aus `session.js` und
+  werden nie in ein Result, ein Log oder eine Exception geschrieben.
+- Body als `application/x-www-form-urlencoded`; Arrays als `groups[]`.
+- Timeout 20 s über `AbortSignal.timeout` (betrifft nur den einzelnen Request, nicht den Job).
+- Envelope-Unwrap: `json.ocs.meta.statuscode` und `json.ocs.data`. Erfolg nur wenn
+  HTTP 2xx **und** `statuscode === 100` (REVIEW-NOTES 2).
 
+Result-Typ überall identisch:
+
+```js
+{ ok: true, data, httpStatus }
+{ ok: false, kind: 'ocs'|'http'|'auth'|'forbidden'|'ratelimit'|'notOcs'|'network'|'timeout'|'cert',
+  httpStatus: number|null, ocsCode: number|null, messageId, message }
 ```
-credentials.json  { version:1, baseUrl, adminUser, passwordCipher:<base64>,
-                    backend:'gnome_libsecret'|'kwallet'|'basic_text'|..., savedAt:<ISO> }
-jobs.json         { version:1, jobs:[ { id, type, startedAt, finishedAt, total, ok, failed,
-                    rateLimited, cancelled } ] }      // max. 20, neueste zuerst
-settings.json     { version:1, usernameOrder:'givenFirst'|'surnameFirst', usersPageSize:50,
-                    lastCsvDir:<string|null> }
-app.log           Textlog, rotiert einmalig nach app.log.1 bei >1 MB
+
+`kind: 'notOcs'` wenn die Antwort kein JSON mit `ocs`-Wurzel ist (typisch HTML bei falschem
+Basis-Pfad oder fehlendem Header).
+
+**Fehlercode-Maps pro Endpunkt**, keine globale Tabelle (REVIEW-NOTES 3): jede Funktion in
+`ocs/users.js` und `ocs/groups.js` definiert ihre eigene lokale Map und übergibt sie an
+`mapOcsError(result, MAP, fallbackId)`. Beispiel:
+
+```js
+const CREATE_USER_ERRORS = { 101: 'ungueltiges_argument', 102: 'user_existiert',
+  104: 'gruppe_existiert_nicht', 105: 'keine_rechte_fuer_gruppe', 107: 'passwort_policy',
+  111: 'userid_nicht_erzeugbar' };
 ```
 
-`jobs.json` enthält nur Metadaten — keine Usernamen-Listen, keine Passwörter, keine Fehlertexte
-mit Nutzerdaten. Alle Schreibzugriffe über `store.js` (tmp + rename). Beim Lesen einer defekten
-oder fremdversionierten Datei wird der Fallback genutzt und gewarnt, nie geworfen. CSV-Exporte
-schreibt der Nutzer über den Speicherdialog an einen Ort seiner Wahl, nie nach `userData`.
+`mapOcsError` kennt nur `kind`-basierte Fallbacks (`auth`, `forbidden`, `ratelimit`, `notOcs`,
+`network`), nie endpunktspezifische Codes.
 
-## 10. Teststrategie
+**`users/details`-Probe und N+1-Fallback** (`ocs/userList.js`):
+1. Erster Aufruf `GET /cloud/users/details?format=json`.
+2. **Fallback-Trigger** (genau diese Bedingungen): HTTP 404 · `kind: 'notOcs'` ·
+   `statuscode !== 100` · `data.users` fehlt oder ist kein Objekt · der erste Eintrag hat weder
+   `enabled` noch `quota`.
+3. Fallback: `GET /cloud/users` (IDs) + je ID `GET /cloud/users/{id}` über denselben Pool
+   (concurrency 4), mit `users.onLoadProgress` und sichtbarer Warnung im UI
+   ("Einzelabfragen, kann dauern", DECISIONS 34).
+4. Das Ergebnis der Probe wird **für die Sitzung memoisiert** (`session.userListMode`
+   = `'details' | 'fallback'`) und erst bei Reconnect neu bestimmt.
+Beide Wege laufen durch `shared/userView.js` und liefern identische `UserView`-Objekte.
 
-**Unit-getestet (Vitest, `tests/`, Umgebung `node`):** alle Module aus `src/shared/` — der
-Username-Generator gegen die vollständige Tabelle aus RESEARCH-UPN 11 plus die Fixtures aus
-Abschnitt 10 (ohne Domain), Kürzung bei 64 Zeichen, Kollisionsauflösung mit Geburtsdatum,
-case-insensitiver Vergleich; CSV-Parser mit beiden Trennzeichen, BOM, CRLF, Quotes, fehlenden
-Spalten; beide Datumsformate und deren Fehlerfälle; Quota-Parsing für jede Zeile der Tabelle in
-Abschnitt 8; Passwortbildung und Policy; Import-Plan mit datei- und serverseitigen Kollisionen;
-Batch-Aggregation inkl. `rateLimited`; alle `ocs-errors`-Funktionen inkl. Unbekannt-Fallback.
+**Gruppenmitglieder** defensiv parsen: `{ users: [...] }` und ein nacktes Array akzeptieren,
+sonst `antwort_shape_unbekannt` mit Endpunktnamen in der Meldung.
 
-**Mit gemocktem HTTP getestet:** `ocs/client.js` (Header `OCS-APIRequest`, `format=json`,
-Auswertung von HTTP-Status *und* `meta.statuscode`, 429-Backoff, HTML-Antwort),
-`ocs/users.js`/`groups.js` (Parameter und Fehlerpfade), `ocs/users-list-adapter.js`
-(Bulk-Erfolg, Bulk-404 -> Fallback, einzelne fehlende Details -> `partial`),
-`batch/runner.js` (Parallelität ≤ 5, Teilfehler, Abbruch, 429-Nachlauf).
-Mocking: `vi.stubGlobal('fetch', vi.fn())` mit Antworten aus `tests/fixtures/*.json`; keine
-Netzwerk-Bibliothek, kein MSW. `electron` wird per `vi.mock('electron', ...)` ersetzt
-(`safeStorage`, `app.getPath`, `dialog`), `node:fs` über ein temporäres Verzeichnis.
+**Verbindungstest** (`ocs/connection.js`): `GET /cloud/users?limit=1&format=json`.
+Erfolg = HTTP 200 **und** `statuscode === 100`. Klassifikation mit eigenen Meldungen:
+401 -> `falsche_zugangsdaten`; 403 oder OCS 997 -> `kein_admin`; 429 ->
+`server_blockt_vorerst` ("Server blockt vorübergehend, bitte warten" — nie als
+"nicht erreichbar" oder "falsches Passwort"); `notOcs` -> `falscher_basispfad`;
+`ENOTFOUND`/`ECONNREFUSED` -> `server_nicht_erreichbar`; Zertifikatsfehler -> Prompt aus §8.
+`shared/url.js` normalisiert vorher: Schema erforderlich, **nur https** (DECISIONS 35),
+Trailing Slash und angehängte `/index.php` bzw. `/ocs/...`-Reste entfernen.
 
-**Bewusst nicht automatisiert getestet:** Vue-Komponenten und swal2-Dialoge (keine jsdom-/
-Testing-Library-Abhängigkeit, Abnahme laut GOAL manuell), `src/main/index.js` und Preload
-(Verdrahtung ohne Logik), das `electron-builder`-Artefakt, echte Nextcloud-Instanz (laut
-DECISIONS manuelle Abnahme durch den Nutzer).
+**Startverhalten:** kein Auto-Connect. Beim Start zeigt `ConnectView` die gespeicherte URL und
+den Admin-Namen vorbefüllt (nie das Passwort) mit Button "Mit gespeichertem Zugang verbinden".
+Wird das gespeicherte Passwort abgelehnt, bleibt der Dialog offen, Passwortfeld leer, Meldung
+`gespeichertes_passwort_abgelehnt`, gespeicherter Satz bleibt bis zu "Zugang löschen" erhalten.
+Dashboard, Benutzer, Gruppen und Import sind erst nach erfolgreichem Verbinden erreichbar.
 
-## 11. Sicherheitsgrenzen
+## 8. Zugangsdaten und TLS
 
-- App-Passwort: nur in `session.js` (Speicher) und verschlüsselt in `credentials.json`. Es wird
-  nie in eine IPC-Antwort, ein Log, eine Fehlermeldung, eine Exception oder ein CSV geschrieben,
-  auch nicht teilmaskiert. `logger.redact()` ist die zweite Verteidigungslinie.
-- Initialpasswörter: existieren im Main (Plan), im Renderer nur als Vorschauzeile und im
-  Ergebnis-CSV. Kein Logging, kein Eintrag in `jobs.json`.
-- Renderer darf: `window.api`-Methoden aufrufen, Daten darstellen, lokal filtern/sortieren,
-  reine Funktionen aus `src/shared/` nutzen.
-- Renderer darf nicht: HTTP sprechen (`connect-src 'none'`), Dateien lesen/schreiben, Node-APIs
-  nutzen, beliebige IPC-Kanäle adressieren, Secrets halten.
-- Jeder IPC-Handler validiert seine Eingaben erneut im Main (Server-URL, Usernamen, Quota,
-  Gruppen-IDs) — die Renderer-Validierung ist nur Komfort.
-- Externe Links/Navigation sind blockiert; es gibt keinen `webview`, kein `remote`, kein
-  `nodeIntegrationInWorker`.
+`credentials.js`:
+- Speichern nur auf ausdrücklichen Wunsch (`remember: true`).
+- Vorher `safeStorage.isEncryptionAvailable()` und auf Linux `getSelectedStorageBackend()`.
+- Backend `gnome_libsecret` / `kwallet*` -> `encryptString`, Ablage als eine JSON-Datei
+  `credentials.json` in `app.getPath('userData')`: `{ baseUrl, adminUser, secret: <base64> }`.
+  Kein electron-store, keine Profilliste (GOAL Zeile 8).
+- Backend `basic_text` oder `isEncryptionAvailable() === false` -> **nicht persistieren**
+  (DECISIONS 31). `connection.connect` liefert `{ ok: true, status: { secretStorage: 'session' } }`
+  plus `messageId: 'kein_keyring_nur_sitzung'`; der Renderer zeigt eine swal2-Warnung und
+  ein dauerhaftes Hinweisfeld "Zugang gilt nur für diese Sitzung".
+  `setUsePlainTextEncryption()` wird nie aufgerufen.
+- Entschlüsseln passiert nur in `connection.connectSaved`; das Klartextpasswort lebt
+  ausschließlich in `session.js`.
 
-## 12. Explizit NICHT gemacht
+`tls.js`:
+- `app.on('certificate-error')`: Hostvergleich gegen `session.certException`.
+  Treffer (Host + SHA-256-Fingerprint gleich) -> `callback(true)`.
+- Kein Treffer -> `tls.onCertificatePrompt` mit Host, Fingerprint (Doppelpunkt-Gruppen),
+  Subject, Issuer, Gültigkeit. Der Renderer zeigt einen swal2-Dialog mit dem Fingerprint
+  zum Vergleich; erst `tls.respondCertificate({ akzeptiert: true })` setzt
+  `session.certException = { host, fingerprint }` und ruft `callback(true)`. Ablehnen -> `callback(false)`.
+- Solange eine Ausnahme aktiv ist, zeigt `App.vue` ein **permanentes Banner**
+  "Unsichere Zertifikatsausnahme aktiv für `<host>` (`<fingerprint>`)".
+- **Entscheidung (nicht in den Dokumenten geklärt): die Ausnahme gilt nur für die Sitzung** und
+  wird nicht persistiert — eine auf Platte liegende Ausnahme wäre ein stiller Dauer-Bypass;
+  die erneute Bestätigung kostet einen Klick pro Start. Punkt für den Nutzer in §11.
+- `setUsePlainTextEncryption`, `ignore-certificate-errors`, `webSecurity: false` und
+  `NODE_TLS_REJECT_UNAUTHORIZED` sind verboten.
 
-- **Kein vue-router:** sechs Views, eine `ref` in `App.vue` genügt.
-- **Kein Pinia/Vuex:** je ein Composable pro Domäne deckt den Zustand ab.
-- **Keine UI-Bibliothek:** eigenes Dark-Theme-CSS, nur swal2 für Dialoge (CLAUDE.md-Vorgabe).
-- **Kein TypeScript:** von CLAUDE.md ausgeschlossen.
-- **Kein axios/node-fetch:** globales `fetch` reicht für Basic-Auth-Formularrequests.
-- **Keine CSV-Bibliothek:** der Parser muss Fehlerzeilen-Toleranz und Header-Mapping ohnehin
-  selbst liefern; rund 60 Zeilen reine Logik statt Abhängigkeit.
-- **Keine globale OCS-Fehlertabelle:** laut Research bedeuten Codes pro Endpunkt Verschiedenes.
-- **Kein Repository-/Service-Interface über die OCS-Module:** es gibt genau eine
-  Implementierung; Ausnahme ist nur der Userlisten-Adapter mit zwei realen Pfaden.
-- **Kein Plugin-/Erweiterungssystem, keine Server-Profile, kein LDAP, keine i18n, kein Light
-  Theme:** Nicht-Ziele in GOAL.md.
-- **Kein Auto-Update, keine Telemetrie, kein Crash-Reporter.**
-- **Kein Caching-Layer, keine lokale DB:** Listen werden pro Ansicht geladen und im Composable
-  gehalten.
-- **Kein konfigurierbares Parallelitäts-Setting:** DECISIONS legt fix 5 fest.
-- **Kein Integrationstest gegen eine echte Nextcloud:** DECISIONS legt manuelle Abnahme fest.
-- **Kein eigener Bundler für Main/Preload:** Electron lädt die ESM-Main-Dateien und die
-  CJS-Preload-Datei direkt; nur der Renderer wird von Vite gebaut.
+## 9. Sicherheitsgrenzen
 
-## Offene Fragen an den Nutzer
+- **Main -> Renderer:** niemals das App-Passwort, auch nicht maskiert, auch nicht in
+  `message`/`stack`. Kein Rohobjekt eines `fetch`-Requests, keine `Authorization`-Header.
+- **Renderer:** kein Node, kein `fs`, kein `fetch` auf den Nextcloud-Host, kein `require`.
+  `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `webSecurity: true`,
+  `preload` die einzige Brücke. `setWindowOpenHandler` verweigert alles,
+  `will-navigate` blockt externe Navigation.
+- **Preload:** nur die Methoden aus §3, jede mit festem Kanalnamen. Keine
+  Channel-Parameter von außen, keine Weitergabe von `ipcRenderer`.
+- **Platte:** `credentials.json` (verschlüsselt) ist die einzige von der App geschriebene Datei
+  ohne Nutzerdialog. CSV-Exporte nur über `dialog.showSaveDialog` an nutzergewählte Pfade.
+- **Initialpasswörter:** entstehen pur im Renderer, gehen als Request-Payload nach Main und
+  stehen nur im Import-Export. Nicht in Logs, nicht in `ItemResult.grund`, nicht im Jobverlauf.
+- **Jobverlauf:** nur Typ, Zeit, Anzahl ok/Fehler (DECISIONS 33) — keine Usernamen-Listen,
+  keine Passwörter, keine Persistenz.
 
-1. **Sonderzeichen im Initialpasswort:** DECISIONS nennt `<Prefix><ddmmyyyy><Sonderzeichen>`.
-   Fest `!` oder im Import-Dialog eingebbar? (Vorschlag: fest `!`.)
-2. **Batch-Operation "Einstellungen ändern":** GOAL nennt E-Mail-Domain und Anzeigename-Format.
-   Soll v1 das enthalten, und wenn ja mit welcher Regel (z. B. "E-Mail = `<username>@<Domain>`",
-   überschreibt bestehende Adressen)? Aktuell nicht in der Operationsliste.
-3. **Zielgruppen beim CSV-Import:** Soll eine angegebene, auf dem Server nicht existierende
-   Gruppe automatisch angelegt werden, oder ist das ein Fehler mit Abbruch der Vorschau?
-4. **Filter "Kontingentauslastung" in der Usertabelle:** welche Stufen (z. B. <50 % / 50-90 % /
-   >90 % / unbegrenzt / unbekannt)?
-5. **Dry-Runs in der Job-Historie:** sollen Vorschauen mitgezählt werden? (Angenommen: nein,
-   nur ausgeführte Jobs.)
-6. **Löschen von Usern:** soll zusätzlich ein Hinweis erscheinen, dass Nextcloud die Dateien des
-   Users mitlöscht, oder genügt die Zahleneingabe-Bestätigung?
+## 10. Fehlerbehandlung und Logging
+
+- `ocs/client.js` wirft nicht; alles wird Result. Netzwerk- und Parse-Fehler werden dort
+  in `kind` übersetzt.
+- Jeder IPC-Handler hat ein `try/catch` als letzte Rettung und liefert
+  `{ ok: false, messageId: 'unerwarteter_fehler', message }` ohne Stack an den Renderer.
+- Deutsche Texte ausschließlich in `shared/messages.js` (`messageId -> Text`), damit UI-Sprache
+  und Codebezeichner getrennt bleiben. Der Renderer zeigt `message`, loggt nichts.
+- Einzelfehler brechen einen Job nie ab (GOAL Zeile 62). Der Job endet nur durch Abbruch,
+  Abbruch durch den Nutzer oder vollständige Abarbeitung.
+- Jede Liste hat drei definierte Zustände über `StateBlock.vue`: Laden, Leer
+  ("Keine Einträge"), Fehler mit Wiederholen-Button. Nullwerte rendern als "0".
+  Datenstand mit Zeitstempel, Aktualisieren nur per Button, kein Polling.
+- **Logging:** kein Datei-Logging (DECISIONS 50). `main/log.js#dbg()` ist no-op wenn
+  `app.isPackaged`, nimmt nur Strings und wird nie mit Credentials, Passwörtern oder
+  Exportinhalten aufgerufen. `process.on('unhandledRejection')` schreibt eine Kurzmeldung
+  über `dbg`.
+
+## 11. Teststrategie
+
+**Pur unit-getestet, ohne Mocks** (alles in `src/shared/`): `username`, `usernameRules`,
+`birthdate`, `password`, `csvImport`, `csvUserList`, `importPlan`, `quota`, `pool`, `dryRun`,
+`resultCsv`, `filters`, `url`, `userView`, `messages`. Diese Module importieren nichts mit I/O —
+das ist eine Review-Regel, nicht nur eine Konvention.
+
+Pflichtfälle: alle 14 Zeilen aus RESEARCH-UPN §11 inklusive der beiden `''`-Fehlerfälle und die
+5 Fixtures aus §10 (ohne Domain); beide Reihenfolgen; alle sechs Quota-Shapes; jeder Zeilen- und
+Dateifehler aus §6; Kürzung-vor-Kollision und Kollision-nach-Kürzung; Re-Import derselben CSV
+ergibt ausschließlich `benutzer_existiert_bereits`.
+
+**Mit gemocktem `fetch`** (`globalThis.fetch` per `vi.stubGlobal`, keine HTTP-Bibliothek):
+`ocs/client.js` (Header-Pflicht `OCS-APIRequest`, `format=json`, 100/401/403/429/HTML/Netzfehler,
+Retry-Zählung), `ocs/users.js` und `ocs/groups.js` (endpunktspezifische Codes -> messageId),
+`ocs/userList.js` (Probe-Erfolg, 404-Fallback, Shape-Fallback, Session-Memo),
+`actions/pipeline.js` (50 Items, 7 Fehler, ein 429 mit Retry, Abbruch bei Item 20 -> jedes Item
+genau einmal, 429 nicht als Userfehler, `teilweise` bei fehlgeschlagenem Gruppenschritt).
+
+**Gemockt statt echt:** `electron` (`app`, `dialog`, `safeStorage`, `ipcMain`) über
+Modul-Mocks; `node:fs/promises` in `credentials.test.js`.
+
+**Nur manuell prüfbar** (-> `docs/MANUAL-TEST.md`): echter `users/details`-Pfad und Shape,
+echte `MAX_USERID_LENGTH`, Gruppenmitglieder-Shape, safeStorage-Backends,
+Zertifikatsausnahme, Dialogverhalten von SweetAlert2, Build-Artefakt.
+
+Keine Vue-Komponententests, keine E2E-Suite: GOAL Zeile 60 verlangt manuelle Abnahme,
+Zeile 61/62 nur Generator- und Batch-Tests.
+
+`tests/fixtures/`:
+`import-ok.csv` · `import-semikolon.csv` · `import-komma.csv` · `import-bom-crlf.csv` ·
+`import-leer.csv` · `import-nur-header.csv` · `import-header-falsch.csv` ·
+`import-spaltenzahl.csv` · `import-quote-unbalanciert.csv` · `import-datum-formate.csv` ·
+`import-datum-ungueltig.csv` · `import-datum-zukunft.csv` · `import-doppelzeile.csv` ·
+`import-cjk.csv` · `import-kollision.csv` · `import-lange-namen.csv` ·
+`import-2001-zeilen.csv` · `userliste-mit-header.csv` · `userliste-ohne-header.csv` ·
+`ocs-users-details.json` · `ocs-users-ids.json` · `ocs-user-single.json` ·
+`ocs-quota-shapes.json` · `ocs-groups.json` · `ocs-group-members-array.json` ·
+`ocs-group-members-object.json` · `ocs-error-401.json` · `ocs-error-403-997.json` ·
+`ocs-html-antwort.html`
+
+## 12. Offene technische Risiken
+
+| Risiko | Gewählte Abfederung |
+|---|---|
+| `users/details` Pfad/Shape unverifiziert | Probe mit fünf expliziten Fallback-Triggern, Session-Memo, identischer `UserView` auf beiden Wegen |
+| `MAX_USERID_LENGTH` unbekannt | Konstante `MAX_USERID = 64` an einer Stelle; Kürzungstest hängt am Konstantenwert, nicht an 64 |
+| Gruppenmitglieder-Shape unverifiziert | Zwei akzeptierte Shapes, sonst benannte Fehlermeldung statt stiller leerer Liste |
+| Quota-Felder inkonsistent / `null` | `kind: 'unknown'` als erster Klasse-Zustand; Dashboard zeigt vier Werte statt einer Summe (DECISIONS 32) |
+| 429 durch Tippfehler im Verbindungstest | Eigene Meldung `server_blockt_vorerst`, kein automatischer Wiederholungsversuch im Testdialog |
+| Brute-Force-Sperre durch Batch-Last | Parallelität fest 4, 429-Backoff 2 s/6 s, danach Item-Fehler |
+| safeStorage still auf Klartext | Backendprüfung vor jedem Speichern, `basic_text` persistiert nie, sichtbarer Sitzungshinweis |
+| Klartextpasswörter im Export | Warnung vor dem Speicherdialog, nutzergewählter Pfad, Liste beim Verlassen der Ansicht verworfen |
+| Kollisionsname kodiert das Geburtsdatum | Geburtsdatum nur in Vorschau und Export sichtbar, nirgends sonst, nie geloggt |
+| Teilerfolg bei `user.create` mit Gruppe | Getrennte Schritte, Status `teilweise` mit benanntem Schritt, kein Rollback |
+| Groß-/Kleinschreibung bei User-IDs | Jede Existenz- und Kollisionsprüfung vergleicht case-insensitiv |
+| Vorschauzahl weicht von Rohauswahl ab | Löschbestätigung nutzt ausschließlich `aenderungen.length` aus dem Dry-Run |
+
+## 13. Ausdrücklich NICHT gebaut
+
+- Pinia — ein reaktives Modul `state.js` reicht für fünf Views.
+- vue-router — eine `ref('dashboard')` plus `<component :is>`; fünf Views, keine URLs, kein Deep-Link-Bedarf.
+- axios — Node-`fetch` ist im Main vorhanden.
+- papaparse — "simple CSV" ohne Quoting ist ein ~40-Zeilen-Modul.
+- electron-store — ein Datensatz, eine JSON-Datei, keine Profile.
+- Job-Registry, Queue-Klasse, State Machine, Event-Bus — ein Pool, ein Stop-Flag, eine Ergebnisliste.
+- AbortController im Batch — DECISIONS 42 verlangt, dass laufende Requests fertiglaufen.
+- Persistenzschicht für den Jobverlauf — DECISIONS 33: letzte 5 im Speicher.
+- Globale OCS-Fehlertabelle — Codes sind endpunktspezifisch (REVIEW-NOTES 3).
+- API-Versionsverhandlung / pluggable Adapter — eine Probe mit Session-Memo genügt.
+- Batch-Aktion "Einstellungen ändern" / Anzeigename-Umformatierung — gestrichen (DECISIONS 36).
+- Rollback oder Kompensation für Teilfehler — nicht verlässlich erreichbar, Admin lässt erneut laufen.
+- Subadmin-Endpunkte, Gruppen-Anzeigename-Editierung, Paginierung, LDAP, Light Theme, i18n — nicht in GOAL.
+- Freitext-Kontingent — nur Presets 1/2/5/10/20 GiB und unbegrenzt (DECISIONS 38).
+- Vue-Komponententests und E2E — Abnahme ist manuell (DECISIONS 20).
+- Auto-Connect beim Start — explizites Verbinden, damit ein abgelehntes Passwort nicht
+  unbemerkt die Brute-Force-Verzögerung startet.

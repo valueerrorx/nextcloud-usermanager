@@ -1,7 +1,5 @@
 # Entscheidungen
-
 Eine Zeile pro Entscheidung. Quelle der Wahrheit für Architekt, Coder und Tester.
-
 | Datum | Frage | Antwort |
 |---|---|---|
 | 2026-10-05 | Pfad des Referenzprojekts "Microsoft 365 Users" | `/home/valueerror/Nextcloud/WebDEV/Microsoft365-Manager` (read-only), UPN-Logik in `src/utils/upn.js` + Kopie in `index.js` |
@@ -18,11 +16,11 @@ Eine Zeile pro Entscheidung. Quelle der Wahrheit für Architekt, Coder und Teste
 | 2026-10-05 | Abruf der Userliste | `GET /cloud/users/details` (Bulk) mit automatischem Fallback auf Einzelabfragen, da Pfad/Shape nicht offiziell belegt sind |
 | 2026-10-05 | Vergleich bei Username-Kollisionen | Case-insensitiv, weil Nextcloud Groß-/Kleinschreibung bei User-IDs inkonsistent behandelt (Issues #10814, #20011) |
 | 2026-10-05 | Abnahme gegen echte Nextcloud | Nutzer testet manuell. Entwicklung gegen dokumentierte OCS-API + gemockte HTTP-Tests. Keine Integrationsumgebung im Plan |
-| 2026-10-05 | safeStorage-Backend `basic_text` (kein Keyring aktiv) | Warnen + speichern erlauben: beim Speichern `isEncryptionAvailable()` + `getSelectedStorageBackend()` prüfen, bei `basic_text` swal2-Warnung mit expliziter Bestätigung, dann persistieren |
+| ~~2026-10-05~~ | safeStorage-Backend `basic_text` (kein Keyring aktiv) | Warnen + speichern erlauben: beim Speichern `isEncryptionAvailable()` + `getSelectedStorageBackend()` prüfen, bei `basic_text` swal2-Warnung mit expliziter Bestätigung, dann persistieren  **— ÜBERHOLT, siehe spätere Zeile** |
 | 2026-10-05 | Generierter Username länger als Nextcloud-Limit (64) | Auf 64 Zeichen kürzen. Kollisionsprüfung läuft auf dem gekürzten Wert. Vorschau markiert die Zeile als "gekürzt" |
 | 2026-10-05 | Fehlerhafte Zeilen beim CSV-Import | Gute Zeilen importieren. Fehlerzeilen rot markiert, übersprungen, mit Grund im Ergebnis-Export |
-| 2026-10-05 | Lebensdauer der Batch-Job-Historie | JSON-Datei in Electron `userData`, letzte 20 Jobs, nur Metadaten (Typ, Zeit, Anzahl ok/Fehler). Keine Passwörter |
-| 2026-10-05 | Parallelität bei Batch-Jobs | Fix 5 gleichzeitige Requests als Konstante im Code (Tech-Lead-Default, kein Nextcloud-Limit). Nicht konfigurierbar, kein UI-Setting |
+| ~~2026-10-05~~ | Lebensdauer der Batch-Job-Historie | JSON-Datei in Electron `userData`, letzte 20 Jobs, nur Metadaten (Typ, Zeit, Anzahl ok/Fehler). Keine Passwörter  **— ÜBERHOLT, siehe spätere Zeile** |
+| ~~2026-10-05~~ | Parallelität bei Batch-Jobs | Fix 5 gleichzeitige Requests als Konstante im Code (Tech-Lead-Default, kein Nextcloud-Limit). Nicht konfigurierbar, kein UI-Setting  **— ÜBERHOLT, siehe spätere Zeile** |
 | 2026-10-05 | Kollision auch mit Geburtsdatum nicht auflösbar (gleicher Name UND gleiches Geburtsdatum) | Zeile wird als Fehler abgelehnt und übersprungen, Status `Benutzer existiert bereits`. Kein Zählersuffix. Ein versehentlicher Re-Import meldet dadurch sauber statt Dubletten anzulegen |
 | 2026-10-05 | Username überschreitet das Nextcloud-Längenlimit (defensiv 64) | **Nachnamen-Komponente kürzen**, bis der Gesamtusername passt, danach Eindeutigkeit erneut prüfen. Kann der Username auch bei vollständig gekürztem Nachnamen nicht passen, wird die Zeile ein Fehler |
 | 2026-10-05 | Initialpasswort: abgeleitet oder zufällig? | Bleibt bei der abgeleiteten Regel `<Prefix><ddmmyyyy>!`. Keine Zufallsoption. Hinweis: Passwort bleibt dauerhaft gültig, die API bietet kein Erzwingen einer Änderung |
@@ -49,3 +47,14 @@ Eine Zeile pro Entscheidung. Quelle der Wahrheit für Architekt, Coder und Teste
 | 2026-10-05 | Passwort-Export auf Platte | swal2-Warnung vor dem Speicherdialog, nur nutzergewählter Pfad, kein Default im App-Verzeichnis, kein Auto-Open. Passwortliste beim Verlassen der Importansicht aus dem Speicher werfen |
 | 2026-10-05 | Logging | Kein Datei-Logging. Konsole nur im Dev-Modus. Niemals Passwörter, App-Passwort oder Export-Inhalte |
 | 2026-10-05 | Einzel-User-Aktionen | Laufen über dieselbe Action-Pipeline wie Batch, mit einer Auswahl von genau einem. Kein zweiter Codepfad |
+| 2026-10-05 | CSV-Import mit nicht existierender Zielgruppe | Nach Rückfrage anlegen: Vorschau markiert "wird neu angelegt", swal2 fragt einmal explizit nach. Kein stilles Anlegen |
+| 2026-10-05 | Filterstufen "Kontingentauslastung" in der Usertabelle | 5 Stufen: `<50 %`, `50-90 %`, `>90 %`, `unbegrenzt`, `unbekannt`. "unbekannt" ist Pflicht, weil Quota laut Research oft nicht auswertbar ist |
+| 2026-10-05 | Dry-Runs in der Job-Historie | Nein, nur tatsächlich ausgeführte Jobs (Tech-Lead-Default) |
+| 2026-10-05 | Bestätigung beim Batch-Löschen | Zahleneingabe PLUS Hinweistext, dass Nextcloud die Dateien der User mitlöscht (Tech-Lead-Default) |
+| 2026-10-05 | Widersprüche aus paralleler Lead-Session | Aufgelöst zugunsten der Nutzerantworten: safeStorage nicht persistieren, Job-Historie nur Sitzung mit 5 Jobs, Parallelität 4. Die drei Lead-Default-Zeilen sind als ÜBERHOLT markiert |
+| 2026-10-05 | Lebensdauer der TLS-Ausnahme (selbstsigniert) | **Nur die laufende Sitzung.** Fingerprint nach jedem App-Start erneut bestätigen. Ein getauschtes Zertifikat fällt dadurch sofort auf |
+| 2026-10-05 | Deutung von `quota: 0` (kein Kontingent gesetzt) | Als **`unknown`**. Kein Prozentwert, nicht in der "fast voll"-Liste, zählt in der Dashboard-Kachel als "unbekannt". Verhindert Division durch 0 und falsche 100-%-Anzeigen |
+| 2026-10-05 | Ergebnis-CSV: Spalten des Import-Exports | Spalten 1-6 identisch zum Batch-Bericht, plus eine 7. Spalte `passwort` nur im Import-Export |
+| 2026-10-05 | 429-Pausendialog im Batch | **Gestrichen.** Erschöpfte Retries werden ein normaler Item-Fehler. Spart zwei IPC-Kanäle und einen UI-Zustand (Tech-Lead-Entscheidung) |
+| 2026-10-05 | Username-Länge: Kritik vs. Entscheidung | Die Nutzerentscheidung "Nachnamen kürzen" setzt die gegenteilige Empfehlung in SPEC-CRITIQUE außer Kraft. Kürzen läuft vor **und** nach dem Anhängen von `.ddmmyyyy`, danach Eindeutigkeit erneut prüfen |
+| 2026-10-05 | Kein Auto-Connect beim App-Start | Verbindung immer explizit, damit ein veraltetes gespeichertes Passwort nicht still die Brute-Force-Verzögerung auslöst (Tech-Lead-Entscheidung) |
