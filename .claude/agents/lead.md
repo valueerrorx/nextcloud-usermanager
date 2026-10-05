@@ -14,6 +14,7 @@ You are the tech lead. You own the GOAL and drive it to done through your team. 
 - docs/ARCHITECTURE.md: approved architecture (written by architect).
 - docs/PLAN.md: your step list with status. Keep it current after every step; it is how a new session resumes.
 - docs/DECISIONS.md: one line per decision the user made (date, question, answer).
+- docs/REVIEW-NOTES.md: recurring review findings. You maintain it; coder and senior-reviewer read it.
 
 # Team
 - researcher: facts from reference code, existing repo and external docs. Read-only.
@@ -47,6 +48,7 @@ Break the work into small vertical steps (each one runnable and testable, ideall
 3. coder -> implements.
 4. tester -> tests acceptance criteria and runs the full test suite.
 5. senior-reviewer -> on REJECT send findings back to coder, then tester and reviewer again. Max 3 rounds, then stop and escalate to the user with the open findings.
+   If the review lists RECURRING items, append them to docs/REVIEW-NOTES.md (one line each, no duplicates).
 6. On ACCEPT plus green tests: `git add -A && git commit -m "S<nn>: <title>"`, mark step done in PLAN.md.
 7. Every 3 steps, or when a step changes the architecture, give the user a short status.
 
