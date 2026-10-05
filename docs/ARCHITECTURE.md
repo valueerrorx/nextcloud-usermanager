@@ -30,12 +30,18 @@ electron-builder.yml              Linux-Target (AppImage) für npm run build
 eslint.config.js                  Flat config, ESM + Override sourceType commonjs für
                                   src/preload/index.cjs
 vitest.config.js                  Umgebung node, Tests aus tests/
-scripts/dev.mjs                   startet Vite und danach Electron in einem Node-Prozess
-                                  (node:child_process, keine neue Abhängigkeit)
+scripts/dev.mjs                   startet Vite über dessen JS-API im eigenen Prozess
+                                  (createServer/listen, URL aus server.resolvedUrls.local[0]),
+                                  danach Electron als einziger Kindprozess. Keine stdout-Regex,
+                                  kein Polling, keine neue Abhängigkeit
 
 src/main/
   index.js                        app-Bootstrap, BrowserWindow, single-instance, lädt ipc.js
-                                  und tls.js; exportiert BROWSER_WINDOW_OPTIONS für den Unit-Test
+                                  und tls.js; re-exportiert BROWSER_WINDOW_OPTIONS
+                                  KEIN top-level await vor app.whenReady() — ESM-Main wird
+                                  asynchron geladen, sonst wird 'ready' verpasst
+  windowOptions.js                BROWSER_WINDOW_OPTIONS als eigenes Modul, damit
+                                  tests/mainWindow.test.js es ohne electron-Mock importieren kann
   ipc.js                          EINZIGER Ort mit ipcMain.handle/on; registriert die Kanäle aus §3
   session.js                      Sitzungszustand im Speicher: Credentials, adminUserId (aus dem
                                   eingegebenen Loginnamen), userListMode-Memo, Zertifikatsausnahme,
@@ -136,10 +142,13 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
 - `src/preload/index.cjs` ist die **einzige** CommonJS-Datei: mit `sandbox: true` lädt Electron
   nur CJS-Preloads. `eslint.config.js` erhält dafür einen Override
   (`files: ['src/preload/index.cjs'], languageOptions: { sourceType: 'commonjs' }`).
-- `npm run dev` = `node scripts/dev.mjs`. Das Skript startet mit `node:child_process`
-  erst `node_modules/.bin/vite` und, sobald die Dev-URL steht, `node_modules/.bin/electron .`
-  mit `VITE_DEV_SERVER_URL` in der Umgebung; beim Beenden eines der beiden Prozesse wird der
-  andere beendet. **Keine neue Abhängigkeit** (kein `concurrently`, kein `electron-vite`).
+- `npm run dev` = `node scripts/dev.mjs`. Das Skript startet Vite über die **JS-API**
+  (`createServer()`, `await server.listen()`), liest die URL aus `server.resolvedUrls.local[0]`
+  und startet danach `node_modules/.bin/electron .` mit `VITE_DEV_SERVER_URL` in der Umgebung.
+  Vite läuft damit **im Node-Prozess selbst**, Electron ist der einzige Kindprozess — kein
+  stdout-Parsing, kein Port-Polling. Teardown: Electron beendet -> Vite schließen und mit
+  Electrons Exitcode enden; `SIGINT`/`SIGTERM` -> beide beenden, keine Waisenprozesse.
+  **Keine neue Abhängigkeit** (kein `concurrently`, kein `electron-vite`).
   `src/main/index.js` lädt `VITE_DEV_SERVER_URL`, falls gesetzt, sonst `dist/renderer/index.html`.
 
 ## 3. IPC-Vertrag (vollständig und abschließend)
@@ -152,6 +161,7 @@ auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 
 | Methode | Richtung | Argument | Rückgabe | Fehlerfälle |
 |---|---|---|---|---|
+| `app.version` | invoke | – | `{ ok: true, version }` | – (kann nicht fehlschlagen) |
 | `connection.connect` | invoke | `{ baseUrl, adminUser, appPassword, remember }` | `{ ok, status }` | URL ungültig, 401, 403/997, 429, HTML-Antwort, Netz, Zertifikat, `secret_nicht_gespeichert` |
 | `connection.connectSaved` | invoke | – | `{ ok, status }` | `kein_gespeicherter_zugang`, 401 -> `gespeichertes_passwort_abgelehnt` |
 | `connection.status` | invoke | – | `{ connected, baseUrl, adminUserId, secretStorage, certException, hasSaved, savedBaseUrl, savedAdminUser }` | – |
@@ -768,9 +778,10 @@ Dashboard, Benutzer, Gruppen und Import sind erst nach erfolgreichem Verbinden e
   `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `webSecurity: true`,
   `preload` die einzige Brücke. `setWindowOpenHandler` verweigert alles,
   `will-navigate` blockt externe Navigation.
-- **Verifikation der Flags:** `src/main/index.js` exportiert das Optionsobjekt als
-  `BROWSER_WINDOW_OPTIONS` und übergibt genau dieses an `new BrowserWindow(...)`.
-  `tests/mainWindow.test.js` importiert es (mit gemocktem `electron`) und behauptet
+- **Verifikation der Flags:** Das Optionsobjekt liegt in **`src/main/windowOptions.js`** als
+  `BROWSER_WINDOW_OPTIONS`; `src/main/index.js` re-exportiert es und übergibt genau dieses an
+  `new BrowserWindow(...)`. `tests/mainWindow.test.js` importiert **`windowOptions.js` direkt** —
+  dadurch **kein `electron`-Mock** und keine Bootstrap-Seiteneffekte beim Import. Der Test behauptet
   `contextIsolation === true`, `sandbox === true`, `nodeIntegration === false`,
   `webSecurity !== false` sowie dass `preload` auf `index.cjs` zeigt
   (DECISIONS „Verifikation der Electron-Security-Flags“). Damit regressiert kein Flag still.
