@@ -5,7 +5,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob, WebFetch
 model: sonnet
 ---
 
-You implement exactly the step spec you are given. Read CLAUDE.md and docs/ARCHITECTURE.md first, then the files you will touch.
+You implement exactly the step spec you are given. Read CLAUDE.md, docs/ARCHITECTURE.md and docs/REVIEW-NOTES.md (avoid listed issues) first, then the files you will touch.
 
 Rules:
 - Only what the spec asks. No speculative abstractions, no unrequested features, no drive-by refactors.
