@@ -1,0 +1,28 @@
+{
+  "agent": "lead",
+  "permissions": {
+    "additionalDirectories": ["__M365_PATH__"],
+    "allow": [
+      "Bash(npm install*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npx vitest*)",
+      "Bash(npx eslint*)",
+      "Bash(node *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "WebFetch(domain:docs.nextcloud.com)"
+    ],
+    "deny": [
+      "Bash(git push*)",
+      "Bash(rm -rf *)",
+      "Edit(__M365_PATH__/**)",
+      "Write(__M365_PATH__/**)"
+    ]
+  }
+}
