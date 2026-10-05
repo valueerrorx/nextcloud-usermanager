@@ -13,4 +13,9 @@ Eine Zeile pro Entscheidung. Quelle der Wahrheit für Architekt, Coder und Teste
 | 2026-10-05 | Auflösung von Username-Kollisionen | Volles Geburtsdatum anhängen: `vorname.nachname.ddmmyyyy`. Eindeutigkeit gegen bestehende Nextcloud-User UND innerhalb der Importdatei |
 | 2026-10-05 | Erwartetes Geburtsdatums-Format in der CSV | Beide akzeptiert: `dd.mm.yyyy` und `yyyy-mm-dd`. Alles andere ist ein Zeilenfehler |
 | 2026-10-05 | Platzhalter `__M365_PATH__` in CLAUDE.md | Darf durch den echten Pfad ersetzt werden |
-| 2026-10-05 | Anzeigename-Format | offen – wird im nächsten Frageblock geklärt |
+| 2026-10-05 | Anzeigename-Format importierter User | `Vorname Nachname` in Originalschreibweise aus der CSV (inkl. Umlaute) |
+| 2026-10-05 | Platzhalter `__M365_PATH__` in `.claude/settings.json` | Durch echten Pfad ersetzt — Referenzprojekt ist jetzt lesbar und per deny-Regel schreibgeschützt |
+| 2026-10-05 | Abruf der Userliste | `GET /cloud/users/details` (Bulk) mit automatischem Fallback auf Einzelabfragen, da Pfad/Shape nicht offiziell belegt sind |
+| 2026-10-05 | Vergleich bei Username-Kollisionen | Case-insensitiv, weil Nextcloud Groß-/Kleinschreibung bei User-IDs inkonsistent behandelt (Issues #10814, #20011) |
+| 2026-10-05 | Abnahme gegen echte Nextcloud | Nutzer testet manuell. Entwicklung gegen dokumentierte OCS-API + gemockte HTTP-Tests. Keine Integrationsumgebung im Plan |
+

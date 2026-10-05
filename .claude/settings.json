@@ -1,7 +1,7 @@
 {
   "agent": "lead",
   "permissions": {
-    "additionalDirectories": ["__M365_PATH__"],
+    "additionalDirectories": ["/home/valueerror/Nextcloud/WebDEV/Microsoft365-Manager"],
     "allow": [
       "Bash(npm install*)",
       "Bash(npm run *)",
@@ -21,8 +21,8 @@
     "deny": [
       "Bash(git push*)",
       "Bash(rm -rf *)",
-      "Edit(__M365_PATH__/**)",
-      "Write(__M365_PATH__/**)"
+      "Edit(/home/valueerror/Nextcloud/WebDEV/Microsoft365-Manager/**)",
+      "Write(/home/valueerror/Nextcloud/WebDEV/Microsoft365-Manager/**)"
     ]
   }
 }
