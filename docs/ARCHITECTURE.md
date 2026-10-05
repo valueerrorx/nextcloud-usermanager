@@ -122,7 +122,10 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
   ocsUsers.test.js                endpunktspezifische Codes -> messageId, user.update 1-2 Schritte
   ocsGroups.test.js               102/103/101 je Endpunkt
   userList.test.js                details-Probe, Fallback-Trigger, Session-Memo
-  pipeline.test.js                50 Items, 7 Fehler, ein 429, Abbruch bei 20, Stop-Flag-Aufräumen
+  pipeline.test.js                50 Items, 7 Fehler, ein 429, Abbruch bei 20 (injizierter
+                                  shouldStop-Callback, kennt session nicht)
+  session.test.js                 Jobzustand laufend/beendet, Stop-Flag-Aufräumen im finally,
+                                  actions.stop -> gestoppt/bereits_beendet/unbekannt
   fixtures/                       siehe §11
 ```
 
@@ -322,14 +325,22 @@ Ablauf in `pipeline.js` — `runJob({ jobId, action, items, params, shouldStop }
    Retries sind ein normaler Item-Fehler mit der Begründung `server_blockt_vorerst`, der Job
    läuft weiter bis zum Ende.
 4. Nach jedem Item `actions.onProgress`. Jedes Item erscheint **genau einmal** im Ergebnis.
-5. **Im `finally`** von `runJob` räumt `ipc.js` das Stop-Flag der `jobId` aus `session` weg, egal
-   ob der Job normal endete, abgebrochen wurde oder warf. Kein Leck über die Sitzungsdauer.
+5. `ipc.js` umschließt den `runJob`-Aufruf mit `try/finally`. Im `finally` wird **nur das
+   Stop-Flag** der `jobId` entfernt und der Jobzustand auf `'beendet'` gesetzt — egal ob der Job
+   normal endete, abgebrochen wurde oder warf. Kein Leck über die Sitzungsdauer.
+
+`session` hält pro `jobId` einen Zustand `'laufend' | 'beendet'`, der **nicht** aufgeräumt wird;
+nur das Stop-Flag wird freigegeben. Ohne diesen Zustand könnte `actions.stop` einen beendeten Job
+nicht von einem nie gestarteten unterscheiden.
 
 `actions.stop({ jobId })` wirft nie und liefert einen definierten Zustand:
-`'gestoppt'` (Flag gesetzt, Job läuft noch), `'bereits_beendet'` (jobId war in dieser Sitzung
-aktiv, läuft aber nicht mehr — der Renderer zeigt dann nur den vorhandenen Bericht),
-`'unbekannt'` (jobId wurde nie gestartet). Ein doppelter Klick auf „Abbrechen“ ist dadurch
-harmlos und kein Fehlerdialog.
+`'gestoppt'` (Zustand `'laufend'`, Flag gesetzt), `'bereits_beendet'` (Zustand `'beendet'` — der
+Renderer zeigt dann nur den vorhandenen Bericht), `'unbekannt'` (jobId ist in `session`
+unbekannt). Ein doppelter Klick auf „Abbrechen“ ist dadurch harmlos und kein Fehlerdialog.
+
+**Testzuordnung:** Diese Zustandslogik gehört zu `ipc.js`/`session.js` und wird in
+`tests/session.test.js` geprüft, **nicht** in `pipeline.test.js` — `pipeline.js` kennt `session`
+per Konstruktion nicht und kann die Aufräumlogik nicht sehen.
 
 `ItemResult`:
 
@@ -384,15 +395,45 @@ nutzergewählter Pfad, kein Default im App-Verzeichnis, kein Auto-Open
 **Umfang des Import-Exports** (DECISIONS „Import-Ergebnis-Export Umfang“): exportiert werden die
 Pipeline-Ergebnisse **plus** die schon in der Vorschau abgewiesenen Fehlerzeilen. Letztere haben
 `aktion = 'user.create'`, `status = 'fehler'`, `grund` = der deutsche Text der Zeilenfehler-ID aus
-§6, `httpStatus`/`ocsCode` leer, `passwort` leer. **Hat eine Zeile keinen Username** (alle Fehler
-vor Stufe 12, z. B. `vorname_leer`, `datum_format`, `name_nicht_abbildbar`), steht in Spalte 1
-die **Zeilennummer** der CSV in der Form `Zeile 17`. Damit ist jede Eingabezeile im Export
+§6, `httpStatus`/`ocsCode` leer, `passwort` leer. **Jede Zeile ohne ermittelten Kandidaten** — also jeder Fehler, der auftritt, bevor
+Stufe 12 einen `kandidatA` erzeugt hat (z. B. `vorname_leer`, `datum_format`,
+`name_nicht_abbildbar`, `doppelzeile`) — bekommt in Spalte 1 die **Zeilennummer** der CSV in der
+Form `Zeile 17`. **Zeilen mit ermitteltem Kandidaten** tragen diesen Kandidaten in Spalte 1, auch
+wenn sie danach scheiterten: `username_zu_lang` (Stufe 12 bzw. 14c) den gekürzten Kandidaten, und
+die Kollisionsfehler aus 13 / 14b / 14d / 14f den **kollidierenden** Kandidaten. So ist jede
+Eingabezeile auffindbar und der Admin sieht bei Kollisionen sofort, welcher Name belegt war. Damit ist jede Eingabezeile im Export
 genau einmal auffindbar, und `resultCsv.js` braucht keine zweite Spaltendefinition.
 
 ## 6. Username-Generierung und Import-Pipeline
 
 Reihenfolge der Stufen, von CSV-Bytes zur Vorschauzeile. Stufen 1-9 in `shared/csvImport.js`,
 10-18 in `shared/importPlan.js`. Beide ohne I/O; die Bytes kommen aus `files.openCsv`.
+
+**Signaturen der beiden komplexesten Module** — verbindlich, damit der Coder nichts erfindet:
+
+```js
+// shared/csvImport.js — Stufen 1-9
+parseImportCsv(text)        -> { ok, rows: RawRow[], fileError? }
+//   RawRow = { zeile, vorname, nachname, geburtsdatum, fehler? }
+parseUserList(text)         -> { ok, usernames: string[], fileError? }   // Batch-Input
+
+// shared/importPlan.js — Stufen 10-18
+buildImportPlan({
+  rows,              // RawRow[] aus parseImportCsv
+  serverUserIds,     // string[], lowercase-normalisiert, aus state.users
+  order,             // 'givenFirst' | 'surnameFirst'
+  prefix,            // Passwort-Prefix, schon validiert
+  max = MAX_USERID,  // Testbarkeit: §6.1 läuft mit max = 20
+}) -> { rows: PreviewRow[], summary: { neu, kollisionAufgeloest, fehler } }
+//   PreviewRow = { zeile, vorname, nachname, ddmmyyyy, username|null,
+//                  status: 'neu'|'kollision_aufgeloest'|'fehler',
+//                  gekuerzt: boolean, fehlerId?, displayname, passwort|null }
+
+truncateToFit({ first, second, suffix, max }) -> { first, second, gekuerzt }
+```
+
+`max` ist ein echtes Argument, kein Testhaken: §6.1 verlangt `max = 20` für lesbare Beispiele,
+produktiv wird `MAX_USERID = 64` übergeben (DECISIONS „Test-seitiger `max`-Parameter“).
 Die Nummerierung ist die **verbindliche Ausführungsreihenfolge**: jede Stufe sieht nur das
 Ergebnis der vorherigen, und eine Zeile verlässt die Pipeline bei ihrem ersten Fehler.
 
@@ -411,7 +452,10 @@ Ergebnis der vorherigen, und eine Zeile verlässt die Pipeline bei ihrem ersten 
    Nicht parsbar -> `datum_format`; kalendarisch ungültig (31.02.2010) ->
    `datum_ungueltig`; in der Zukunft -> `datum_zukunft`.
 9. Dublette innerhalb der Datei: Vergleich von Vorname+Nachname+ddmmyyyy **auf dem Rohtext**,
-   getrimmt und case-insensitiv -> `doppelzeile`. Bewusst **nicht** über
+   getrimmt und case-insensitiv, Schlüssel **`'|'`-getrennt** (`roh.toLowerCase()` je Feld, mit
+   `'|'` gejoint — identisches Schema wie `identitaet` in Stufe 14). Ohne Trenner würden
+   `Ann|Amarie` und `Anna|Marie` bei gleichem Geburtsdatum zu einer falschen `doppelzeile`
+   verschmelzen. -> `doppelzeile`. Bewusst **nicht** über
    `normalizeComponent`: sonst würde `Anna Maria` / `AnnaMaria` hier schon wegfallen und der
    Fall `benutzer_existiert_bereits` aus Stufe 14b wäre unerreichbar.
 10. `normalizeComponent` auf Vor- und Nachname (Regex-Kette exakt in der Reihenfolge
@@ -496,8 +540,10 @@ Ergebnis der vorherigen, und eine Zeile verlässt die Pipeline bei ihrem ersten 
     registrieren nichts und belegen damit keinen Namen für Folgezeilen.
 
 **Folge der Stufe 13 — der saubere Re-Import ist beweisbar:** Ein zweiter Lauf derselben Datei
-findet jeden Namen aus dem ersten Lauf im Server-Set und endet für **jede** Zeile mit
-`benutzer_existiert_bereits`. Es entsteht nie ein `.ddmmyyyy`-Zweitaccount, weil das Suffix
+findet jeden Namen aus dem ersten Lauf im Server-Set und endet für **jede Zeile, die im ersten
+Lauf tatsächlich angelegt wurde**, mit `benutzer_existiert_bereits`. Zeilen, die schon vor
+Stufe 13 scheitern (`datum_format`, `vorname_leer`, …), scheitern erneut mit **ihrer eigenen**
+Fehler-ID — das ist korrekt und kein Widerspruch zum Beweis. Es entsteht nie ein `.ddmmyyyy`-Zweitaccount, weil das Suffix
 bestehende User gar nicht mehr betrachtet. **Preis** (bewusst akzeptiert, siehe DECISIONS):
 ein echter Neuzugang, der denselben erzeugten Namen wie ein Altuser hätte, muss manuell mit
 abweichender `userid` angelegt werden.
@@ -540,9 +586,18 @@ bei `fehler` den deutschen Text der Fehler-ID.
 
 ### 6.2 Validator für manuell eingegebene `userid`
 
-`username.js` exportiert `validateUserid(s) -> { ok, messageId? }` mit genau den Prüfungen aus
-Stufe 15: Zeichensatz, reservierte Namen, `MAX_USERID`, nicht leer, nicht nur Punkte
-(DECISIONS „Manuell eingegebene `userid`“). Die Einzel-User-Anlage in `UsersView.vue` ruft
+`username.js` exportiert `validateUserid(s, { quelle })` -> `{ ok, messageId? }`. Geprüft werden
+reservierte Namen, `MAX_USERID`, nicht leer, nicht nur Punkte — identisch zu Stufe 15.
+
+**Abweichend ist nur der Zeichensatz**, und das ist Absicht (DECISIONS „Zeichensatz für manuell
+eingegebene `userid`“):
+- `quelle: 'generator'` (Stufe 15): `[a-z0-9.]` — der Generator erzeugt per Konstruktion nichts
+  anderes, die Prüfung ist eine Regressionssperre.
+- `quelle: 'manuell'` (§6.2): `[A-Za-z0-9_.@-]`, keine Leerzeichen, kein Apostroph. Nextcloud
+  erlaubt laut RESEARCH-OCS §7 zusätzlich Leerzeichen und `'`; beide sind hier **bewusst
+  ausgeschlossen**, weil sie in URLs, CSV-Exporten und Shell-Kontexten Quoting-Fehler provozieren.
+  Ohne diese Erweiterung könnte der Admin kein `max_mueller` anlegen, obwohl Nextcloud es
+  akzeptiert. Die Einzel-User-Anlage in `UsersView.vue` ruft
 **denselben** Validator und schickt bei `ok: false` **keinen** Request. Nur hier ist
 `username_zeichen` erreichbar, weil der Nutzer frei tippt.
 
@@ -777,7 +832,8 @@ Retry-Zählung), `ocs/users.js` und `ocs/groups.js` (endpunktspezifische Codes -
 Shape-Fallback, Session-Memo), `actions/pipeline.js` (50 Items, 7 Fehler, ein 429 mit Retry,
 Abbruch bei Item 20 -> jedes Item genau einmal, 429 nach erschöpften Retries als
 `server_blockt_vorerst`-Item-Fehler **ohne** Jobabbruch, `teilweise` bei fehlgeschlagenem
-Gruppenschritt, `shouldStop` als injizierter Callback, Stop-Flag nach Jobende aufgeräumt).
+Gruppenschritt, `shouldStop` als injizierter Callback). Das Aufräumen des Stop-Flags und die
+`actions.stop`-Zustände liegen in `session.test.js`, nicht hier.
 
 **Gemockt statt echt:** `electron` (`app`, `dialog`, `safeStorage`, `ipcMain`, `BrowserWindow`)
 über Modul-Mocks; `node:fs/promises` in `credentials.test.js`.
@@ -795,7 +851,7 @@ ausdrücklich nur Generator- und Batch-Unit-Tests (DECISIONS „Abnahme gegen ec
 `import-spaltenzahl.csv` · `import-quote-unbalanciert.csv` · `import-datum-formate.csv` ·
 `import-datum-ungueltig.csv` · `import-datum-zukunft.csv` · `import-doppelzeile.csv` ·
 `import-cjk.csv` · `import-kollision.csv` · `import-lange-namen.csv` ·
-`import-kuerzung-gleich.csv` (die drei Zeilen aus §6.1 Fall 1) ·
+`import-kuerzung-gleich.csv` (die drei Zeilen aus §6.1 Fall 1; **in zwei Varianten**: `-max20` für den Unit-Test mit `max = 20` und `-max64` mit Nachnamen > 60 Zeichen, die ihre ersten 51 Zeichen teilen, für MANUAL #86a gegen die Produktionskonstante `MAX_USERID = 64`) ·
 `import-2001-zeilen.csv` · `userliste-mit-header.csv` · `userliste-ohne-header.csv` ·
 `ocs-users-details.json` · `ocs-users-ids.json` · `ocs-user-single.json` ·
 `ocs-quota-shapes.json` · `ocs-groups.json` · `ocs-error-401.json` ·
