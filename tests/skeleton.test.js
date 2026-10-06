@@ -156,9 +156,11 @@ describe('src/main/', () => {
   // S01 verbietet diese Module/Verzeichnisse ausdrücklich (docs/steps/S01-skeleton.md "Ausdrücklich
   // NICHT in diesem Schritt"); spätere Schritte legen laut ARCHITECTURE §2 weitere main/-Module an,
   // daher keine exakte Allowlist (REVIEW-NOTES: "Verbotenes aufzählen, nicht Erlaubtes").
+  // 'ocs' ist mit S03 entfernt - das Verzeichnis existiert ab dann (gleiches Schema wie
+  // 'src/shared/' nach S02).
   it('enthält keines der in S01 verbotenen Module/Verzeichnisse', () => {
     const entries = readdirSync(path.join(root, 'src', 'main'));
-    const forbidden = ['session.js', 'credentials.js', 'tls.js', 'log.js', 'files.js', 'ocs', 'actions'];
+    const forbidden = ['session.js', 'credentials.js', 'tls.js', 'log.js', 'files.js', 'actions'];
     for (const name of forbidden) {
       expect(entries).not.toContain(name);
     }
