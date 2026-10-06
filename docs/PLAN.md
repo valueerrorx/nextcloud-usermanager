@@ -41,7 +41,8 @@ größte Korrektheitsverpflichtung des Ziels ist und vollständig spezifiziert v
 ## Offene Verifikation (blockiert S01-S02 nicht)
 
 Vier API-Fakten sind unverifiziert; der Entwurf ist darauf defensiv ausgelegt. Klärung über
-`nc-verify.sh` gegen `https://cloud.xapient.solutions`:
+`docs/nc-verify.sh` gegen `https://cloud.xapient.solutions`
+(Aufruf: `bash docs/nc-verify.sh <admin-user>`; Passwort wird interaktiv gelesen):
 - `users/details`: v1- oder v2-Pfad, echte Response-Form
 - Quota-Form beim Einzeluser (Skalar vs. Objekt)
 - echte `MAX_USERID_LENGTH` (defensiv 64)
