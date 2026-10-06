@@ -15,7 +15,7 @@ Nur Fakten. Verifizierungsgrad ist pro Punkt markiert. Architekt/Coder: das hier
 | Zweck | Methode + Pfad | Parameter |
 |---|---|---|
 | Liste (nur IDs) | `GET /cloud/users` | `search`, `limit`, `offset` |
-| Liste mit Details | `GET /cloud/users/details` | `search`, `limit`, `offset` — **Pfad v1 vs v2 UNVERIFIZIERT** |
+| Liste mit Details | `GET /cloud/users/details` | `search`, `limit`, `offset` — **verifiziert, siehe V1: v1 UND v2 funktionieren, aber nur v1 liefert `statuscode` 100** |
 | Einzeluser | `GET /cloud/users/{userid}` | – |
 | Anlegen | `POST /cloud/users` | `userid` (Pflicht), `password`, `displayName`, `email`, `groups[]`, `subadmin[]`, `quota`, `language` |
 | Feld ändern | `PUT /cloud/users/{userid}` | `key`, `value` |
@@ -38,7 +38,7 @@ Nur Fakten. Verifizierungsgrad ist pro Punkt markiert. Architekt/Coder: das hier
 | Liste | `GET /cloud/groups` | `search`, `limit`, `offset` |
 | Anlegen | `POST /cloud/groups` | `groupid` |
 | Löschen | `DELETE /cloud/groups/{groupid}` | – |
-| Mitglieder | `GET /cloud/groups/{groupid}` | **Response-Shape UNVERIFIZIERT** |
+| Mitglieder | `GET /cloud/groups/{groupid}` | **verifiziert, siehe V4: `data.users` ist ein Array** |
 | Anzeigename ändern | `PUT /cloud/groups/{groupid}` | `key=displayname`, `value` |
 | Subadmins | `GET /cloud/groups/{groupid}/subadmins` | – |
 
@@ -47,9 +47,9 @@ Nur Fakten. Verifizierungsgrad ist pro Punkt markiert. Architekt/Coder: das hier
 
 ## 4. Quota (verifiziert + dokumentierte Bugs)
 - **Setzen** über `PUT /cloud/users/{userid}` mit `key=quota`. Doc-Beispiel: `"100MB"`. Ebenfalls akzeptiert: `"1 GB"`, `"none"` (unbegrenzt), rohe Byte-Zahl.
-- **Lesen** beim Einzeluser: Quota kommt teils als Skalar (`"quota": 0`), beim Details-Endpunkt als Objekt `{ free, used, total, relative, quota }`.
+- **Lesen:** auf der Test-Instanz liefern **beide** Wege ein Objekt `{ free, used, total, relative, quota }` (siehe V2). Die Doku zeigt für ältere Versionen auch einen Skalar — der Parser deckt beides ab.
 - Bekannte Inkonsistenzen (nextcloud/server #19909, #7212):
-  - Unbegrenzt erscheint je nach Codepfad als `"none"` **oder** `-3`.
+  - Unbegrenzt erscheint je nach Codepfad als `"none"` **oder** `-3`. **Auf der Test-Instanz: `-3`** (siehe V3), und zwar in `quota`, `total` **und** `free`.
   - Bei Usern, die sich noch nie eingeloggt haben, können `free`/`total` `null` oder ganz abwesend sein.
 - **Konsequenz:** Quota-Parsing muss defensiv sein. Dashboard-Kennzahlen ("90 % voll", "Nutzung vs. Kontingent") dürfen kein saubere Zahlenobjekt annehmen.
 
@@ -75,7 +75,7 @@ Nur Fakten. Verifizierungsgrad ist pro Punkt markiert. Architekt/Coder: das hier
 
 ## 7. Username-Constraints in Nextcloud (semi-verifiziert, lib/private/User/Manager.php)
 - Erlaubte Zeichen effektiv `[a-zA-Z0-9 _.@-']` — alles andere wird abgelehnt.
-- Maximale Länge über `IUser::MAX_USERID_LENGTH`; exakter Wert **UNVERIFIZIERT** (Community nennt 64).
+- Maximale Länge über `IUser::MAX_USERID_LENGTH`; **verifiziert: 65 Zeichen werden abgelehnt, `MAX_USERID = 64` ist korrekt** (siehe V5).
 - Reservierte Namen: `.htaccess`, `files_external`, `__groupfolders`, `.ncdata`, `owncloud.log`, `nextcloud.log`, `updater.log`, `audit.log`, `appdata_<instanceid>`.
 - Nicht erlaubt: leer, nur Punkte, führende/abschließende Leerzeichen.
 - Groß-/Kleinschreibung: in Nextcloud selbst **inkonsistent** behandelt (offene Issues #10814, #20011). Unsere Kollisionsprüfung muss daher **case-insensitiv** vergleichen, um auf der sicheren Seite zu sein.
@@ -91,7 +91,80 @@ Nur Fakten. Verifizierungsgrad ist pro Punkt markiert. Architekt/Coder: das hier
 - Die CLAUDE.md-Vorgaben entsprechen damit den Defaults — es genügt, sie **nicht** abzuschalten.
 - Doku-Warnung: `contextIsolation` abschalten deaktiviert auch die Sandbox, unabhängig vom Default.
 
-## 10. Offene Punkte zur Klärung bei der Implementierung
-- `users/details`: v1- vs v2-Pfad und exakte Response-Shape gegen die echte Test-Instanz prüfen. Fallback: `GET /cloud/users` + Einzelabfragen (N+1) hinter einem Adapter, damit der Umstieg billig bleibt.
-- Response-Shape der Gruppenmitglieder-Abfrage ebenso.
+## 10. Offene Punkte — ERLEDIGT
+Alle vier Punkte sind am 2026-10-06 an der Test-Instanz geklärt, siehe Abschnitt „VERIFIZIERT" unten.
+Der N+1-Fallback bleibt als Absicherung gegen andere Nextcloud-Versionen bestehen.
 - Exakte `MAX_USERID_LENGTH` gegen die Test-Instanz prüfen; bis dahin defensiv 64 annehmen.
+
+---
+
+# VERIFIZIERT an der Test-Instanz (2026-10-06)
+
+Gemessen mit `docs/nc-verify.sh` gegen `https://cloud.xapient.solutions`.
+Diese Abschnitte ersetzen die oben als UNVERIFIZIERT markierten Punkte.
+
+## V1. `users/details` — FALLE: `statuscode` unterscheidet sich zwischen v1 und v2
+Beide Pfade antworten mit HTTP 200 und liefern **dieselbe** Datenstruktur
+(`data.users` als Objekt, gekeyt nach `userid`). Aber:
+
+| Pfad | `meta.statuscode` bei Erfolg |
+|---|---|
+| `/ocs/v1.php/cloud/users/details` | **100** |
+| `/ocs/v2.php/cloud/users/details` | **200** |
+
+**v2 verwendet HTTP-artige Codes im OCS-Envelope.** Eine Erfolgsprüfung auf
+`statuscode === 100` schlägt gegen v2 bei *jedem* erfolgreichen Request fehl.
+
+**Konsequenz:** Das Projekt benutzt **ausschließlich `/ocs/v1.php`**. Wer je einen Aufruf auf
+v2 umstellt, muss die Envelope-Prüfung mitändern — sonst gilt jeder Erfolg als Fehler.
+
+## V2. Quota ist auf BEIDEN Lesewegen ein Objekt
+Entgegen der Doku-Stichprobe liefert auch der Einzeluser-Endpunkt ein Objekt, nicht einen Skalar:
+
+```
+GET /ocs/v1.php/cloud/users/{id}      -> quota: { free, used, total, relative, quota }
+GET /ocs/v1.php/cloud/users/details   -> quota: { free, used, total, relative, quota }
+```
+Beispiel begrenzt: `{"free":1013296222,"used":60445602,"total":1073741824,"relative":5.63,"quota":1073741824}`
+
+**Konsequenz:** Die Quota-Treue degradiert auf dem N+1-Fallback **nicht**. Der defensive Parser
+bleibt trotzdem, weil der Skalar-Fall in der Doku für ältere Versionen belegt ist — aber die
+Dashboard-Zahl „unbekannt" steigt im Fallback nicht, wie zuvor befürchtet.
+
+## V3. Unbegrenztes Kontingent ist `-3` — bestätigt
+Der Admin-Account liefert:
+```
+quota: { "free": -3, "used": 53983039299, "total": -3, "relative": 0, "quota": -3 }
+```
+- `quota`, `total` und `free` sind **`-3`**, nicht `"none"`. Der String `"none"` ist auf dieser
+  Instanz nicht aufgetreten; der Parser muss beides akzeptieren.
+- **`used` ist auch bei unbegrenzt eine echte Zahl.** Die Dashboard-Gesamtnutzung kann unbegrenzte
+  User also mitzählen — nur die Summe der *Kontingente* nicht.
+- `relative` ist bei unbegrenzt `0`. **Nicht** als „0 % belegt" interpretieren und nicht für die
+  „fast voll"-Liste verwenden.
+
+## V4. Gruppenmitglieder: `{ users: [...] }` — kein nacktes Array
+```
+GET /ocs/v1.php/cloud/groups/admin  ->  data: { "users": ["valueerror"] }
+GET /ocs/v1.php/cloud/groups        ->  data: { "groups": ["2026-1C", ..., "admin", ...] }
+```
+Der zuvor befürchtete Shape-Zweifel ist ausgeräumt.
+
+## V5. Maximale Username-Länge
+65 Zeichen werden abgelehnt:
+```
+meta: { status: "failure", statuscode: 101, message: "Benutzername ist zu lang" }
+```
+Bestätigt `MAX_USERID = 64` als korrekte Obergrenze. Beachte: der Fehler kommt als `101` mit einer
+**deutschen Servermeldung** — unsere eigene Meldung ist trotzdem vorzuziehen, weil `101` beim
+Anlegen auch andere Ursachen hat.
+
+## V6. User-IDs enthalten Großbuchstaben
+Beispiel aus der echten Instanz: `Aaron.w`.
+**Bestätigt die Entscheidung, Kollisionen case-insensitiv zu prüfen.** Ein Vergleich über exakte
+Gleichheit hätte `aaron.w` als frei gemeldet und das Anlegen wäre serverseitig gescheitert.
+
+## V7. `email` kann `null` sein
+Nicht `""`, sondern `null`. Der Normalisierer in `userView.js` muss das abfangen, sonst steht
+`null` in der Tabelle und im CSV-Export.
+

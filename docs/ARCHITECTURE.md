@@ -719,8 +719,9 @@ const CREATE_USER_ERRORS = { 101: 'ungueltiges_argument', 102: 'user_existiert',
 (DECISIONS „Gleichheit der beiden Leseweg-Ergebnisse“): beide Wege laufen durch
 `shared/userView.js` und liefern `UserView`-Objekte, die in den **Identitätsfeldern**
 `userid`, `displayname`, `email`, `enabled`, `groups` übereinstimmen. Mehr wird **nicht**
-behauptet: der Einzeluser-Endpunkt liefert `quota` teils als Skalar, weshalb `quota` auf dem
-N+1-Weg legitim zu `kind: 'unknown'` degradieren darf. Sichtbare Folge: die
+behauptet. **An der Test-Instanz degradiert `quota` faktisch NICHT** — beide Wege liefern ein
+Quota-Objekt (RESEARCH-OCS V2, verifiziert 2026-10-06). Die Erlaubnis zur Degradation auf
+`kind: 'unknown'` bleibt im Vertrag, weil die Doku den Skalar-Fall für ältere Versionen zeigt. Sichtbare Folge: die
 Dashboard-Kachelzahl „unbekannt“ steigt im Fallback-Modus, `summeBegrenztBytes` sinkt
 entsprechend, und betroffene User fallen aus der „fast voll“-Liste. Die Fallback-Warnung im UI
 nennt das ausdrücklich. `userView.test.js` prüft genau diese Abgrenzung: Identitätsfelder
@@ -900,9 +901,9 @@ Die Gruppenmitglieder-Fixtures entfallen mit `groups.members` (§3).
 
 | Risiko | Gewählte Abfederung |
 |---|---|
-| `users/details` Pfad/Shape unverifiziert | Probe mit fünf expliziten Fallback-Triggern, Session-Memo, gleiche **Identitätsfelder** auf beiden Wegen (§7) |
-| `MAX_USERID_LENGTH` unbekannt | Konstante `MAX_USERID = 64` an einer Stelle; Kürzungstests übergeben `max` explizit und hängen nicht am Wert 64 |
-| Gruppenmitglieder-Shape unverifiziert | Risiko entfällt: kein Endpunkt mehr, Mitglieder werden aus der Userliste abgeleitet (§3) |
+| `users/details` **verifiziert** (RESEARCH-OCS V1): v1 und v2 funktionieren, Shape identisch | Probe + fünf Fallback-Trigger bleiben als Absicherung gegen andere Versionen. **Ausschließlich `/ocs/v1.php` verwenden** — v2 liefert `statuscode` 200 statt 100 und bricht damit die Envelope-Prüfung |
+| `MAX_USERID_LENGTH` **verifiziert 64** (RESEARCH-OCS V5: 65 Zeichen -> `101`) | Konstante `MAX_USERID = 64` an einer Stelle; Kürzungstests übergeben `max` explizit |
+| Gruppenmitglieder-Shape **verifiziert** `data.users` = Array (RESEARCH-OCS V4) | Risiko entfällt doppelt: kein Endpunkt mehr, Mitglieder werden aus der Userliste abgeleitet (§3) |
 | Quota-Felder inkonsistent / `null` | `kind: 'unknown'` als erster Klasse-Zustand; Dashboard zeigt vier Werte statt einer Summe (DECISIONS „Dashboard-Kachel Speicher“) |
 | 429 durch Tippfehler beim Verbinden | Eigene Meldung `server_blockt_vorerst`, kein automatischer Wiederholungsversuch im Verbindungsdialog |
 | Brute-Force-Sperre durch Batch-Last | Parallelität fest 4, 429-Backoff 2 s/6 s, danach Item-Fehler |
