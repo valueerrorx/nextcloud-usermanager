@@ -73,9 +73,10 @@ zurück; gekürzt wird erst in `truncateToFit`.
 |---|---|---|
 | `0` (Zahl) | `''` | Falsy-Guard aus Schritt 1 |
 | `'0'` | `'0'` | Ziffern bleiben |
+| `'Müller'` (vorkomponiert, NFC, U+00FC) | `'mueller'` | Schritt 3 greift |
 | `123` (Zahl) | `'123'` | Coercion, nicht falsy |
 | `null`, `undefined`, `false`, `''` | `''` | Falsy-Guard |
-| `'Müller'` (NFD-Eingabe) | `'muller'` | Schritt 3 trifft kein vorkomponiertes `ü`. **1:1-treu**, kein Bug — macOS-CSVs liefern NFD |
+| `'Mu' + '\u0308' + 'ller'` (dekomponiert, NFD) | `'muller'` | Schritt 3 trifft nur das **vorkomponierte** `ü` (U+00FC). Hier steht `u` + Combining Diaeresis, also greift erst Schritt 6 und entfernt den Strich. **1:1-treu, kein Bug** — macOS exportiert CSVs in NFD. Im Test als Escape schreiben, nie als Literal |
 | `'St. Clair'` | `'st.clair'` | Punkt überlebt, Leerzeichen fällt weg |
 | `'Max.'` + `'Müller'` | `'max..mueller'` | Doppelpunkt entsteht legitim; das Referenzprojekt verhält sich identisch |
 | `'李'` | `''` | Nicht-lateinisch fällt in Schritt 8 weg |
