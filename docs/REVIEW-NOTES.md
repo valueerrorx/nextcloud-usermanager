@@ -28,3 +28,7 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 
 ## Reviews
 <!-- Ab hier: Befunde aus echten Reviews. Format: - [S<nn>] <Datei> - <Muster> -->
+- [S01] `src/main/index.js`, `src/renderer/App.vue`, `scripts/dev.mjs` — **unbehandelte Promise-Rejections**, fünf Stellen in einem Schritt. `loadURL`/`loadFile`, `app.whenReady().then()`, ein `async` Funktionsaufruf ohne `.catch()`, `onMounted(async …)`. Jede davon endet in einem stillen Totalausfall ohne Diagnose. **Jede Promise wird awaited oder gecatcht, ohne Ausnahme.**
+- [S01] `tests/skeleton.test.js` — **Regex-Assertions auf Quelltext sind kein Sicherheitstest.** Ein Preload-Durchgriff `invoke: (channel, ...args) => …` hat die Prüfung „exponiert genau ein Feld" passiert, weil die Regex nur argumentlose Arrow-Functions traf. Sicherheitszusagen werden **verhaltensbasiert** geprüft: Modul laden, `electron` stubben, `Object.keys(api)` vergleichen.
+- [S01] `tests/skeleton.test.js` — Eine Assertion auf die **exakte** Menge der devDependencies wird in einem Folgeschritt fälschlich rot. Verbotenes aufzählen, nicht Erlaubtes.
+- [S01] `electron-builder.yml` — `files`-Whitelist ohne `!node_modules/**`: Vue und SweetAlert2 sind schon von Vite gebündelt und landen doppelt im Artefakt.
