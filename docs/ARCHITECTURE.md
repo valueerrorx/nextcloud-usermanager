@@ -127,7 +127,8 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
                                   electron-Version/keine verbotenen devDeps), vite base './',
                                   relative Asset-Pfade im Build (Scratch-outDir, dist/ bleibt
                                   unberührt), Preload VERHALTENSBASIERT über createRequire +
-                                  electron-Stub geprüft, src/shared/ fehlt
+                                  electron-Stub geprüft. Die S01-Zusicherung „src/shared/ fehlt" ist
+                                  mit S02 entfernt — das Verzeichnis existiert ab dann
   ipc.test.js                     genau ein Kanal 'app.version', Rueckgabe { ok, version }
   index.test.js                   second-instance: Fenster wiederherstellen/fokussieren,
                                   zerstoertes Fenster wird nicht dereferenziert
@@ -641,6 +642,8 @@ Zeilen- und Dateifehler des **Imports**, abschließende Enumeration mit UI-Text 
 | `doppelzeile` | Identische Zeile kommt in der Datei mehrfach vor. |
 | `username_zu_lang` | Username ist auch nach Kürzen des Nachnamens zu lang. |
 | `username_reserviert` | Dieser Username ist in Nextcloud reserviert. |
+| `username_leer` | Bitte einen Benutzernamen eingeben. |
+| `username_nur_punkte` | Ein Benutzername darf nicht nur aus Punkten bestehen. |
 | `username_nach_kuerzung_nicht_eindeutig` | Zwei verschiedene Namen werden durch das Kürzen zum gleichen Username. Bitte einen der beiden manuell anlegen. |
 | `benutzer_existiert_bereits` | Benutzer existiert bereits. |
 
@@ -842,7 +845,10 @@ Testdatei in der §2-Liste**; es gibt keinen Namen hier ohne Datei dort und umge
 Pflichtfälle:
 - alle 14 Zeilen aus RESEARCH-UPN §11 inklusive der beiden `''`-Fehlerfälle, die 5 Fixtures aus
   §10 (ohne Domain), beide Reihenfolgen;
-- `truncateToFit` mit Budget `>= second.length`, `>= 1` und `< 1`, in beiden Reihenfolgen;
+- `truncateToFit` mit Budget `>= second.length`, `>= 1` und `< 1`; die Funktion nimmt kein
+  `order` — geprüft wird stattdessen die **Reihenfolgeunabhängigkeit** (gleiche Längen, beide
+  `order` beim Zusammensetzen, gleiches `second`-Ergebnis) sowie die Invariante
+  `first.length + 1 + second.length + suffix.length <= max`, mit `=== max` bei `gekuerzt: true`;
 - die **vier Fälle aus §6.1**, jeweils gegen die konkrete Fehler-ID geprüft, insbesondere
   `username_nach_kuerzung_nicht_eindeutig` ≠ `benutzer_existiert_bereits`;
 - Re-Import derselben CSV ergibt für **jede** Zeile `benutzer_existiert_bereits` (§6.1 Fall 3);
