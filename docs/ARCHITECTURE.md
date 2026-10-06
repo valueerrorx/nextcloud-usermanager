@@ -121,7 +121,8 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
                                   userCounts, historyCounts mit teilweise
   userView.test.js                beide Lesewege -> gleiche Identitätsfelder, Quota-Degradation
   messages.test.js                jede messageId aus §6/§7 hat einen deutschen Text, keine Waisen
-  url.test.js                     Trailing Slash, /index.php, http abgelehnt
+  url.test.js                     volle Tabelle: Subpath, Port, IP, /ocs/... in der Mitte,
+                                  HTTPS:// , http abgelehnt, URL mit Zugangsdaten abgelehnt
   credentials.test.js             basic_text -> nicht persistieren, Keyring -> Base64-Blob
   skeleton.test.js                S01-Gerüstfakten: package.json (type/main/scripts/gepinnte
                                   electron-Version/keine verbotenen devDeps), vite base './',
@@ -671,6 +672,12 @@ Die Passwortliste wird beim Verlassen der Importansicht aus `state.js` entfernt.
 ## 7. OCS-Client
 
 `request({ method, path, query, form })` in `ocs/client.js`:
+
+> **`fetchImpl` ist ein Pflichtparameter und darf nicht `globalThis.fetch` sein.**
+> `app.on('certificate-error')` feuert nur für Chromium-Requests. Mit Node/undici-`fetch` wäre die
+> vom Nutzer gewählte Zertifikatsausnahme unimplementierbar. S04 verdrahtet Electrons `net.fetch`
+> plus `session.setCertificateVerifyProc` (DECISIONS „`fetchImpl` hat KEINEN Default").
+
 - Basis `${baseUrl}/ocs/v1.php` + `path`; `format=json` immer in der Query.
 - Header auf **jedem** Request: `OCS-APIRequest: true`, `Accept: application/json`,
   `Authorization: Basic base64(user:appPassword)`. Credentials werden dem Client bei der
@@ -680,7 +687,9 @@ Die Passwortliste wird beim Verlassen der Importansicht aus `state.js` entfernt.
   `fetchImpl` sind injizierbar, damit Retry-Tests nicht in Echtzeit warten.
   Credentials werden nie in ein Result, ein Log oder eine Exception geschrieben.
 - Body als `application/x-www-form-urlencoded`; Arrays als `groups[]`.
-- Timeout 20 s über `AbortSignal.timeout` (betrifft nur den einzelnen Request, nicht den Job).
+- Timeout **30 s** über `AbortSignal.timeout` (betrifft nur den einzelnen Request, nicht den Job).
+  30 statt 20 s, weil die Brute-Force-Sperre die Antwort progressiv bis ~25 s verzögert — mit 20 s
+  würde ein falsches Passwort als Zeitüberschreitung fehldiagnostiziert (DECISIONS „Timeout 30 s").
 - Envelope-Unwrap: `json.ocs.meta.statuscode` und `json.ocs.data`. Erfolg nur wenn
   HTTP 2xx **und** `statuscode === 100` (REVIEW-NOTES 2).
 
