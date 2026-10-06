@@ -114,8 +114,10 @@ unabhängig von `order`. `first` wird nie gekürzt und daher nicht zurückgegebe
 Die Funktion ist **reihenfolgeunabhängig**, weil nur Längen zählen; der Trenner ist in beiden
 Reihenfolgen genau ein Punkt und das Suffix trägt seinen eigenen führenden Punkt.
 
-**Invariante, als Test:** `first.length + 1 + second.length + suffix.length <= max`,
-und `=== max` genau dann, wenn `gekuerzt: true`.
+**Invariante, als Test — gilt nur auf dem `passt: true`-Pfad:**
+`first.length + 1 + second.length + suffix.length <= max`, und `=== max` genau dann, wenn
+`gekuerzt: true`. Bei `passt: false` kommt `second` unverändert zurück, die Summe darf dort
+also legitim über `max` liegen; dieser Fall wird separat geprüft.
 
 `suffix` ist `''` oder `'.ddmmyyyy'` (9 Zeichen). S02 **erzeugt kein Suffix**, es kommt als Argument.
 
