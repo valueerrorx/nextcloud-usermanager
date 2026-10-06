@@ -108,9 +108,14 @@ Budget für second = max - first.length - 1 (Trennpunkt) - suffix.length
 
 **Alle drei Schlüssel sind auf jedem Pfad gesetzt**, auch bei `passt: false`.
 
-**Fehlende Argumente scheitern kontrolliert, nicht per TypeError.** `first`, `second` und
-`suffix` haben jeweils den Default `''`, `max` den Default `MAX_USERID`. Ein fehlendes Argument
-wird also wie ein leerer String behandelt — konsistent zum Falsy-Guard in `normalizeComponent`.
+**Fehlende Argumente scheitern kontrolliert, nicht per TypeError.** Das Argumentobjekt selbst
+hat den Default `{}`, `first`/`second`/`suffix` jeweils `''`, `max` den Wert `MAX_USERID`.
+`truncateToFit()` und `truncateToFit(null)` werfen also nicht. Jeder dieser Defaults braucht
+einen eigenen Test — bei der ersten Fassung waren zwei von drei ungeprüft.
+
+**Nicht-String-Werte für `first`/`second`/`suffix` sind außerhalb des Kontrakts.** Aufrufer
+übergeben normalisierte Strings; eine Zahl darf werfen. Hier wird bewusst **nicht** gecoerct,
+damit ein Aufrufer-Fehler sichtbar bleibt statt stillschweigend ein falsches Ergebnis zu liefern.
 Leeres `first` oder `second` ist kein Sonderfall: die Arithmetik gilt unverändert; ein leeres
 `second` hat Länge 0, passt also immer.
 
@@ -120,9 +125,21 @@ Die Funktion ist **reihenfolgeunabhängig**, weil nur Längen zählen; der Trenn
 Reihenfolgen genau ein Punkt und das Suffix trägt seinen eigenen führenden Punkt.
 
 **Invariante, als Test — gilt nur auf dem `passt: true`-Pfad:**
-`first.length + 1 + second.length + suffix.length <= max`, und `=== max` genau dann, wenn
-`gekuerzt: true`. Bei `passt: false` kommt `second` unverändert zurück, die Summe darf dort
-also legitim über `max` liegen; dieser Fall wird separat geprüft.
+`first.length + 1 + second.length + suffix.length <= max`.
+
+`gekuerzt: true` **implizit** `total === max`. Die Umkehrung gilt **nicht**: am Grenzwert
+`budget === second.length` ist `total === max` **und** `gekuerzt === false`, weil der Nachname
+exakt passt und nicht geschnitten wird. Eine frühere Fassung dieser Spec behauptete „`=== max`
+genau dann, wenn `gekuerzt: true`" — das war falsch und blieb unentdeckt, weil der Grenzwert in
+keinem Test eingesetzt wurde. Auf dem Nicht-Kürzungs-Pfad gilt also `total <= max`, nicht `<`.
+
+Bei `passt: false` kommt `second` unverändert zurück, die Summe darf dort legitim über `max`
+liegen; dieser Fall wird separat geprüft.
+
+**Pflichtgrenzwerte als Test:** `budget === second.length` (mit und ohne Suffix) ->
+`gekuerzt: false`, `second` unverändert. Ohne diesen Fall überlebt die Mutation
+`budget >= second.length` -> `budget > second.length` die gesamte Suite und setzt `gekuerzt: true`
+auf einem nie gekürzten Namen — das Flag landet in der Importvorschau.
 
 `suffix` ist `''` oder `'.ddmmyyyy'` (9 Zeichen). S02 **erzeugt kein Suffix**, es kommt als Argument.
 

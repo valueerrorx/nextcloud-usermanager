@@ -850,7 +850,9 @@ Pflichtfälle:
   `order` — geprüft wird stattdessen die **Reihenfolgeunabhängigkeit** (gleiche Längen, beide
   `order` beim Zusammensetzen, gleiches `second`-Ergebnis) sowie die Invariante
   `first.length + 1 + second.length + suffix.length <= max` (nur auf dem `passt: true`-Pfad;
-  bei `passt: false` kommt `second` unverändert zurück), mit `=== max` bei `gekuerzt: true`;
+  bei `passt: false` kommt `second` unverändert zurück). `gekuerzt: true` impliziert `=== max`,
+  **nicht umgekehrt**: am Grenzwert `budget === second.length` gilt `=== max` bei
+  `gekuerzt: false`. Dieser Grenzwert ist Pflichttest;
 - die **vier Fälle aus §6.1**, jeweils gegen die konkrete Fehler-ID geprüft, insbesondere
   `username_nach_kuerzung_nicht_eindeutig` ≠ `benutzer_existiert_bereits`;
 - Re-Import derselben CSV ergibt für **jede** Zeile `benutzer_existiert_bereits` (§6.1 Fall 3);
