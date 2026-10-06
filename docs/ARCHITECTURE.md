@@ -448,7 +448,8 @@ buildImportPlan({
 //                  status: 'neu'|'kollision_aufgeloest'|'fehler',
 //                  gekuerzt: boolean, fehlerId?, displayname, passwort|null }
 
-truncateToFit({ first, second, suffix, max }) -> { first, second, gekuerzt }
+truncateToFit({ first, second, suffix, max }) -> { second, gekuerzt, passt }
+//   first wird nie gekuerzt und daher nicht zurueckgegeben; passt=false -> username_zu_lang
 ```
 
 `max` ist ein echtes Argument, kein Testhaken: §6.1 verlangt `max = 20` für lesbare Beispiele,
