@@ -644,6 +644,7 @@ Zeilen- und Dateifehler des **Imports**, abschließende Enumeration mit UI-Text 
 | `username_reserviert` | Dieser Username ist in Nextcloud reserviert. |
 | `username_leer` | Bitte einen Benutzernamen eingeben. |
 | `username_nur_punkte` | Ein Benutzername darf nicht nur aus Punkten bestehen. |
+| `username_zeichen` | Der Benutzername enthält nicht erlaubte Zeichen. |
 | `username_nach_kuerzung_nicht_eindeutig` | Zwei verschiedene Namen werden durch das Kürzen zum gleichen Username. Bitte einen der beiden manuell anlegen. |
 | `benutzer_existiert_bereits` | Benutzer existiert bereits. |
 
