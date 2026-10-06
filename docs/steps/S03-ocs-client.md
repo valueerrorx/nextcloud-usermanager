@@ -1,108 +1,123 @@
 # S03 — OCS-Client (gemockt)
 
-Status: spec
-Bindend: `CLAUDE.md`, `docs/ARCHITECTURE.md` §7, §9, `docs/RESEARCH-OCS.md` (inkl. Abschnitt
-**VERIFIZIERT**), `docs/REVIEW-NOTES.md` (14 Einträge, alle gültig).
+Status: approved (nach einer Revisionsrunde)
+Bindend: `CLAUDE.md`, `docs/ARCHITECTURE.md` §7, §9, `docs/RESEARCH-OCS.md` (inkl. **VERIFIZIERT**),
+`docs/REVIEW-NOTES.md` (14 Einträge).
 
 ## Ziel
 
-Die HTTP-Schicht zur Nextcloud-OCS-API im Main-Prozess, vollständig gegen gemocktes `fetch`
-getestet. **Kein UI, kein Dialog, keine Credential-Speicherung, kein echter Netzwerkzugriff.**
+Die HTTP-Schicht zur OCS-API im Main-Prozess, vollständig gegen injiziertes `fetch` getestet.
+**Nur `client.js`.** `url.js` ist S03a, `errors.js` ist S05, der Verbindungsdialog ist S04.
 
 ## Dateien
 
 ```
-src/main/ocs/client.js    createOcsClient() -> { request }; Envelope-Unwrap, Result-Typ,
-                          Retry/Backoff, Timeout
-src/main/ocs/errors.js    mapOcsError(result, endpointMap, fallbackId)
-src/shared/url.js         normalizeBaseUrl(input) -> { ok, baseUrl } | { ok:false, messageId }
-src/shared/messages.js    ERWEITERN um die IDs aus Abschnitt 5 (append-only)
+src/main/ocs/client.js    createOcsClient() -> { request }
+src/shared/messages.js    ERWEITERN um die 9 IDs aus Abschnitt 5 (append-only)
 tests/ocsClient.test.js
-tests/ocsErrors.test.js
-tests/url.test.js
 tests/messages.test.js    ERWEITERN
 ```
 
-## 1. Credentials werden injiziert, nicht aus `session.js` gelesen
-
-`ARCHITECTURE.md` §7 sagte „Credentials kommen aus `session.js`". **Das wird hiermit geändert**
-(DECISIONS „Credential-Übergabe an den OCS-Client"):
+## 1. Factory
 
 ```js
 createOcsClient({
-  baseUrl,            // schon normalisiert, ohne Trailing Slash
+  baseUrl,                        // schon normalisiert, OHNE Trailing Slash
   adminUser,
   appPassword,
-  timeoutMs = 20000,
+  fetchImpl,                      // PFLICHT, kein Default
+  timeoutMs = 30000,
   retryDelaysMs = [2000, 6000],
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  fetchImpl = globalThis.fetch,
 }) -> { request }
 ```
 
-Begründung: Ein Modul, das ein Singleton liest, ist nur mit Mock testbar — genau der Fehler, den
-`pipeline.js` wegen REVIEW-NOTES vermeiden musste. `session.js` (S04) hält künftig die
-**Client-Instanz**, nicht der Client die Session.
+**`fetchImpl` hat absichtlich keinen Default und darf nie `globalThis.fetch` sein.**
+`app.on('certificate-error')` feuert nur für Chromium-Requests; mit Node/undici-`fetch` wäre die
+Zertifikatsausnahme unimplementierbar. S04 verdrahtet `net.fetch`. Fehlt `fetchImpl`, wirf beim
+Erzeugen — nicht erst beim ersten Request.
 
-`sleep` und `retryDelaysMs` sind injizierbar, damit Retry-Tests nicht 8 Sekunden warten.
-`fetchImpl` ebenso, damit kein globaler Stub nötig ist.
+**Kein Instanz-Zustand.** Vier parallele `request`-Aufrufe über **eine** Instanz dürfen sich nicht
+beeinflussen (die Pipeline fährt Parallelität 4). `baseUrl` wird **nicht** re-normalisiert; ein
+Trailing Slash dort ist ein Aufruferfehler.
 
 ## 2. `request({ method, path, query, form })`
 
-- URL: `${baseUrl}/ocs/v1.php${path}`. **Ausschließlich `v1.php`** — siehe Abschnitt 6.
-- `format=json` ist **immer** in der Query, auch wenn `query` fehlt.
-- Header auf **jedem** Request:
-  `OCS-APIRequest: true`, `Accept: application/json`,
-  `Authorization: Basic ${base64(adminUser + ':' + appPassword)}`.
-- `form` wird als `application/x-www-form-urlencoded` gesendet. Arrays als wiederholtes
-  `groups[]`. Fehlt `form`, wird **kein** Body und **kein** Content-Type gesetzt.
-- Timeout `timeoutMs` über `AbortSignal.timeout`.
-- **Das App-Passwort erscheint in keinem Result, keiner Meldung, keinem Log, keiner Exception.**
+- URL: `${baseUrl}/ocs/v1.php${path}`. **Nur `v1.php`** (RESEARCH-OCS V1).
+- `path` **muss** mit `/` beginnen und darf kein `?` oder `#` enthalten. **Aufrufer kodieren
+  Pfadsegmente selbst** mit `encodeURIComponent` — echte User-IDs sind nicht auf `[a-z0-9.]`
+  beschränkt (verifiziert V6: `Aaron.w`).
+- `format=json` ist **immer** in der Query. Ein vom Aufrufer übergebenes `format` wird
+  **überschrieben**.
+- Query-Encoding über `URLSearchParams`.
+- Header auf **jedem** Request: `OCS-APIRequest: true`, `Accept: application/json`,
+  `Authorization: Basic ${base64(utf8(adminUser + ':' + appPassword))}`.
+  **UTF-8**, nicht latin1 — Passwörter enthalten Sonderzeichen.
+- `form` als `application/x-www-form-urlencoded` über `URLSearchParams`; Arrays als wiederholtes
+  `groups[]`. `undefined`/`null`-Werte werden **weggelassen**, nicht als `"undefined"` gesendet.
+  Ohne `form`: **kein** Body, **kein** Content-Type.
+- `redirect: 'follow'` (Default). Nextcloud leitet bei fehlendem Header um; ein gefolgter Redirect
+  endet dann auf HTML und damit in `notOcs`. Bei Cross-Origin-Redirect entfernt `fetch` den
+  `Authorization`-Header — das Ergebnis ist dann `notOcs`, nicht `auth`.
+- Timeout `timeoutMs` über `AbortSignal.timeout`. **Der Client erzeugt keinen eigenen
+  `AbortController`** — die einzige mögliche Abbruchursache ist damit der Timeout. Genau deshalb
+  darf ein Abort als `timeout` klassifiziert werden.
+- **`request` wirft nie.** Auch nicht, wenn `fetchImpl` einen String statt eines `Error` wirft.
 
-## 3. Erfolg und Envelope
-
-Erfolg **nur** wenn HTTP 2xx **und** `json.ocs.meta.statuscode === 100`.
+## 3. Result-Typ
 
 ```js
-{ ok: true, data, httpStatus }
-{ ok: false, kind, httpStatus, ocsCode, messageId, message }
+{ ok: true,  data, httpStatus, versuche }
+{ ok: false, kind, httpStatus, ocsCode, messageId, message, versuche }
 ```
 
-`kind` ist genau einer von:
-`'ocs' | 'http' | 'auth' | 'forbidden' | 'ratelimit' | 'notOcs' | 'network' | 'timeout' | 'cert'`
+- `data = json.ocs.data ?? null`. Nie `undefined` (verschwindet über IPC).
+- `data` ist **genau** `json.ocs.data`, nicht `json.ocs` und nicht `json`.
+- `ocsCode` ist eine Zahl oder `null`. Auf allen Früh-Rückgabepfaden (401/403/429, Exceptions)
+  ist `ocsCode: null` und es wird **kein** Body geparst.
+- `httpStatus` ist eine Zahl oder `null` (bei Exceptions `null`).
+- `versuche` = **Anzahl der tatsächlich getätigten `fetchImpl`-Aufrufe**. 1 = kein Retry.
+- **`message` ist ausnahmslos `MESSAGES[messageId]`.** Nie `err.message`, nie `ocs.meta.message`.
+  Der Server sendet eigene deutsche Texte (verifiziert V5), und eine Node-Fehlermeldung kann den
+  `Authorization`-Header mitsamt App-Passwort enthalten.
 
-Klassifikation, **in dieser Prüfreihenfolge** (sie entscheidet bei Mehrdeutigkeit):
+## 4. Klassifikation — verbindliche Prüfreihenfolge
 
-| Bedingung | `kind` | `messageId` |
-|---|---|---|
-| `fetch` wirft mit `name === 'TimeoutError'` oder `AbortError` | `timeout` | `zeitueberschreitung` |
-| `fetch` wirft mit Zertifikatsursache (`cause.code` beginnt mit `CERT_`, `DEPTH_ZERO…`, `SELF_SIGNED…`, `ERR_TLS_`) | `cert` | `zertifikat_nicht_vertraut` |
-| `fetch` wirft sonst (`ENOTFOUND`, `ECONNREFUSED`, `EAI_AGAIN`, …) | `network` | `server_nicht_erreichbar` |
-| HTTP 401 | `auth` | `falsche_zugangsdaten` |
-| HTTP 403 | `forbidden` | `kein_admin` |
-| HTTP 429 | `ratelimit` | `server_blockt_vorerst` |
-| Body nicht als JSON parsebar **oder** `json.ocs` fehlt | `notOcs` | `falscher_basispfad` |
-| `statuscode === 997` | `forbidden` | `kein_admin` |
-| `statuscode !== 100` | `ocs` | `ocs_fehler` (Endpunkt-Map überschreibt später) |
-| HTTP nicht 2xx, Envelope aber gültig | `http` | `unerwarteter_serverfehler` |
+**A. `fetchImpl` hat geworfen** (vor jeder HTTP-Auswertung):
+1. `err.name` oder `err.cause?.name` ist `'TimeoutError'` oder `'AbortError'`
+   -> `timeout` / `zeitueberschreitung`.
+   (undici lehnt beim Body-Lesen als `TypeError: terminated` ab, mit der Ursache in `cause`.)
+2. `typeof err.cause?.code === 'string'` **und** Code in `CERT_CODES`
+   -> `cert` / `zertifikat_nicht_vertraut`.
+   `CERT_CODES` ist eine **explizite Menge**, kein Prefix-Match:
+   `SELF_SIGNED_CERT_IN_CHAIN`, `DEPTH_ZERO_SELF_SIGNED_CERT`,
+   `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`,
+   `UNABLE_TO_GET_ISSUER_CERT`, `CERT_HAS_EXPIRED`, `CERT_NOT_YET_VALID`,
+   `CERT_UNTRUSTED`, `ERR_TLS_CERT_ALTNAME_INVALID`, `HOSTNAME_MISMATCH`.
+   Die beiden häufigsten Internal-CA-Codes stehen bewusst drin — ein Prefix-Match auf `CERT_`
+   hätte sie übersehen und einen erreichbaren Server als „nicht erreichbar" gemeldet.
+   **Der `typeof`-Check ist Pflicht**: ein `.startsWith` auf `undefined` würde im `catch` werfen
+   und einen Netzwerkfehler in eine unbehandelte Rejection verwandeln.
+3. Alles andere -> `network` / `server_nicht_erreichbar`.
+   (`err.cause` kann ein `AggregateError` sein — Dual-Stack-`ECONNREFUSED` mit dem Code in
+   `cause.errors[0].code`. Fällt hier korrekt in `network`.)
 
-**Wichtig:** HTTP-Status wird **vor** dem Envelope geprüft, weil 401/403/429 häufig ohne
-gültigen OCS-Body kommen. Ein 429 darf **niemals** als `server_nicht_erreichbar` oder
-`falsche_zugangsdaten` erscheinen (RESEARCH-OCS §6: ein Tippfehler löst die Brute-Force-Sperre aus,
-und „falsches Passwort" wäre dann eine irreführende Diagnose).
+**B. HTTP-Status, vor dem Envelope** — weil 401/403/429 häufig ohne gültigen OCS-Body kommen:
+4. 401 -> `auth` / `falsche_zugangsdaten`
+5. 403 -> `forbidden` / `kein_admin`
+6. 429 -> `ratelimit` / `server_blockt_vorerst`
 
-## 4. Retry und Backoff
+**C. Envelope:**
+7. Body nicht als JSON parsebar (auch 204 und leerer Body), **oder** `json.ocs` ist kein Objekt,
+   **oder** `json.ocs.meta` ist kein Objekt, **oder** `json.ocs.meta.statuscode` ist keine Zahl
+   -> `notOcs` / `falscher_basispfad`.
+8. `statuscode === 997` -> `forbidden` / `kein_admin`
+9. `statuscode !== 100` -> `ocs` / `ocs_fehler`, `ocsCode` gesetzt
+10. HTTP nicht 2xx bei gültigem Envelope und `statuscode === 100`
+    -> `http` / `unerwarteter_serverfehler`
+11. Sonst Erfolg.
 
-- `kind: 'ratelimit'` -> bis zu **2** Wiederholungen, Wartezeiten `retryDelaysMs` = 2000, 6000 ms.
-- `kind: 'network'` **oder** HTTP 5xx -> genau **1** Wiederholung (erste Wartezeit).
-- `kind: 'timeout'`, `'auth'`, `'forbidden'`, `'notOcs'`, `'cert'`, `'ocs'` -> **keine**
-  Wiederholung. Ein falsches Passwort zu wiederholen verschärft nur die Brute-Force-Sperre.
-- Nicht-idempotente Methoden werden **ebenfalls** wiederholt, aber nur bei `ratelimit` und
-  `network`/5xx — in beiden Fällen ist davon auszugehen, dass der Request den Server nicht
-  erreicht oder abgelehnt wurde. Das ist eine bewusste Abwägung, siehe DECISIONS.
-- Nach erschöpften Retries wird das **letzte** Ergebnis zurückgegeben, unverändert.
-- Das Result trägt zusätzlich `versuche: number` (1 = kein Retry), damit Tests die Zählung prüfen
-  können, ohne auf Timing zu bauen.
+**429 darf niemals** als `server_nicht_erreichbar` oder `falsche_zugangsdaten` erscheinen.
 
 ## 5. Neue messageIds
 
@@ -117,126 +132,105 @@ und „falsches Passwort" wäre dann eine irreführende Diagnose).
 | `zertifikat_nicht_vertraut` | Das Zertifikat des Servers ist nicht vertrauenswürdig. |
 | `unerwarteter_serverfehler` | Unerwartete Antwort des Servers. |
 | `ocs_fehler` | Der Server hat die Anfrage abgelehnt. |
-| `url_leer` | Bitte eine Server-Adresse eingeben. |
-| `url_kein_schema` | Bitte die Adresse mit https:// angeben. |
-| `url_nur_https` | Nur https wird unterstützt. |
-| `url_ungueltig` | Diese Adresse ist keine gültige URL. |
 
-## 6. `shared/url.js` — `normalizeBaseUrl(input)`
+## 6. Retry
 
-Rein, kein I/O. Gibt `{ ok: true, baseUrl }` oder `{ ok: false, messageId }`.
+Die Entscheidung hängt am **HTTP-Status**, nicht am `kind` — HTTP 500 mit `statuscode 101` ergibt
+`kind: 'ocs'`, soll aber als 5xx behandelt werden.
 
-Regeln, **in dieser Prüfreihenfolge**:
-1. Leer, nur Whitespace oder kein String -> `url_leer`.
-2. Kein `://` -> `url_kein_schema`. (Wir ergänzen **nicht** stillschweigend `https://`, weil der
-   Nutzer sonst nicht merkt, dass er `http` gemeint hat.)
-3. Schema vorhanden, aber nicht `https` -> `url_nur_https` (DECISIONS „TLS / Serverzertifikat").
-4. Nicht als `URL` parsebar -> `url_ungueltig`.
-5. Normalisierung des Ergebnisses:
-   - Trailing Slashes entfernen.
-   - Angehängtes `/index.php` entfernen.
-   - Angehängten `/ocs`-Teil entfernen (`/ocs`, `/ocs/v1.php`, `/ocs/v2.php/cloud/users`, …)
-     — der Nutzer kopiert gern eine API-URL aus der Doku.
-   - `/settings/...`, `/apps/...` und `/login` ebenfalls entfernen.
-   - Query und Fragment verwerfen.
-   - Host lowercase, Pfad-Rest bleibt wie eingegeben (Subpath-Installationen wie
-     `https://host/nextcloud` müssen erhalten bleiben).
+| Auslöser | Methoden | Wiederholungen |
+|---|---|---|
+| HTTP 429 | **alle** | 2 |
+| HTTP 5xx | **nur `GET`/`HEAD`** | 1 |
+| `kind: 'network'` | **nur `GET`/`HEAD`** | 1 |
+| alles andere | – | 0 |
 
-### Pflichttestfälle mit erwartetem Ergebnis
-| Eingabe | Ergebnis |
-|---|---|
-| `'https://cloud.xapient.solutions'` | `https://cloud.xapient.solutions` |
-| `'https://cloud.xapient.solutions/'` | `https://cloud.xapient.solutions` |
-| `'https://cloud.xapient.solutions///'` | `https://cloud.xapient.solutions` |
-| `'https://Cloud.Xapient.Solutions'` | `https://cloud.xapient.solutions` |
-| `'https://host/nextcloud'` | `https://host/nextcloud` (Subpath bleibt) |
-| `'https://host/nextcloud/'` | `https://host/nextcloud` |
-| `'https://host/index.php'` | `https://host` |
-| `'https://host/nextcloud/index.php'` | `https://host/nextcloud` |
-| `'https://host/ocs/v1.php/cloud/users'` | `https://host` |
-| `'https://host/nextcloud/ocs/v2.php'` | `https://host/nextcloud` |
-| `'https://host/settings/admin'` | `https://host` |
-| `'https://host/login'` | `https://host` |
-| `'https://host/?foo=1#x'` | `https://host` |
-| `'http://host'` | `url_nur_https` |
-| `'ftp://host'` | `url_nur_https` |
-| `'cloud.xapient.solutions'` | `url_kein_schema` |
-| `''`, `'   '`, `null`, `42` | `url_leer` |
-| `'https://'` | `url_ungueltig` |
+**Warum 5xx nur bei GET:** Ein 502/504 vom Reverse Proxy heißt, der Request *wurde* weitergeleitet
+und kann durchgelaufen sein. Ein wiederholtes `POST /cloud/users` meldet dann `102 user exists`,
+obwohl der User angelegt wurde; ein wiederholtes `DELETE` meldet `101 not found`, obwohl gelöscht
+wurde. Bei 429 lehnt die Brute-Force-Sperre **vor** der Verarbeitung ab, daher dort alle Methoden.
 
-## 7. `ocs/errors.js` — `mapOcsError(result, endpointMap, fallbackId)`
+- Wartezeit vor Versuch *n* ist `retryDelaysMs[n-1]`. Ist kein Eintrag vorhanden
+  (z. B. `retryDelaysMs: []` oder `[5]`), wird **nicht weiter** wiederholt.
+- **Globale Obergrenze `versuche <= 3`**, als Invariante getestet — sonst kann eine Folge
+  429 -> network -> 429 kreisen.
+- Nach erschöpften Retries wird das **letzte** Ergebnis unverändert zurückgegeben.
+- Bei `auth`, `forbidden`, `notOcs`, `timeout`, `cert` wird **nie** wiederholt. Ein falsches
+  Passwort zu wiederholen verschärft nur die Brute-Force-Sperre.
 
-- Ist `result.ok` -> Programmierfehler, wirf. `mapOcsError` wird nur auf Fehler angewendet.
-- Bei `kind === 'ocs'`: `endpointMap[result.ocsCode]` benutzen, sonst `fallbackId`.
-- Bei **jedem anderen** `kind`: die `messageId` aus dem Result **unverändert** behalten.
-  `mapOcsError` kennt **keine** endpunktspezifischen Codes für `auth`, `forbidden`, `ratelimit`,
-  `notOcs`, `network`, `timeout`, `cert`, `http` (REVIEW-NOTES 3).
-- Rückgabe: dasselbe Result mit ersetzter `messageId` und passendem `message` aus `messages.js`.
-- **Keine globale Code-Tabelle.** `errors.js` enthält **keine** Zahl-zu-ID-Zuordnung; die Maps
-  leben bei den Endpunkten (ab S05).
+## Abnahmekriterien (alle automatisiert, `fetchImpl` injiziert)
 
-## Abnahmekriterien (alle automatisiert, `fetch` injiziert)
-
-1. **Header-Pflicht:** Jeder Request trägt `OCS-APIRequest: true`, `Accept: application/json`
-   und ein korrektes `Authorization: Basic`. Ein Test dekodiert den Basic-Header und prüft
-   `user:password`. **Mutationsbeweis beilegen**, dass das Entfernen von `OCS-APIRequest`
-   mindestens einen Test rot macht.
-2. **`format=json` immer dabei** — auch bei fehlendem `query` und bei zusätzlicher Query.
-3. **Erfolg:** HTTP 200 + `statuscode 100` -> `{ ok: true, data }`, `data` ist genau
-   `json.ocs.data`.
-4. **Erfolg verlangt beides:** HTTP 200 mit `statuscode 101` -> `ok: false`, `kind: 'ocs'`.
-   HTTP 500 mit `statuscode 100` im Body -> `ok: false`.
-   **Dieser zweite Fall ist Pflicht** — er ist der Grund, warum die Prüfung zweiteilig ist.
-5. **v2-Falle:** Eine Antwort mit `statuscode: 200` (so antwortet `/ocs/v2.php`, RESEARCH-OCS V1)
-   ergibt `ok: false`, `kind: 'ocs'`, `ocsCode: 200`. Ein Test hält das fest, damit niemand die
-   Prüfung „lockert", ohne es zu merken.
-6. **Jede Zeile der Klassifikationstabelle in Abschnitt 3** als eigener Fall, mit dem erwarteten
-   `kind` **und** der erwarteten `messageId`. Insbesondere: 429 ergibt **nie**
-   `server_nicht_erreichbar` oder `falsche_zugangsdaten`.
-7. **HTML-Antwort** (`<!DOCTYPE html>…`, Content-Type `text/html`, HTTP 200) ->
-   `kind: 'notOcs'`, `messageId: 'falscher_basispfad'`.
-8. **Retry:** `ratelimit` dreimal hintereinander -> `versuche === 3`, `sleep` wurde mit
-   `2000` und dann `6000` aufgerufen. `network` -> `versuche === 2`. `auth` -> `versuche === 1`
-   und `sleep` **nie** aufgerufen. HTTP 500 -> `versuche === 2`.
-   Erfolg nach einem 429 -> `ok: true`, `versuche === 2`.
-9. **Timeout:** `fetchImpl`, das mit `name: 'TimeoutError'` wirft -> `kind: 'timeout'`,
-   `versuche === 1`.
-10. **Kein Secret-Leak:** Ein Test serialisiert bei **jedem** Fehler-`kind` das komplette Result
-    mit `JSON.stringify` und behauptet, das App-Passwort kommt darin nicht vor. Zusätzlich darf
-    es in `message` und `messageId` nicht vorkommen.
-11. **Form-Encoding:** `form: { groups: ['a','b'], quota: 'none' }` ergibt den Body
-    `groups%5B%5D=a&groups%5B%5D=b&quota=none` (Reihenfolge wie eingefügt) und
+1. **Header-Pflicht.** Jeder Request trägt die drei Header. Der Basic-Wert dekodiert zu genau
+   `user:passwort` — **mit einem Passwort, das `:` und ein Nicht-ASCII-Zeichen enthält**
+   (z. B. `pa:ß wort`), um UTF-8-statt-latin1 zu belegen.
+   **Mutationsbeweis beilegen** (gegen eine **Kopie** in einem Scratch-Verzeichnis, nie gegen
+   `src/`): Entfernen von `OCS-APIRequest` macht mindestens einen Test rot.
+2. **Exakte URL.** `request({ method:'GET', path:'/cloud/users', query:{ limit:1 } })` gegen
+   `baseUrl='https://h'` erzeugt **genau** `https://h/ocs/v1.php/cloud/users?limit=1&format=json`
+   (Stringvergleich, kein `toContain`). Ein vom Aufrufer übergebenes `format=xml` wird
+   überschrieben.
+3. **Erfolg.** HTTP 200 + `statuscode 100` -> `ok: true`; `data` deep-equals ein verschachteltes
+   Fixture **und** `data !== json.ocs` **und** `data !== json`. Fehlendes `ocs.data` -> `data === null`.
+4. **Erfolg verlangt beides.** HTTP 200 + `statuscode 101` -> `ok: false`, `kind: 'ocs'`.
+   HTTP 500 + `statuscode 100` -> `ok: false`, `kind: 'http'`.
+5. **v2-Falle.** `statuscode: 200` -> `ok: false`, `kind: 'ocs'`, `ocsCode: 200`. Hält fest, dass
+   die Prüfung nicht „gelockert" werden darf.
+6. **Klassifikationstabelle als Fixture-Tabelle**, je Zeile mit Status, Headern, Body und
+   erwarteten `kind`, `messageId`, `httpStatus`, `ocsCode`, `versuche`. Mindestens diese Zeilen:
+   401 · 403 · 429 · 997-im-Envelope · HTML 200 · 302-auf-HTML · 204 ohne Body ·
+   `ocs` ohne `meta` · `statuscode` als String · 500 mit gültigem Envelope.
+7. **Exception-Pfade, drei Timeout-Varianten:** `DOMException`-artig mit `name:'TimeoutError'`;
+   `name:'AbortError'`; `TypeError` mit `cause.name === 'TimeoutError'`. Alle -> `kind: 'timeout'`.
+8. **Zertifikat:** je ein Fall für `UNABLE_TO_VERIFY_LEAF_SIGNATURE` und
+   `DEPTH_ZERO_SELF_SIGNED_CERT` -> `kind: 'cert'`. Zusätzlich ein geworfener Fehler **ohne**
+   `cause` -> `kind: 'network'` (belegt den `typeof`-Guard).
+9. **Nicht-`Error` geworfen** (ein String) -> `kind: 'network'`, kein Throw nach außen.
+10. **Retry, exakte Aufrufliste.** 429 dreimal -> `versuche === 3` und
+    `sleep.mock.calls` deep-equals `[[2000],[6000]]`. Erfolg nach einem 429 -> `ok: true`,
+    `versuche === 2`. `auth` -> `versuche === 1`, `sleep` **nie** aufgerufen.
+    **`GET` mit 500 -> `versuche === 2`; `POST` mit 500 -> `versuche === 1`** (der Kern der
+    Methodenunterscheidung). `POST` mit 429 -> `versuche === 3`.
+    `retryDelaysMs: []` mit 429 -> `versuche === 1`. Folge 429 -> network -> 429 -> `versuche <= 3`.
+11. **Kein Secret-Leak, realistisch statt vakuum.** Zwei Fälle:
+    (a) `fetchImpl` wirft `new Error('connect ECONNREFUSED ... Basic ' + base64(user+':'+pw))`;
+    (b) der Server antwortet mit `ocs.meta.message`, das das Passwort enthält.
+    In **beiden** Fällen darf das Passwort weder in `JSON.stringify(result)` noch in
+    `result.message` noch in `result.messageId` vorkommen. Diese zwei Fälle töten genau die zwei
+    naheliegenden Bugs `message: err.message` und `message: meta.message`.
+12. **Form-Encoding.** `form: { groups:['a','b'], quota:'1 GB', leer: undefined, nix: null }`
+    ergibt den Body **genau** `groups%5B%5D=a&groups%5B%5D=b&quota=1+GB`
+    (`URLSearchParams`-Kodierung: `+` statt `%20`; `undefined`/`null` weggelassen) und
     `Content-Type: application/x-www-form-urlencoded`. Ohne `form`: **kein** Body, **kein**
     Content-Type.
-12. **`normalizeBaseUrl`:** alle 18 Zeilen der Tabelle in Abschnitt 6.
-13. **`mapOcsError`:** `kind: 'ocs'` mit Code in der Map -> gemappte ID; Code **nicht** in der Map
-    -> `fallbackId`; `kind: 'auth'` mit einer Map, die `401` enthielte -> ID bleibt
-    `falsche_zugangsdaten`, die Map wird **ignoriert**; `result.ok === true` -> wirft.
-14. **`messages.js`:** jede der 13 neuen IDs hat den exakten Text aus Abschnitt 5. Vorwärtsrichtung
-    wie in S02 — **keine** Prüfung auf unbenutzte IDs.
-15. **Purity von `url.js`:** fällt unter den bestehenden ESLint-Override für `src/shared/**`.
-    Zusätzlich der Spy-Test wie in S02.
+13. **Parallelität.** Vier gleichzeitige `request`-Aufrufe über **eine** Instanz, mit
+    unterschiedlichen Antworten, liefern unabhängige Results und `versuche`-Werte.
+14. **`fetchImpl` fehlt** -> `createOcsClient` wirft beim Erzeugen, nicht beim ersten Request.
+15. **`messages.js`:** die 9 neuen IDs. **Vorwärtsrichtung durch Treiben des Produzenten** —
+    jede ID wird über `request` mit passend gemocktem `fetchImpl` erzeugt, nicht per
+    Literal-Vergleich auf die Map. Keine Prüfung auf unbenutzte IDs.
 16. `npm test` und `npm run lint` grün.
 
 ## Ausdrücklich NICHT in diesem Schritt
 
-- **Kein `ocs/connection.js`**, keine `checkConnection()`. Das ist S04 zusammen mit dem Dialog.
-- Kein `session.js`, kein `credentials.js`, kein `safeStorage`, keine Zertifikatsausnahme,
-  kein `tls.js`. S03 **klassifiziert** Zertifikatsfehler nur, es behandelt sie nicht.
-- Kein `ocs/users.js`, `ocs/groups.js`, `ocs/userList.js`. Keine Endpunkt-Maps — nur der
-  Mechanismus `mapOcsError` plus eine Beispielmap **im Test**.
-- Keine `users/details`-Probe, kein N+1-Fallback, kein `userView.js`, kein `quota.js`.
+- **Kein `src/shared/url.js`** und keine `url_*`-IDs. Das ist **S03a**.
+- **Kein `src/main/ocs/errors.js`**, kein `mapOcsError`. Das ist **S05**, zusammen mit den ersten
+  echten Endpunkt-Maps. Ein Mechanismus ohne Aufrufer ist keine vertikale Scheibe.
+- Kein `ocs/connection.js`, keine `checkConnection()`. Das ist S04.
+- Kein `session.js`, `credentials.js`, `safeStorage`, `tls.js`. S03 **klassifiziert**
+  Zertifikatsfehler, es behandelt sie nicht.
+- Kein `ocs/users.js`, `ocs/groups.js`, `ocs/userList.js`, keine `users/details`-Probe,
+  kein N+1-Fallback, kein `userView.js`, kein `quota.js`.
 - Keine neuen IPC-Kanäle, keine Preload-Änderung, keine UI, keine Vue-Datei.
-- Kein echter Netzwerkzugriff in Tests. `fetchImpl` wird injiziert.
+- Kein echter Netzwerkzugriff in Tests.
 - Keine neuen Abhängigkeiten.
 
-## Fallen aus docs/REVIEW-NOTES.md, die hier besonders gelten
+## Fallen aus docs/REVIEW-NOTES.md
 
-- **Punkt 1:** `OCS-APIRequest` auf **jedem** Request, auch beim späteren Verbindungstest.
-- **Punkt 2:** HTTP 200 ist kein Erfolg. Beide Bedingungen prüfen.
-- **Punkt 3:** Keine globale Statuscode-Tabelle. Maps gehören zu den Endpunkten.
-- **Punkt 5:** `429` ist ein eigener Fehlerfall mit Backoff, nie ein User-Fehler.
-- **Punkt 8:** Das App-Passwort verlässt den Main-Prozess nie — auch nicht in Fehlermeldungen.
-- **`[S02]`-Einträge:** Grenzwerte tatsächlich einsetzen; Defaults an Eingaben prüfen, bei denen
-  sie zählen; Mutationsbeweise nur gegen Kopien; bei „genau dann, wenn" beide Richtungen prüfen;
-  Testname und Assertion müssen übereinstimmen.
+- **1:** `OCS-APIRequest` auf jedem Request.
+- **2:** HTTP 200 ist kein Erfolg — beide Bedingungen prüfen.
+- **3:** Keine globale Statuscode-Tabelle. In S03 existiert **keine** Code-Map außer `997`.
+- **5:** `429` ist ein eigener Fehlerfall mit Backoff, nie ein User-Fehler.
+- **8:** Das App-Passwort verlässt den Main-Prozess nie, auch nicht in Fehlermeldungen.
+- **`[S02]`:** Grenzwerte tatsächlich einsetzen; Defaults an Eingaben prüfen, bei denen sie zählen;
+  Mutationsbeweise nur gegen Kopien; bei „genau dann, wenn" beide Richtungen; Testname und
+  Assertion müssen übereinstimmen.
