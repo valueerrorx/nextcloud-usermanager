@@ -124,9 +124,12 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
   url.test.js                     Trailing Slash, /index.php, http abgelehnt
   credentials.test.js             basic_text -> nicht persistieren, Keyring -> Base64-Blob
   skeleton.test.js                S01-Gerüstfakten: package.json (type/main/scripts/gepinnte
-                                  electron-Version/keine Extra-devDeps), vite base './',
-                                  relative Asset-Pfade im Build, Preload exponiert nur
-                                  appVersion ohne Channel-Durchgriff, src/shared/ fehlt
+                                  electron-Version/keine verbotenen devDeps), vite base './',
+                                  relative Asset-Pfade im Build (Scratch-outDir, dist/ bleibt
+                                  unberührt), Preload VERHALTENSBASIERT über createRequire +
+                                  electron-Stub geprüft, src/shared/ fehlt
+  ipc.test.js                     genau ein Kanal 'app.version', Rueckgabe { ok, version }
+  theme.test.js                   genau die sechs Theme-Tokens mit festen Hex-Werten
   mainWindow.test.js              BROWSER_WINDOW_OPTIONS: contextIsolation/sandbox/nodeIntegration
   ocsClient.test.js               gemockte fetch: 100/401/403/429/HTML/Netzfehler, Header-Pflicht
   ocsUsers.test.js                endpunktspezifische Codes -> messageId, user.update 1-2 Schritte
@@ -784,7 +787,9 @@ Dashboard, Benutzer, Gruppen und Import sind erst nach erfolgreichem Verbinden e
   `will-navigate` blockt externe Navigation.
 - **Verifikation der Flags:** Das Optionsobjekt liegt in **`src/main/windowOptions.js`** als
   `BROWSER_WINDOW_OPTIONS`; `src/main/index.js` re-exportiert es und übergibt genau dieses an
-  `new BrowserWindow(...)`. `tests/mainWindow.test.js` importiert **`windowOptions.js` direkt** —
+  `new BrowserWindow(...)`. `applyNavigationGuards(webContents)` liegt ebenfalls in `windowOptions.js` und ist damit ohne
+  Electron testbar (`tests/mainWindow.test.js` prüft Deny-All und `will-navigate`).
+  `tests/mainWindow.test.js` importiert **`windowOptions.js` direkt** —
   dadurch **kein `electron`-Mock** und keine Bootstrap-Seiteneffekte beim Import. Der Test behauptet
   `contextIsolation === true`, `sandbox === true`, `nodeIntegration === false`,
   `webSecurity !== false` sowie dass `preload` auf `index.cjs` zeigt
