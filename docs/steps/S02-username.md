@@ -107,6 +107,10 @@ Budget für second = max - first.length - 1 (Trennpunkt) - suffix.length
   `username_zu_lang`.
 
 **Alle drei Schlüssel sind auf jedem Pfad gesetzt**, auch bei `passt: false`.
+
+**Fehlende Argumente scheitern kontrolliert, nicht per TypeError.** `first`, `second` und
+`suffix` haben jeweils den Default `''`, `max` den Default `MAX_USERID`. Ein fehlendes Argument
+wird also wie ein leerer String behandelt — konsistent zum Falsy-Guard in `normalizeComponent`.
 Leeres `first` oder `second` ist kein Sonderfall: die Arithmetik gilt unverändert; ein leeres
 `second` hat Länge 0, passt also immer.
 
@@ -136,6 +140,9 @@ also legitim über `max` liegen; dieser Fall wird separat geprüft.
   Nur `{ ok }` bzw. `{ ok: false, messageId }`.
 - Nicht-String-Eingabe (`null`, `42`, `{}`) -> `username_leer`.
 - Fehlendes oder unbekanntes `quelle` -> **strengster** Zeichensatz (`generator`). Fail closed.
+- Das zweite Argument wird **nicht destrukturiert**: `validateUserid('Max', null)` oder mit einem
+  String/Number als zweitem Argument wirft nicht, sondern fällt ebenfalls auf `generator` zurück.
+  Ein Validator mit „fail closed"-Kontrakt darf nicht werfen.
 
 Zeichensatz (DECISIONS „Zeichensatz für manuell eingegebene `userid`"):
 - `quelle: 'generator'` -> `[a-z0-9.]`. Regressionssperre.
