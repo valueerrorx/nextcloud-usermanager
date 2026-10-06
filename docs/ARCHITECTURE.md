@@ -794,6 +794,11 @@ Dashboard, Benutzer, Gruppen und Import sind erst nach erfolgreichem Verbinden e
   `contextIsolation === true`, `sandbox === true`, `nodeIntegration === false`,
   `webSecurity !== false` sowie dass `preload` auf `index.cjs` zeigt
   (DECISIONS „Verifikation der Electron-Security-Flags“). Damit regressiert kein Flag still.
+- **Content-Security-Policy:** `src/renderer/index.html` tragt ein `<meta http-equiv="Content-Security-Policy">`
+  mit `default-src 'self'; style-src 'self' 'unsafe-inline'`. `'unsafe-inline'` ist ausschliesslich
+  fuer die Inline-Styles von SweetAlert2 noetig. Der HMR-Websocket im Dev-Modus ist ueber den
+  `connect-src`-Fallback auf `'self'` gedeckt. Folgeschritte duerfen die CSP nicht aufweichen,
+  ohne es hier zu begruenden (DECISIONS „Content-Security-Policy im Renderer").
 - **Preload:** nur die Methoden aus §3, jede mit festem Kanalnamen, CommonJS
   (`src/preload/index.cjs`, weil `sandbox: true` kein ESM-Preload lädt). Keine
   Channel-Parameter von außen, keine Weitergabe von `ipcRenderer`.
