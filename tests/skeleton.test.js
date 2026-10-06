@@ -152,12 +152,6 @@ describe('src/preload/index.cjs', () => {
   });
 });
 
-describe('src/shared/', () => {
-  it('existiert in S01 nicht', () => {
-    expect(existsSync(path.join(root, 'src', 'shared'))).toBe(false);
-  });
-});
-
 describe('src/main/', () => {
   // S01 verbietet diese Module/Verzeichnisse ausdrücklich (docs/steps/S01-skeleton.md "Ausdrücklich
   // NICHT in diesem Schritt"); spätere Schritte legen laut ARCHITECTURE §2 weitere main/-Module an,

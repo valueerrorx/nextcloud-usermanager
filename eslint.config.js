@@ -46,4 +46,17 @@ export default [
       'no-unused-vars': 'error',
     },
   },
+  {
+    // src/shared/ is pure: no I/O, no node:*, no electron, no vue (ARCHITECTURE §2)
+    files: ['src/shared/**/*.js'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: ['node:*', 'electron', 'vue', 'fs', 'path', 'child_process'],
+        },
+      ],
+      'no-restricted-globals': ['error', 'fetch', 'process', 'require', 'XMLHttpRequest'],
+    },
+  },
 ];
