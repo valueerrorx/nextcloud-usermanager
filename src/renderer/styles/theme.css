@@ -1,0 +1,30 @@
+:root {
+  --bg: #15181d;
+  --bg-elev: #1d2128;
+  --fg: #e6e8eb;
+  --fg-muted: #9aa3ad;
+  --accent: #4a9eff;
+  --border: #2b313a;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+
+/* swal2 dunkel ausschliesslich per Variablen-Override, kein zusaetzliches Theme-Paket */
+.swal2-popup {
+  background: var(--bg-elev) !important;
+  color: var(--fg) !important;
+}
+
+.swal2-title,
+.swal2-html-container {
+  color: var(--fg) !important;
+}
+
+.swal2-actions .swal2-styled {
+  background: var(--accent) !important;
+}

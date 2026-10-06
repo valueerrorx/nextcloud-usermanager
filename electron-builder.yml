@@ -1,0 +1,12 @@
+appId: com.nextcloud.usermanager
+productName: Nextcloud User Manager
+directories:
+  output: release
+files:
+  - dist/renderer/**/*
+  - src/main/**/*
+  - src/preload/**/*
+  - package.json
+  - "!node_modules/**"
+linux:
+  target: AppImage

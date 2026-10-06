@@ -129,6 +129,8 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
                                   unberührt), Preload VERHALTENSBASIERT über createRequire +
                                   electron-Stub geprüft, src/shared/ fehlt
   ipc.test.js                     genau ein Kanal 'app.version', Rueckgabe { ok, version }
+  index.test.js                   second-instance: Fenster wiederherstellen/fokussieren,
+                                  zerstoertes Fenster wird nicht dereferenziert
   theme.test.js                   genau die sechs Theme-Tokens mit festen Hex-Werten
   mainWindow.test.js              BROWSER_WINDOW_OPTIONS: contextIsolation/sandbox/nodeIntegration
   ocsClient.test.js               gemockte fetch: 100/401/403/429/HTML/Netzfehler, Header-Pflicht
