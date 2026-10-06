@@ -673,8 +673,12 @@ Die Passwortliste wird beim Verlassen der Importansicht aus `state.js` entfernt.
 `request({ method, path, query, form })` in `ocs/client.js`:
 - Basis `${baseUrl}/ocs/v1.php` + `path`; `format=json` immer in der Query.
 - Header auf **jedem** Request: `OCS-APIRequest: true`, `Accept: application/json`,
-  `Authorization: Basic base64(user:appPassword)`. Credentials kommen aus `session.js` und
-  werden nie in ein Result, ein Log oder eine Exception geschrieben.
+  `Authorization: Basic base64(user:appPassword)`. Credentials werden dem Client bei der
+  Erzeugung **injiziert** (`createOcsClient({ baseUrl, adminUser, appPassword, timeoutMs,
+  retryDelaysMs, sleep, fetchImpl })`); `session.js` hält die **Client-Instanz**, nicht der Client
+  die Session (DECISIONS „Credential-Übergabe an den OCS-Client"). `sleep`, `retryDelaysMs` und
+  `fetchImpl` sind injizierbar, damit Retry-Tests nicht in Echtzeit warten.
+  Credentials werden nie in ein Result, ein Log oder eine Exception geschrieben.
 - Body als `application/x-www-form-urlencoded`; Arrays als `groups[]`.
 - Timeout 20 s über `AbortSignal.timeout` (betrifft nur den einzelnen Request, nicht den Job).
 - Envelope-Unwrap: `json.ocs.meta.statuscode` und `json.ocs.data`. Erfolg nur wenn
@@ -683,9 +687,9 @@ Die Passwortliste wird beim Verlassen der Importansicht aus `state.js` entfernt.
 Result-Typ überall identisch:
 
 ```js
-{ ok: true, data, httpStatus }
+{ ok: true, data, httpStatus, versuche }
 { ok: false, kind: 'ocs'|'http'|'auth'|'forbidden'|'ratelimit'|'notOcs'|'network'|'timeout'|'cert',
-  httpStatus: number|null, ocsCode: number|null, messageId, message }
+  httpStatus: number|null, ocsCode: number|null, messageId, message, versuche }
 ```
 
 `kind: 'notOcs'` wenn die Antwort kein JSON mit `ocs`-Wurzel ist (typisch HTML bei falschem
