@@ -114,7 +114,10 @@ bereits 401/403/429/notOcs/cert/network/timeout. **Keine zweite Fehlertabelle.**
 
 ### A5. `src/main/tls.js`
 Wie in der Architekturkorrektur oben. Zusätzlich:
-- Genau **eine** Ausnahme pro Host; ein zweiter Host erzeugt einen eigenen Prompt.
+- **Genau EINE Ausnahme insgesamt**, nicht eine pro Host (Korrektur gegenüber der ersten
+  Spec-Fassung). Die App verbindet sich zu genau einem Server; Profillisten sind ein Nicht-Ziel
+  (GOAL Zeile 8). Ein anderer Host erzeugt einen neuen Prompt und **überschreibt** die bestehende
+  Ausnahme. Der Kommentar im Code darf nicht „one exception per host" behaupten.
 - `requestId` ist eine Zufalls-ID; eine Antwort auf eine unbekannte oder abgelaufene ID wird
   verworfen und der zugehörige `callback` mit `-2` beantwortet.
 - **Prompt-Timeout 120 s** -> `callback(-2)`, ID verfällt. Ein hängender `callback` würde den

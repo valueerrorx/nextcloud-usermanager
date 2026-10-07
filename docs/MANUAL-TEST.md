@@ -42,7 +42,8 @@ ist — das deckt `tests/pool.test.js` ab).
 
 ## B. Verbindung und Zugangsdaten
 
-8. **Tun:** korrekte URL, Admin-User und App-Passwort eingeben, "Verbinden".
+8. **Tun:** korrekte URL der Test-Instanz (`https://cloud.xapient.solutions`, DECISIONS
+   „Test-Instanz für die manuelle Abnahme“), Admin-User und App-Passwort eingeben, "Verbinden".
    **Erwartung:** **ein** Vorgang prüft und verbindet (kein getrennter "Testen"-Schritt),
    Erfolgsmeldung, Dashboard wird erreichbar. Es gibt keinen "Trennen"-Button; "Zugang löschen"
    entfernt nur den gespeicherten Satz.
