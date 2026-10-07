@@ -53,6 +53,10 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 
 - [S04] **Ein Mutationsbeweis ist eine Entwicklungs-Tätigkeit, kein Test für die Suite.** In S04 landeten zwei Tests im Bestand, die zur Laufzeit eine Datei nach `/tmp` kopieren, dort den Fehler einbauen und dann behaupten, die kaputte Kopie sei kaputt. Das ist immer grün und sagt nichts über den echten Code. **Richtig:** die Mutation einmal beim Entwickeln fahren, belegen, dass die **echte** Assertion rot wird, und nur die echte Assertion in der Suite lassen. Kein Dateisystem-Schreiben während `npm test`.
 
+- [S04] **Wird der HTTP-Stack getauscht, verfällt die darauf zugeschnittene Fehlerklassifikation.** `CERT_CODES` in `client.js` enthielt OpenSSL-Strings (`SELF_SIGNED_CERT_IN_CHAIN`) für Node/undici. Mit dem Wechsel auf Electrons `net.fetch` wirft Chromium `net::ERR_CERT_*` — ein untrustworthy Zertifikat wurde dadurch als „Server nicht erreichbar" gemeldet. **Lead-Fehler:** den Stack gewechselt, die Klassifikation nicht mitgezogen.
+- [S04] **Zustände, die das UI anzeigen soll, müssen dort landen, wo das UI sie liest.** Die akzeptierte Zertifikatsausnahme lag nur in der Controller-Closure; `connection.status.certException` war immer `null`, und das Warnbanner verschwand im Hauptablauf wieder. Eine Sicherheitswarnung, die der Nutzer nicht sieht, ist keine.
+- [S04] **Für Zertifikatsergebnisse ist der Verifier die Autorität, nicht die Fetch-Fehlermeldung.** Statt Fehlerstrings zu parsen, fragt der Verbindungsaufbau den TLS-Controller, was mit dem Zertifikat dieses Hosts entschieden wurde. Deterministisch und unabhängig vom HTTP-Stack.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
