@@ -1,6 +1,151 @@
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, net, BrowserWindow } from 'electron';
+import { normalizeBaseUrl } from '../shared/url.js';
+import { MESSAGES } from '../shared/messages.js';
+import { checkConnection } from './ocs/connection.js';
+import { session } from './session.js';
+import * as credentials from './credentials.js';
+import { createTlsController } from './tls.js';
+
+// net.fetch is Electron's Chromium-backed fetch, never globalThis.fetch (ARCHITEKTURKORREKTUR):
+// app.on('certificate-error') only fires for Chromium requests, so only net.fetch lets the user's
+// certificate exception apply. Wrapped, not passed directly, to avoid a stray `this` binding.
+const fetchImpl = (...args) => net.fetch(...args);
+
+function broadcast(channel, payload) {
+  const windows = BrowserWindow.getAllWindows ? BrowserWindow.getAllWindows() : [];
+  for (const win of windows) {
+    if (win.isDestroyed()) continue; // a destroyed webContents would throw on send
+    win.webContents.send(channel, payload);
+  }
+}
+
+// Exported so tests can drive the controller directly and so a future bootstrap step can call
+// installCertificateVerifier(session.defaultSession, tlsController) (src/main/tls.js).
+export const tlsController = createTlsController({
+  sendPrompt: (payload) => broadcast('tls.onCertificatePrompt', payload),
+});
+
+function hostnameOf(baseUrl) {
+  try {
+    return new URL(baseUrl).hostname;
+  } catch {
+    return null;
+  }
+}
+
+// The TLS controller is the authority on certificate outcomes (REVIEW-NOTES [S04]), not the
+// fetch error string: a declined or timed-out certificate decision for this host must not be
+// reported as a generic network failure just because net.fetch surfaces one of those.
+function applyTlsOutcome(result, baseUrl) {
+  if (result.ok || (result.kind !== 'network' && result.kind !== 'cert')) return result;
+  const decision = tlsController.getDecision(hostnameOf(baseUrl));
+  if (decision === 'abgelehnt') {
+    return { ...result, kind: 'cert', messageId: 'zertifikat_abgelehnt', message: MESSAGES.zertifikat_abgelehnt };
+  }
+  if (decision === 'zeitueberschreitung') {
+    return { ...result, kind: 'cert', messageId: 'zertifikat_nicht_vertraut', message: MESSAGES.zertifikat_nicht_vertraut };
+  }
+  return result;
+}
+
+function buildStatus() {
+  return {
+    connected: session.connected,
+    baseUrl: session.baseUrl,
+    adminUserId: session.adminUserId,
+    secretStorage: session.secretStorage,
+    certException: session.certException,
+  };
+}
+
+async function handleConnect({ baseUrl, adminUser, appPassword, remember }) {
+  const normalized = normalizeBaseUrl(baseUrl);
+  if (!normalized.ok) {
+    return { ok: false, messageId: normalized.messageId, message: MESSAGES[normalized.messageId] };
+  }
+
+  const result = await checkConnection({ baseUrl: normalized.baseUrl, adminUser, appPassword, fetchImpl });
+  // client already classified it (REVIEW-NOTES 3) - applyTlsOutcome only overrides a cert
+  // misdiagnosis, no second error table.
+  if (!result.ok) return applyTlsOutcome(result, normalized.baseUrl);
+
+  // Session is written only now, on success - a failed attempt above leaves it untouched.
+  session.setConnected({
+    client: result.client,
+    baseUrl: normalized.baseUrl,
+    adminUser,
+    adminUserId: result.adminUserId,
+    appPassword,
+    secretStorage: 'session',
+  });
+
+  if (!remember) {
+    return { ok: true, status: buildStatus() };
+  }
+
+  const saved = await credentials.save({ baseUrl: normalized.baseUrl, adminUser, appPassword });
+  session.setSecretStorage(saved.secretStorage);
+  const response = { ok: true, status: buildStatus() };
+  if (saved.messageId) {
+    response.messageId = saved.messageId;
+    response.message = MESSAGES[saved.messageId];
+  }
+  return response;
+}
+
+async function handleConnectSaved() {
+  const saved = await credentials.load();
+  if (!saved) {
+    return { ok: false, messageId: 'kein_gespeicherter_zugang', message: MESSAGES.kein_gespeicherter_zugang };
+  }
+
+  const result = await checkConnection({ ...saved, fetchImpl });
+  if (!result.ok) {
+    const tlsResult = applyTlsOutcome(result, saved.baseUrl);
+    if (tlsResult !== result) return tlsResult; // declined/timed-out certificate wins over the raw classification
+    if (result.kind === 'auth') {
+      return { ...result, messageId: 'gespeichertes_passwort_abgelehnt', message: MESSAGES.gespeichertes_passwort_abgelehnt };
+    }
+    return result;
+  }
+
+  session.setConnected({
+    client: result.client,
+    baseUrl: saved.baseUrl,
+    adminUser: saved.adminUser,
+    adminUserId: result.adminUserId,
+    appPassword: saved.appPassword,
+    secretStorage: 'keyring',
+  });
+  return { ok: true, status: buildStatus() };
+}
+
+// Never decrypts (credentials.peek) - the password must never be touched on a status poll.
+async function handleStatus() {
+  const meta = await credentials.peek();
+  return {
+    ...buildStatus(),
+    hasSaved: meta !== null,
+    savedBaseUrl: meta?.baseUrl ?? null,
+    savedAdminUser: meta?.adminUser ?? null,
+  };
+}
 
 // Only place with ipcMain.handle/on (ARCHITECTURE §2).
 export function registerIpcHandlers() {
   ipcMain.handle('app.version', () => ({ ok: true, version: app.getVersion() }));
+  ipcMain.handle('connection.connect', (event, args) => handleConnect(args));
+  ipcMain.handle('connection.connectSaved', () => handleConnectSaved());
+  ipcMain.handle('connection.status', () => handleStatus());
+  ipcMain.handle('connection.forgetSaved', () => credentials.forget());
+  ipcMain.handle('tls.respondCertificate', (event, args) => {
+    const result = tlsController.respond(args);
+    // Push the accepted exception into session so buildStatus() reports it (REVIEW-NOTES [S04]:
+    // a state the UI must show has to land where the UI reads it) - it was living only in the
+    // controller's closure before, so the permanent banner silently disappeared again.
+    if (result.ok && !result.messageId) {
+      session.setCertException(tlsController.getException());
+    }
+    return result;
+  });
 }

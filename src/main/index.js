@@ -1,7 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import path from 'node:path';
 import { BROWSER_WINDOW_OPTIONS, applyNavigationGuards } from './windowOptions.js';
-import { registerIpcHandlers } from './ipc.js';
+import { registerIpcHandlers, tlsController } from './ipc.js';
+import { installCertificateVerifier } from './tls.js';
 
 export { BROWSER_WINDOW_OPTIONS };
 
@@ -44,6 +45,9 @@ if (!gotLock) {
   app.whenReady()
     .then(async () => {
       registerIpcHandlers();
+      // Wired here, not in ipc.js (ARCHITEKTURKORREKTUR): without this call a real certificate
+      // error falls back to Chromium's default and the fingerprint prompt can never appear.
+      installCertificateVerifier(session.defaultSession, tlsController);
       await createWindow();
     })
     .catch((error) => {

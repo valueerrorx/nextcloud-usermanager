@@ -39,6 +39,7 @@ describe('src/main/index.js second-instance guard', () => {
 
   async function bootWithMockedElectron(browserWindowInstance) {
     const appListeners = new Map();
+    const defaultSession = { setCertificateVerifyProc: vi.fn() };
     vi.doMock('electron', () => ({
       app: {
         requestSingleInstanceLock: () => true,
@@ -55,6 +56,7 @@ describe('src/main/index.js second-instance guard', () => {
         return browserWindowInstance;
       }),
       ipcMain: { handle: vi.fn() },
+      session: { defaultSession },
     }));
 
     await import('../src/main/index.js');
@@ -64,13 +66,13 @@ describe('src/main/index.js second-instance guard', () => {
       expect(browserWindowInstance.loadFile).toHaveBeenCalled();
     });
 
-    return appListeners;
+    return { appListeners, defaultSession };
   }
 
   it('fokussiert und stellt ein minimiertes Fenster bei second-instance wieder her', async () => {
     const browserWindowInstance = fakeBrowserWindow();
     browserWindowInstance.isMinimized = vi.fn(() => true);
-    const appListeners = await bootWithMockedElectron(browserWindowInstance);
+    const { appListeners } = await bootWithMockedElectron(browserWindowInstance);
 
     appListeners.get('second-instance')();
 
@@ -80,7 +82,7 @@ describe('src/main/index.js second-instance guard', () => {
 
   it('fokussiert ein nicht minimiertes Fenster bei second-instance ohne restore', async () => {
     const browserWindowInstance = fakeBrowserWindow();
-    const appListeners = await bootWithMockedElectron(browserWindowInstance);
+    const { appListeners } = await bootWithMockedElectron(browserWindowInstance);
 
     appListeners.get('second-instance')();
 
@@ -91,11 +93,19 @@ describe('src/main/index.js second-instance guard', () => {
   it('tut nichts bei second-instance, wenn das Fenster bereits zerstört ist', async () => {
     const browserWindowInstance = fakeBrowserWindow();
     browserWindowInstance.isDestroyed = vi.fn(() => true);
-    const appListeners = await bootWithMockedElectron(browserWindowInstance);
+    const { appListeners } = await bootWithMockedElectron(browserWindowInstance);
 
     appListeners.get('second-instance')();
 
     expect(browserWindowInstance.restore).not.toHaveBeenCalled();
     expect(browserWindowInstance.focus).not.toHaveBeenCalled();
+  });
+
+  it('installiert den Zertifikatsverifier auf session.defaultSession beim Start (sonst toter Code, siehe REVIEW-NOTES)', async () => {
+    const browserWindowInstance = fakeBrowserWindow();
+    const { defaultSession } = await bootWithMockedElectron(browserWindowInstance);
+
+    expect(defaultSession.setCertificateVerifyProc).toHaveBeenCalledOnce();
+    expect(typeof defaultSession.setCertificateVerifyProc.mock.calls[0][0]).toBe('function');
   });
 });

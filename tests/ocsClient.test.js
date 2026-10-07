@@ -285,6 +285,16 @@ describe('8. Zertifikat', () => {
     expect(result.kind).toBe('cert');
   });
 
+  it('Chromium net::ERR_CERT_AUTHORITY_INVALID (kein OpenSSL-Code, nur die Fehlermeldung) -> kind: cert', async () => {
+    // net.fetch (Electron/Chromium) throws net::ERR_CERT_* instead of the OpenSSL codes above
+    // (REVIEW-NOTES [S04]) - the cheap safety net checks the message/cause text, not err.cause.code.
+    const err = new Error('net::ERR_CERT_AUTHORITY_INVALID');
+    const fetchImpl = singleFetch(thrown(err));
+    const client = createOcsClient({ ...baseOpts, fetchImpl, sleep: vi.fn() });
+    const result = await client.request({ method: 'GET', path: '/cloud/users' });
+    expect(result.kind).toBe('cert');
+  });
+
   it('geworfener Fehler ohne cause -> kind: network (belegt den typeof-Guard)', async () => {
     const err = new Error('fetch failed');
     const fetchImpl = singleFetch(thrown(err));

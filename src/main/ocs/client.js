@@ -36,6 +36,15 @@ function classifyThrown(err) {
   if (typeof causeCode === 'string' && CERT_CODES.has(causeCode)) {
     return makeFailure('cert', null, null, 'zertifikat_nicht_vertraut');
   }
+  // Cheap safety net for Electron's net.fetch (Chromium), which throws net::ERR_CERT_* instead of
+  // the OpenSSL codes above (REVIEW-NOTES [S04]) - checked on both the error and its cause message,
+  // since fetchImpl is injectable and the exact wrapping is not guaranteed. The TLS controller
+  // (tls.js) stays the primary authority for certificate outcomes; this only prevents a cert error
+  // from falling through to "server unreachable" when fetchImpl is net.fetch.
+  const thrownText = [err?.message, err?.cause?.message].filter((s) => typeof s === 'string').join(' ');
+  if (thrownText.includes('ERR_CERT')) {
+    return makeFailure('cert', null, null, 'zertifikat_nicht_vertraut');
+  }
   return makeFailure('network', null, null, 'server_nicht_erreichbar');
 }
 

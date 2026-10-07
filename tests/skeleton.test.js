@@ -93,6 +93,8 @@ describe('src/preload/index.cjs', () => {
 
   function loadPreloadWithStubbedElectron() {
     const invokeCalls = [];
+    const onCalls = [];
+    const removeListenerCalls = [];
     let exposedApi = null;
     let exposedWorldName = null;
     const stubbedElectron = {
@@ -106,6 +108,12 @@ describe('src/preload/index.cjs', () => {
         invoke: (channel, ...args) => {
           invokeCalls.push({ channel, args });
           return Promise.resolve({ ok: true });
+        },
+        on: (channel, listener) => {
+          onCalls.push({ channel, listener });
+        },
+        removeListener: (channel, listener) => {
+          removeListenerCalls.push({ channel, listener });
         },
       },
     };
@@ -125,7 +133,7 @@ describe('src/preload/index.cjs', () => {
     delete requireFromPreload.cache[electronPath];
     delete requireFromPreload.cache[preloadPath];
 
-    return { exposedApi, exposedWorldName, invokeCalls };
+    return { exposedApi, exposedWorldName, invokeCalls, onCalls, removeListenerCalls };
   }
 
   it('exponiert die API unter dem Weltnamen "api" (window.api, von App.vue erwartet)', () => {
@@ -133,9 +141,17 @@ describe('src/preload/index.cjs', () => {
     expect(exposedWorldName).toBe('api');
   });
 
-  it('exponiert genau ein Feld: appVersion', () => {
+  it('exponiert genau die sieben S01-S04-Felder', () => {
     const { exposedApi } = loadPreloadWithStubbedElectron();
-    expect(Object.keys(exposedApi)).toEqual(['appVersion']);
+    expect(Object.keys(exposedApi)).toEqual([
+      'appVersion',
+      'connect',
+      'connectSaved',
+      'connectionStatus',
+      'forgetSaved',
+      'respondCertificate',
+      'onCertificatePrompt',
+    ]);
   });
 
   it('jedes exponierte Feld ist eine Funktion (kein Wert, kein generischer Durchgriff)', () => {
@@ -150,6 +166,24 @@ describe('src/preload/index.cjs', () => {
     await exposedApi.appVersion();
     expect(invokeCalls).toEqual([{ channel: 'app.version', args: [] }]);
   });
+
+  it('connect() leitet das Argument unverändert an den Kanal connection.connect weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim', remember: true };
+    await exposedApi.connect(args);
+    expect(invokeCalls).toEqual([{ channel: 'connection.connect', args: [args] }]);
+  });
+
+  it('onCertificatePrompt() abonniert tls.onCertificatePrompt und gibt einen Disposer zurück', () => {
+    const { exposedApi, onCalls, removeListenerCalls } = loadPreloadWithStubbedElectron();
+    const callback = () => {};
+    const dispose = exposedApi.onCertificatePrompt(callback);
+    expect(onCalls).toHaveLength(1);
+    expect(onCalls[0].channel).toBe('tls.onCertificatePrompt');
+    expect(typeof dispose).toBe('function');
+    dispose();
+    expect(removeListenerCalls).toEqual([{ channel: 'tls.onCertificatePrompt', listener: onCalls[0].listener }]);
+  });
 });
 
 describe('src/main/', () => {
@@ -157,10 +191,11 @@ describe('src/main/', () => {
   // NICHT in diesem Schritt"); spätere Schritte legen laut ARCHITECTURE §2 weitere main/-Module an,
   // daher keine exakte Allowlist (REVIEW-NOTES: "Verbotenes aufzählen, nicht Erlaubtes").
   // 'ocs' ist mit S03 entfernt - das Verzeichnis existiert ab dann (gleiches Schema wie
-  // 'src/shared/' nach S02).
+  // 'src/shared/' nach S02). 'session.js', 'credentials.js' und 'tls.js' sind mit S04 entfernt -
+  // sie entstehen jetzt legitim (REVIEW-NOTES [S03]).
   it('enthält keines der in S01 verbotenen Module/Verzeichnisse', () => {
     const entries = readdirSync(path.join(root, 'src', 'main'));
-    const forbidden = ['session.js', 'credentials.js', 'tls.js', 'log.js', 'files.js', 'actions'];
+    const forbidden = ['log.js', 'files.js', 'actions'];
     for (const name of forbidden) {
       expect(entries).not.toContain(name);
     }
