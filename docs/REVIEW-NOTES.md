@@ -46,6 +46,11 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S02] **Testanzahl ist kein Qualitätsmaß.** 223 grüne Tests, und zwei Mutanten überlebten. Bei sicherheits- oder korrektheitsrelevanten Zusicherungen zählt der Mutationsbeweis, nicht die Zahl.
 - [S03] **Jeder Schritt, der ein neues Verzeichnis oder Modul anlegt, muss die S01-Scope-Guards mitpflegen.** Zweimal passiert: S02 musste den `src/shared/`-Block in `tests/skeleton.test.js` löschen, S03 `'ocs'` aus der Verbotsliste nehmen. **Der Lead schreibt das in die Step-Spec**, sonst stolpert der Coder darüber oder die Suite wird ohne Erklärung rot.
 
+- [S03] **Eine Sicherheitszusage muss gegen JEDE Darstellung des Secrets prüfen.** Der Leak-Test suchte nur den Klartext des Passworts — `message: err.message` hätte ihn passiert, weil im Authorization-Header die **base64**-Form steht. Gleiche Schwäche wie die Quelltext-Regex aus S01: die Zusicherung sieht geprüft aus und ist es nicht.
+- [S03] **Muss der Code zwischen zwei widersprüchlichen Spec-Sätzen wählen, gehört das in den Schrittbericht**, nicht nur in einen Code-Kommentar. Hier: „HTTP 5xx -> GET -> 1 Retry" gegen „bei `notOcs` wird nie wiederholt". Ein echter 502 liefert HTML, ist also `notOcs` — die Retry-Regel war dadurch fast unerreichbar.
+- [S03] **Verdrahtung wird getestet, nicht nur Logik.** Das Löschen von `signal: AbortSignal.timeout(...)` ließ alle 287 Tests grün, während ein echter Request ewig hängen würde. Bei jedem Mechanismus, der nur über ein Options-Objekt wirkt, mindestens eine Assertion auf das übergebene Objekt.
+- [S03] **Lead: `git add -A` nie in einem `docs:`-Commit.** So ist der komplette S03-Quellcode in einem docs-Commit gelandet und der Schritt in `git log` unsichtbar. Quelle und Dokumentation getrennt committen.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.

@@ -155,7 +155,12 @@ wurde. Bei 429 lehnt die Brute-Force-Sperre **vor** der Verarbeitung ab, daher d
 - **Globale Obergrenze `versuche <= 3`**, als Invariante getestet — sonst kann eine Folge
   429 -> network -> 429 kreisen.
 - Nach erschöpften Retries wird das **letzte** Ergebnis unverändert zurückgegeben.
-- Bei `auth`, `forbidden`, `notOcs`, `timeout`, `cert` wird **nie** wiederholt. Ein falsches
+- **Auflösung des Widerspruchs `notOcs` vs. 5xx (Tech-Lead):** Der **HTTP-Status gewinnt**.
+  Ein 5xx wird bei `GET`/`HEAD` auch dann einmal wiederholt, wenn der Body unparsebar ist — ein
+  echter 502/504 vom Reverse Proxy liefert eine HTML-Seite, und ohne diese Regel wäre der
+  5xx-Retry in der Praxis unerreichbar. Für 2xx-Antworten mit HTML bleibt es bei `notOcs`
+  **ohne** Retry (dort ist der Basis-Pfad falsch, Wiederholen hilft nicht).
+- Bei `auth`, `forbidden`, `timeout`, `cert` und bei `notOcs` **mit 2xx** wird **nie** wiederholt. Ein falsches
   Passwort zu wiederholen verschärft nur die Brute-Force-Sperre.
 
 ## Abnahmekriterien (alle automatisiert, `fetchImpl` injiziert)
