@@ -51,6 +51,8 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S03] **Verdrahtung wird getestet, nicht nur Logik.** Das Löschen von `signal: AbortSignal.timeout(...)` ließ alle 287 Tests grün, während ein echter Request ewig hängen würde. Bei jedem Mechanismus, der nur über ein Options-Objekt wirkt, mindestens eine Assertion auf das übergebene Objekt.
 - [S03] **Lead: `git add -A` nie in einem `docs:`-Commit.** So ist der komplette S03-Quellcode in einem docs-Commit gelandet und der Schritt in `git log` unsichtbar. Quelle und Dokumentation getrennt committen.
 
+- [S04] **Ein Mutationsbeweis ist eine Entwicklungs-Tätigkeit, kein Test für die Suite.** In S04 landeten zwei Tests im Bestand, die zur Laufzeit eine Datei nach `/tmp` kopieren, dort den Fehler einbauen und dann behaupten, die kaputte Kopie sei kaputt. Das ist immer grün und sagt nichts über den echten Code. **Richtig:** die Mutation einmal beim Entwickeln fahren, belegen, dass die **echte** Assertion rot wird, und nur die echte Assertion in der Suite lassen. Kein Dateisystem-Schreiben während `npm test`.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.

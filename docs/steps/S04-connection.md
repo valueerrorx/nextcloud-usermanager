@@ -162,10 +162,18 @@ Wird ein gespeichertes Passwort abgelehnt: Dialog bleibt offen, Passwortfeld lee
 
 ## Neue messageIds
 
-`url_leer`, `url_kein_schema`, `url_nur_https`, `url_ungueltig`, `url_mit_zugangsdaten`,
-`kein_keyring_nur_sitzung`, `kein_gespeicherter_zugang`, `gespeichertes_passwort_abgelehnt`,
-`secret_nicht_gespeichert`, `zertifikat_abgelehnt`.
-Deutsche Texte vom Coder formulieren, kurz und ohne Fachjargon; danach hier nachtragen.
+| id | deutsche Meldung |
+|---|---|
+| `url_leer` | Bitte eine Server-Adresse eingeben. |
+| `url_kein_schema` | Die Adresse braucht ein Schema, zum Beispiel https://. |
+| `url_nur_https` | Nur https wird unterstützt. |
+| `url_ungueltig` | Diese Adresse ist ungültig. |
+| `url_mit_zugangsdaten` | Die Adresse darf keinen Benutzernamen oder Passwort enthalten. |
+| `kein_keyring_nur_sitzung` | Kein Systemschlüsselbund gefunden. Der Zugang gilt nur für diese Sitzung. |
+| `kein_gespeicherter_zugang` | Es ist kein gespeicherter Zugang vorhanden. |
+| `gespeichertes_passwort_abgelehnt` | Das gespeicherte Passwort wurde abgelehnt. Bitte neu eingeben. |
+| `secret_nicht_gespeichert` | Der Zugang konnte nicht gespeichert werden. |
+| `zertifikat_abgelehnt` | Die Zertifikatsausnahme wurde abgelehnt. |
 
 ## Abnahmekriterien
 
