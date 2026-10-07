@@ -177,6 +177,8 @@ Wird ein gespeichertes Passwort abgelehnt: Dialog bleibt offen, Passwortfeld lee
 | `gespeichertes_passwort_abgelehnt` | Das gespeicherte Passwort wurde abgelehnt. Bitte neu eingeben. |
 | `secret_nicht_gespeichert` | Der Zugang konnte nicht gespeichert werden. |
 | `zertifikat_abgelehnt` | Die Zertifikatsausnahme wurde abgelehnt. |
+| `zertifikat_anfrage_abgelaufen` | Diese Zertifikatsanfrage ist abgelaufen oder unbekannt. |
+| `zugang_loeschen_fehlgeschlagen` | Der gespeicherte Zugang konnte nicht gelöscht werden. |
 
 ## Abnahmekriterien
 
