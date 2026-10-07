@@ -57,6 +57,10 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S04] **Zustände, die das UI anzeigen soll, müssen dort landen, wo das UI sie liest.** Die akzeptierte Zertifikatsausnahme lag nur in der Controller-Closure; `connection.status.certException` war immer `null`, und das Warnbanner verschwand im Hauptablauf wieder. Eine Sicherheitswarnung, die der Nutzer nicht sieht, ist keine.
 - [S04] **Für Zertifikatsergebnisse ist der Verifier die Autorität, nicht die Fetch-Fehlermeldung.** Statt Fehlerstrings zu parsen, fragt der Verbindungsaufbau den TLS-Controller, was mit dem Zertifikat dieses Hosts entschieden wurde. Deterministisch und unabhängig vom HTTP-Stack.
 
+- [S05] **„Was passiert hier bei 429?" gehört in jede Spec, die einen Fehlerpfad definiert.** Die Regel ist jetzt dreimal verletzt worden, jedes Mal anders verkleidet: in S03 als fehlender eigener Fehlerfall, in S04 beim Stack-Wechsel, in S05 als Fallback-Auslöser mit Verstärkungseffekt (ein 429 schaltete die Sitzung dauerhaft auf N+1 und feuerte danach hunderte Requests gegen den drosselnden Server). Einmal aufschreiben genügt offensichtlich nicht.
+- [S05] **Bei einer Formel reicht es nicht, den falschen Weg auszuschließen — der richtige muss positiv belegt sein.** Ein Mutationstest belegte, dass `relative` ignoriert wird, aber nicht, dass die eigene Prozentrechnung stimmt: ohne `* 100` blieben alle 13 Quota-Tests grün, und die „fast voll"-Liste über 90 % hätte nie ausgelöst.
+- [S05] **Eine Liste von Auslösern in der Spec ist abschließend zu lesen.** „Genau diese fünf Trigger" wurde als „jeder Fehler" implementiert, weil alle Fehler dieselbe Form (`!ok`) haben. Specs müssen den Negativfall ausdrücklich nennen: *jeder andere Fehler tut X*.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.

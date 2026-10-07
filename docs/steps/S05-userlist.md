@@ -147,7 +147,21 @@ fetchAllUsers({ client, adminUserId, onProgress, shouldStop }) -> { ok, users, m
 `nicht_verbunden`, `user_nicht_gefunden`, `userliste_fehlgeschlagen`,
 `einzelabfragen_aktiv` (Warntext für den Fallback-Modus),
 `einige_user_uebersprungen`.
-Texte vom Coder formulieren, kurz und ohne Fachjargon; ich trage sie danach hier nach.
+| id | deutsche Meldung |
+|---|---|
+| `nicht_verbunden` | Keine Verbindung zum Server. Bitte zuerst verbinden. |
+| `user_nicht_gefunden` | Dieser Benutzer wurde nicht gefunden. |
+| `userliste_fehlgeschlagen` | Die Benutzerliste konnte nicht geladen werden. |
+| `einzelabfragen_aktiv` | Einzelabfragen aktiv, das kann dauern. |
+| `einige_user_uebersprungen` | Einige Benutzer konnten nicht geladen werden und fehlen in der Liste. |
+
+**Klarstellung zu A6.2 (nach dem Review):** Die fünf Trigger sind **abschließend**. Jeder andere
+Fehler-`kind` (`timeout`, `network`, `cert`, `auth`, `forbidden`, `ratelimit`, `http`) wird
+**unverändert** zurückgegeben, löst **keinen** Fallback aus und memoisiert **nichts**.
+Sonst würde ein einzelnes 429 die Sitzung dauerhaft auf Einzelabfragen schalten und jedes
+„Neu laden" hunderte Requests gegen den Server feuern, der eben gedrosselt hat.
+Zusätzlich: `formatPercent(p)` in `quota.js` — eine Dezimalstelle, deutsches Komma,
+`null` -> „unbekannt".
 
 ## Abnahmekriterien
 

@@ -126,6 +126,11 @@ ist — das deckt `tests/pool.test.js` ab).
 
 34. **Tun:** Benutzeransicht öffnen. **Erwartung:** Ladezustand sichtbar, danach alle User
     mit userid, Anzeigename, E-Mail, Status, Gruppen und Kontingent.
+34a. **Tun:** nach dem Laden den Zeitstempel ("Stand: ...") ansehen, dann auf "Neu laden" klicken.
+    **Erwartung:** Zeitstempel ist gesetzt und ändert sich nur nach dem Klick, kein automatisches
+    Nachladen; während des Klicks ist der Button kurz deaktiviert.
+34b. **Tun:** gegen eine Instanz ohne User öffnen (bzw. künstlich einen leeren `users.list`-Erfolg
+    provozieren). **Erwartung:** Empty-State "Keine Einträge" statt einer leeren Tabelle ohne Text.
 35. **Tun:** Falls die Instanz `users/details` nicht unterstützt (bzw. künstlich provoziert):
     **Erwartung:** Warnung "Einzelabfragen, kann dauern" plus Fortschrittsanzeige.
     Die **Identitätsfelder** `userid`, `displayname`, `email`, `enabled`, `groups` sind
@@ -144,7 +149,7 @@ ist — das deckt `tests/pool.test.js` ab).
     `unbekannt`, ein User mit unbegrenztem Kontingent nur in `unbegrenzt`;
     kombinierte Filter schneiden die Mengen, Zähler aktualisiert sich; die Summe der fünf
     Stufenmengen ist die Gesamtzahl der User.
-39. **Tun:** Netzwerk trennen und "Aktualisieren" klicken.
+39. **Tun:** Netzwerk trennen und "Neu laden" klicken.
     **Erwartung:** Error-State mit Wiederholen-Button, kein leerer Bildschirm, kein Absturz.
 
 ## F. Einzel-User-Aktionen
