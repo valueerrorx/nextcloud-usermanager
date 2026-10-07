@@ -26,8 +26,10 @@ function makeFailure(kind, httpStatus, ocsCode, messageId) {
 // surfaces here too). The typeof guard is mandatory: a bare .startsWith on undefined would throw
 // inside the catch and turn a network error into an unhandled rejection.
 function classifyThrown(err) {
-  const name = err?.name ?? err?.cause?.name;
-  if (name === 'TimeoutError' || name === 'AbortError') {
+  // Real disjunction, not ??: a TypeError (undici body-read timeout) already has its own
+  // name, so err.cause.name must still be checked, not skipped.
+  const isTimeoutOrAbort = (n) => n === 'TimeoutError' || n === 'AbortError';
+  if (isTimeoutOrAbort(err?.name) || isTimeoutOrAbort(err?.cause?.name)) {
     return makeFailure('timeout', null, null, 'zeitueberschreitung');
   }
   const causeCode = err?.cause?.code;
@@ -74,14 +76,17 @@ function buildFormBody(form) {
 // Which retry budget (if any) this failure belongs to. 429 retries for every method; 5xx and
 // network retry only for GET/HEAD, because a retried POST/DELETE can report a false failure for
 // an operation that actually succeeded.
+// The HTTP status wins over `kind`: a real 502/504 from a reverse proxy returns an HTML body
+// (kind notOcs), and without checking the status first that case - the one the 5xx/GET rule was
+// written for - would be unreachable (S03 review). notOcs with a 2xx status still never retries.
 function retryCategory(result, method) {
-  if (NEVER_RETRY_KINDS.has(result.kind)) return null;
   if (result.httpStatus === 429) return 'ratelimit';
   const isGetHead = method === 'GET' || method === 'HEAD';
   if (!isGetHead) return null;
   if (typeof result.httpStatus === 'number' && result.httpStatus >= 500 && result.httpStatus < 600) {
     return 'other';
   }
+  if (NEVER_RETRY_KINDS.has(result.kind)) return null;
   if (result.kind === 'network') return 'other';
   return null;
 }
