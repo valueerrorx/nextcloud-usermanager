@@ -781,7 +781,18 @@ Dashboard, Benutzer, Gruppen und Import sind erst nach erfolgreichem Verbinden e
   ausschließlich in `session.js`.
 
 `tls.js`:
-- `app.on('certificate-error')`: Hostvergleich gegen `session.certException`.
+
+> **KORREKTUR (2026-10-07):** `app.on('certificate-error')` feuert **nur für `webContents`**,
+> also für Renderer-Navigation — **nicht** für `net.fetch`. Verbindlich ist stattdessen
+> **`session.defaultSession.setCertificateVerifyProc`**, und `fetchImpl` ist **`net.fetch`**
+> (Chromium-Netzwerkstack). `verificationResult === 'net::OK'` -> `callback(-3)`, also Chromiums
+> Default übernehmen; passende Ausnahme -> `callback(0)`; sonst Prompt, Ablehnung/Timeout ->
+> `callback(-2)`. Ein pauschales `callback(0)` ist verboten.
+> Fingerprint zum Vergleich: SHA-256 als Hex in Doppelpunktgruppen, aus dem PEM in
+> `certificate.data` mit `node:crypto` berechnet — Electrons `certificate.fingerprint` ist
+> `sha256/<base64>` und für Menschen unbrauchbar.
+
+- Hostvergleich gegen `session.certException`.
   Treffer (Host + SHA-256-Fingerprint gleich) -> `callback(true)`.
 - Kein Treffer -> `tls.onCertificatePrompt` mit Host, Fingerprint (Doppelpunkt-Gruppen),
   Subject, Issuer, Gültigkeit. Der Renderer zeigt einen swal2-Dialog mit dem Fingerprint
