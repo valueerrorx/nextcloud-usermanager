@@ -45,3 +45,18 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S02] **Die Invariante am Grenzwert war in der Spec falsch**, nicht im Code: „`total === max` genau dann, wenn `gekuerzt: true`" gilt bei exakter Passung (`budget === second.length`) nicht. Gefunden nur durch Mutationstest. **Bei jeder „genau dann, wenn"-Zusicherung beide Richtungen prüfen** — die Umkehrung ist oft falsch.
 - [S02] **Testanzahl ist kein Qualitätsmaß.** 223 grüne Tests, und zwei Mutanten überlebten. Bei sicherheits- oder korrektheitsrelevanten Zusicherungen zählt der Mutationsbeweis, nicht die Zahl.
 - [S03] **Jeder Schritt, der ein neues Verzeichnis oder Modul anlegt, muss die S01-Scope-Guards mitpflegen.** Zweimal passiert: S02 musste den `src/shared/`-Block in `tests/skeleton.test.js` löschen, S03 `'ocs'` aus der Verbotsliste nehmen. **Der Lead schreibt das in die Step-Spec**, sonst stolpert der Coder darüber oder die Suite wird ohne Erklärung rot.
+
+## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
+Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
+aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
+- **Coder und Tester in EINEM Durchlauf**, nicht sequenziell.
+- **EIN Review pro Schritt.** `MINOR`-Befunde werden notiert, nicht behoben. Eine zweite Runde
+  nur bei `CRITICAL`.
+- **spec-critic nur bei Schritten mit echtem Entwurfsanteil**, nicht bei mechanischen.
+- **Mutationsbeweis nur noch für:** Secrets/Secret-Leaks, Electron-Security-Flags und die
+  1:1-Port-Korrektheit. **Nicht** für jeden Default und jeden Grenzwert.
+- **Zielgröße ~25 Tests pro Schritt**, nicht 150. Jedes Abnahmekriterium einmal, plus echte
+  Grenzwerte. Keine tabellengetriebene Aufblähung.
+- **Step-Specs kurz halten** — die S03-Spec hatte 230 Zeilen für ein 140-Zeilen-Modul.
+Die Mutationsbeweis-Technik bleibt, weil sie real Bugs gefunden hat, die grüne Suiten nicht
+fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduziert.
