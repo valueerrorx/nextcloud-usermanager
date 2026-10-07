@@ -2,6 +2,7 @@ import { ipcMain, app, net, BrowserWindow } from 'electron';
 import { normalizeBaseUrl } from '../shared/url.js';
 import { MESSAGES } from '../shared/messages.js';
 import { checkConnection } from './ocs/connection.js';
+import { fetchAllUsers } from './ocs/userList.js';
 import { session } from './session.js';
 import * as credentials from './credentials.js';
 import { createTlsController } from './tls.js';
@@ -131,6 +132,20 @@ async function handleStatus() {
   };
 }
 
+// users.list has no connection -> nicht_verbunden, without ever touching ocs/userList.js (S05 A7).
+async function handleUsersList() {
+  if (!session.connected) {
+    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+  }
+  const result = await fetchAllUsers({
+    client: session.client,
+    adminUserId: session.adminUserId,
+    onProgress: (progress) => broadcast('users.onLoadProgress', progress),
+  });
+  if (!result.ok) return result;
+  return { ok: true, users: result.users, mode: result.mode, uebersprungen: result.uebersprungen, fetchedAt: Date.now() };
+}
+
 // Only place with ipcMain.handle/on (ARCHITECTURE §2).
 export function registerIpcHandlers() {
   ipcMain.handle('app.version', () => ({ ok: true, version: app.getVersion() }));
@@ -138,6 +153,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('connection.connectSaved', () => handleConnectSaved());
   ipcMain.handle('connection.status', () => handleStatus());
   ipcMain.handle('connection.forgetSaved', () => credentials.forget());
+  ipcMain.handle('users.list', () => handleUsersList());
   ipcMain.handle('tls.respondCertificate', (event, args) => {
     const result = tlsController.respond(args);
     // Push the accepted exception into session so buildStatus() reports it (REVIEW-NOTES [S04]:

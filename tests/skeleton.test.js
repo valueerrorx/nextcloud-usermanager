@@ -141,9 +141,26 @@ describe('src/preload/index.cjs', () => {
     expect(exposedWorldName).toBe('api');
   });
 
-  it('exponiert genau die sieben S01-S04-Felder', () => {
+  // Verbotenes aufzählen, nicht Erlaubtes (REVIEW-NOTES [S01], vierter Fall): eine exakte
+  // Feldanzahl wird in jedem Folgeschritt, der die Preload-API erweitert, planmäßig rot.
+  it('exponiert keinen generischen Durchgriff (invoke/send/on/ipcRenderer)', () => {
     const { exposedApi } = loadPreloadWithStubbedElectron();
-    expect(Object.keys(exposedApi)).toEqual([
+    const forbidden = ['invoke', 'send', 'on', 'ipcRenderer'];
+    for (const name of forbidden) {
+      expect(Object.keys(exposedApi)).not.toContain(name);
+    }
+  });
+
+  it('jedes exponierte Feld ist eine Funktion (kein Wert, kein generischer Durchgriff)', () => {
+    const { exposedApi } = loadPreloadWithStubbedElectron();
+    for (const value of Object.values(exposedApi)) {
+      expect(typeof value).toBe('function');
+    }
+  });
+
+  it('enthält die vom Renderer namentlich benötigten Methoden', () => {
+    const { exposedApi } = loadPreloadWithStubbedElectron();
+    const required = [
       'appVersion',
       'connect',
       'connectSaved',
@@ -151,13 +168,11 @@ describe('src/preload/index.cjs', () => {
       'forgetSaved',
       'respondCertificate',
       'onCertificatePrompt',
-    ]);
-  });
-
-  it('jedes exponierte Feld ist eine Funktion (kein Wert, kein generischer Durchgriff)', () => {
-    const { exposedApi } = loadPreloadWithStubbedElectron();
-    for (const value of Object.values(exposedApi)) {
-      expect(typeof value).toBe('function');
+      'usersList',
+      'onUsersLoadProgress',
+    ];
+    for (const name of required) {
+      expect(Object.keys(exposedApi)).toContain(name);
     }
   });
 
@@ -183,6 +198,23 @@ describe('src/preload/index.cjs', () => {
     expect(typeof dispose).toBe('function');
     dispose();
     expect(removeListenerCalls).toEqual([{ channel: 'tls.onCertificatePrompt', listener: onCalls[0].listener }]);
+  });
+
+  it('usersList() ruft ausschließlich den Kanal users.list ohne Argumente auf', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    await exposedApi.usersList();
+    expect(invokeCalls).toEqual([{ channel: 'users.list', args: [] }]);
+  });
+
+  it('onUsersLoadProgress() abonniert users.onLoadProgress und gibt einen Disposer zurück', () => {
+    const { exposedApi, onCalls, removeListenerCalls } = loadPreloadWithStubbedElectron();
+    const callback = () => {};
+    const dispose = exposedApi.onUsersLoadProgress(callback);
+    expect(onCalls).toHaveLength(1);
+    expect(onCalls[0].channel).toBe('users.onLoadProgress');
+    expect(typeof dispose).toBe('function');
+    dispose();
+    expect(removeListenerCalls).toEqual([{ channel: 'users.onLoadProgress', listener: onCalls[0].listener }]);
   });
 });
 

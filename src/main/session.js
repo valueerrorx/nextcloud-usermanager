@@ -44,6 +44,7 @@ export const session = {
   },
 
   // Written only after a successful connection check (A6) - a failed attempt leaves this untouched.
+  // userListMode is reset to null on every (re)connect (S05 A7) so a server change re-probes.
   setConnected({ client, baseUrl, adminUser, adminUserId, appPassword, secretStorage }) {
     state.client = client;
     state.baseUrl = baseUrl;
@@ -51,6 +52,7 @@ export const session = {
     state.adminUserId = adminUserId;
     state.appPassword = appPassword;
     state.secretStorage = secretStorage;
+    state.userListMode = null;
   },
 
   setSecretStorage(secretStorage) {

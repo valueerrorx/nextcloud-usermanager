@@ -14,4 +14,11 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('tls.onCertificatePrompt', listener);
     return () => ipcRenderer.removeListener('tls.onCertificatePrompt', listener);
   },
+  usersList: () => ipcRenderer.invoke('users.list'),
+  // Returns a disposer so a remount never stacks listeners.
+  onUsersLoadProgress: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on('users.onLoadProgress', listener);
+    return () => ipcRenderer.removeListener('users.onLoadProgress', listener);
+  },
 });

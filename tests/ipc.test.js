@@ -242,6 +242,60 @@ describe('tls.respondCertificate / connection.connect — Zertifikat-Entscheidun
 // base64. Der Mutationsbeweis dafür ist eine Entwicklungs-Tätigkeit, kein Suite-Test
 // (REVIEW-NOTES [S04]) - verifiziert: appPassword ins Rückgabeobjekt aufnehmen macht die
 // Assertion unten rot.
+// S05 A7: users.list ohne Verbindung, connect setzt userListMode zurück, Fallback-Verdrahtung
+// inklusive users.onLoadProgress-Broadcast (REVIEW-NOTES "Verdrahtung wird getestet").
+describe('users.list / users.onLoadProgress', () => {
+  const fakeWindow = { isDestroyed: () => false, webContents: { send: vi.fn() } };
+
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    BrowserWindow.getAllWindows.mockReturnValue([fakeWindow]);
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('ohne Verbindung -> { ok: false, messageId: nicht_verbunden }', async () => {
+    const result = await handlers.get('users.list')();
+    expect(result).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+  });
+
+  it('connect setzt session.userListMode zurück auf null', async () => {
+    net.fetch.mockImplementation(async (url) => {
+      if (url.includes('/cloud/users/details')) return fakeResponse({ status: 404 });
+      return okResponse();
+    });
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    await handlers.get('users.list')(); // sets userListMode to 'fallback'
+    expect(session.userListMode).not.toBeNull();
+
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    expect(session.userListMode).toBeNull();
+  });
+
+  it('Fallback-Modus: ok true mit mode/uebersprungen/fetchedAt, und sendet users.onLoadProgress', async () => {
+    net.fetch.mockImplementation(async (url) => {
+      if (url.includes('/cloud/users/details')) return fakeResponse({ status: 404 });
+      if (/\/cloud\/users\/[^/?]+\?/.test(url)) return fakeResponse({ status: 200, body: envelope(100, { id: 'bob', enabled: true, groups: [] }) });
+      if (url.includes('/cloud/users?')) return fakeResponse({ status: 200, body: envelope(100, { users: ['bob'] }) });
+      return okResponse();
+    });
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+
+    const result = await handlers.get('users.list')();
+    expect(result.ok).toBe(true);
+    expect(result.mode).toBe('fallback');
+    expect(result.uebersprungen).toBe(0);
+    expect(typeof result.fetchedAt).toBe('number');
+    expect(result.users.map((u) => u.userid)).toEqual(['bob']);
+
+    expect(fakeWindow.webContents.send).toHaveBeenCalledWith('users.onLoadProgress', { geladen: 1, gesamt: 1 });
+  });
+});
+
 describe('connection.status — kein Secret im Rückgabewert', () => {
   beforeEach(async () => {
     handlers.clear();

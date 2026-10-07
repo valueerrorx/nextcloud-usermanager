@@ -26,4 +26,9 @@ export const MESSAGES = Object.freeze({
   zertifikat_abgelehnt: 'Die Zertifikatsausnahme wurde abgelehnt.',
   zertifikat_anfrage_abgelaufen: 'Diese Zertifikatsanfrage ist abgelaufen oder unbekannt.',
   zugang_loeschen_fehlgeschlagen: 'Der gespeicherte Zugang konnte nicht gelöscht werden.',
+  nicht_verbunden: 'Keine Verbindung zum Server. Bitte zuerst verbinden.',
+  user_nicht_gefunden: 'Dieser Benutzer wurde nicht gefunden.',
+  userliste_fehlgeschlagen: 'Die Benutzerliste konnte nicht geladen werden.',
+  einzelabfragen_aktiv: 'Einzelabfragen aktiv, das kann dauern.',
+  einige_user_uebersprungen: 'Einige Benutzer konnten nicht geladen werden und fehlen in der Liste.',
 });
