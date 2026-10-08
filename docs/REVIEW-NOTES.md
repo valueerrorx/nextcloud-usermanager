@@ -83,6 +83,10 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S09a] **Ein Smoke-Start beweist nur, was auf dem ersten Bildschirm sichtbar ist.** `timeout 20 npx electron .` lief fehlerfrei, obwohl alle Dropdowns defekt waren — `.form-select` erscheint erst nach erfolgreicher Verbindung. **Smoke-Tests nie als Abdeckung verkaufen.**
 - [S09a] **Ein Restyle kann Accessibility zerstören.** `<label>` umschloss das Input (implizite Zuordnung), danach stand es als Geschwister ohne `for` daneben — drei Felder inklusive App-Passwort hatten keinen zugänglichen Namen. **Bei jedem Umbau von Formular-Markup `for`/`id` prüfen.**
 
+- [S10] **Eine Sicherheitsprüfung, deren Eingabe leer sein kann, ist aus.** `serverUserIds` kam aus `state.users`, das nur die Benutzeransicht füllt — wer direkt auf Import ging, bekam ein leeres Array, und die Kollisionsprüfung gegen bestehende User war stillschweigend deaktiviert. Bestehende User erschienen als `neu`. **Eine View, die geladene Daten als Prüfgrundlage braucht, muss sie selbst laden und bis dahin nichts anzeigen** (ARCHITECTURE §3.1 schreibt das für GroupsView längst vor).
+- [S10] **Passwörter brauchen eine Lebensdauer, nicht nur eine Quelle.** Die Initialpasswörter aller importierten Schüler blieben nach dem Verlassen der Importansicht in `state.js` — die ganze Sitzung. Die Architektur verlangt das Löschen beim Verlassen; ohne `onUnmounted` passiert es nicht.
+- [S10] **Vierte Wiederholung von `[S06]`:** `serverUserIds` (`map`), `anzahlAnzulegen` und `dateiName` (Regex-Split) standen wieder in einer `.vue`-Datei. `anzahlAnzulegen` entscheidet, ob der Anlegen-Button aktiv ist und welche Zahl er zeigt — also genau die Art Wert, die nach `src/shared/` gehört.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.

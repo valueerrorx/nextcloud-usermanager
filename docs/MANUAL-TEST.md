@@ -480,3 +480,39 @@ ist — das deckt `tests/pool.test.js` ab).
      **Erwartung:** Prozess startet und läuft bis zum Timeout ohne Absturz; keine
      Konsolenfehler außer der erwarteten Terminierung durch `timeout`. Fenstervisuelle Prüfung
      ist headless nicht möglich - bei Gelegenheit zusätzlich mit echtem Display nachholen.
+
+## L. Importvorschau (S10, noch ohne tatsächliches Anlegen)
+
+112. **Tun:** Import-Ansicht öffnen, "CSV wählen" klicken und eine gültige Import-CSV aus
+     `tests/fixtures/` auswählen. **Erwartung:** Dateiname und Zeilenanzahl erscheinen,
+     Optionen- und Vorschau-Karten werden sichtbar.
+113. **Tun:** eine CSV mit Dateifehler wählen (leer, nur Kopfzeile, falsche Kopfzeile, über
+     2000 Zeilen, unbalanciertes Anführungszeichen). **Erwartung:** der deutsche Fehlertext
+     erscheint **statt** der Vorschautabelle, keine leere Tabelle.
+114. **Tun:** Passwort-Prefix leer lassen, dann zu kurz, dann mit Kleinbuchstaben beginnend,
+     dann gültig eingeben. **Erwartung:** passender deutscher Fehlertext erscheint live bei
+     jeder Eingabe und verschwindet bei einem gültigen Prefix; das Live-Beispiel darunter
+     (z. B. `Schule01012010!`) ändert sich synchron mit dem Prefix.
+115. **Tun:** mit gültigem Prefix die Reihenfolge zwischen "vorname.nachname" und
+     "nachname.vorname" umschalten. **Erwartung:** die Usernames in der Vorschautabelle ändern
+     sich sofort entsprechend, ohne die Datei neu zu laden.
+116. **Tun:** "Gruppe neu anlegen" klicken, einen neuen Namen eingeben und bestätigen.
+     **Erwartung:** swal2-Dialog fragt nach dem Namen, `groups.create` legt die Gruppe an, die
+     Gruppenliste lädt neu und die neue Gruppe ist sofort als Zielgruppe ankreuzbar. Einen
+     bereits existierenden Namen eingeben -> Fehlermeldung "Diese Gruppe existiert schon."
+117. **Tun:** eine Import-CSV mit allen drei Fällen aus einer Datei laden: zwei eindeutige
+     neue Namen, zwei Namen mit gleichem Nachnamen-Präfix (Kollision), und eine Zeile mit
+     ungültigem Datum. **Erwartung:** Vorschautabelle zeigt alle drei Statusfarben (grün "neu",
+     gelb "Kollision aufgelöst", rot "Fehler" mit deutschem Begründungstext), die
+     Kopfzeilen-Zusammenfassung nennt die drei Zahlen korrekt.
+118. **Tun:** eine CSV mit einem sehr langen Nachnamen laden, der gekürzt werden muss.
+     **Erwartung:** die betroffene Zeile zeigt ein Schere-Icon mit Tooltip "Nachname wurde
+     gekürzt" neben dem Username.
+119. **Tun:** eine Datei laden, die ausschließlich Fehlerzeilen ergibt (z. B. nur ungültige
+     Daten). **Erwartung:** die Vorschautabelle zeigt genau diese Fehlerzeilen, der
+     "Anlegen"-Button bleibt deaktiviert (0 anzulegende Zeilen).
+120. **Tun:** mit gültigem Prefix und mindestens einer "neu"/"kollision_aufgeloest"-Zeile den
+     "Anlegen"-Button betrachten, dann klicken. **Erwartung:** Button zeigt die Anzahl der
+     tatsächlich anzulegenden Zeilen, ist nur dann aktiv; der Klick zeigt in diesem Schritt nur
+     einen Platzhalter-Hinweis, es wird **kein** User angelegt (`POST /cloud/users` darf im
+     Netzwerk-Tab nicht auftauchen).
