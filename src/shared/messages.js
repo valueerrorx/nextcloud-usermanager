@@ -52,4 +52,26 @@ export const MESSAGES = Object.freeze({
   job_gestoppt: 'Abbruch angefordert. Laufende Anfragen werden noch fertig.',
   job_bereits_beendet: 'Der Job ist bereits beendet.',
   job_unbekannt: 'Dieser Job ist unbekannt.',
+  // S09: CSV-Import, Datei- und Zeilenfehler, exakte Texte aus ARCHITECTURE §6.2 Fehlertabelle.
+  datei_leer: 'Die Datei ist leer.',
+  nur_header: 'Die Datei enthält nur die Kopfzeile.',
+  header_fehlt: 'Kopfzeile fehlt oder Spalten heißen nicht Vorname, Nachname, Geburtsdatum.',
+  zeilenlimit: 'Mehr als 2000 Zeilen. Bitte die Datei aufteilen.',
+  spaltenzahl: 'Zeile hat nicht genau 3 Spalten.',
+  quote_unbalanciert: 'Unvollständiges Anführungszeichen. Anführungszeichen werden nicht unterstützt.',
+  vorname_leer: 'Vorname fehlt.',
+  nachname_leer: 'Nachname fehlt.',
+  name_nicht_abbildbar: 'Aus diesem Namen lässt sich kein Username bilden.',
+  datum_format: 'Geburtsdatum muss dd.mm.yyyy oder yyyy-mm-dd sein.',
+  datum_ungueltig: 'Dieses Datum existiert nicht.',
+  datum_zukunft: 'Geburtsdatum liegt in der Zukunft.',
+  doppelzeile: 'Identische Zeile kommt in der Datei mehrfach vor.',
+  username_nach_kuerzung_nicht_eindeutig:
+    'Zwei verschiedene Namen werden durch das Kürzen zum gleichen Username. Bitte einen der beiden manuell anlegen.',
+  benutzer_existiert_bereits: 'Benutzer existiert bereits.',
+  // S09: Initialpasswort-Prefix (DECISIONS "Prefix-Validierung Initialpasswort"), eigene messageId je Verstoß.
+  prefix_leer: 'Bitte ein Passwort-Prefix eingeben.',
+  prefix_laenge: 'Das Prefix muss zwischen 3 und 20 Zeichen lang sein.',
+  prefix_zeichen: 'Das Prefix darf nur Buchstaben und Ziffern enthalten.',
+  prefix_grossbuchstabe: 'Das Prefix muss mit einem Großbuchstaben beginnen.',
 });
