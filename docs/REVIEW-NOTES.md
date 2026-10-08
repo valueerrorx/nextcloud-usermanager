@@ -77,6 +77,8 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S08] **Still verworfene Eingaben sind ein Datenrisiko, wenn eine Zahl daran hängt.** Nicht gefundene Auswahl-Einträge wurden per `continue` verworfen; der Admin hätte eine kleinere `anzahl` ohne Erklärung bestätigt. Sie gehören sichtbar nach `ausgeschlossen`.
 - [S08] **Ein Spy-Argument, das niemand liest, ist kein Beweis.** Der „kein Request"-Test übergab `{ client }` als `params` — nichts im Modul liest das, der Test konnte auch gegen eine kaputte Implementierung nicht fehlschlagen. Gleiche Vakuums-Klasse wie die Regex-Assertion aus S01.
 
+- [S09] **Eine überlebende Mutation ist nicht automatisch eine Testlücke — manchmal ist der Code nicht beobachtbar.** Der `'|'`-Trenner im Identitätsschlüssel (`normVorname|normNachname|ddmmyyyy`) überlebt jede Mutation. Beweis, warum kein Test möglich ist: Der Identitätsvergleich findet nur bei **gleichem finalen Username** statt, was einen identischen Vornamen erzwingt (der wird nie gekürzt). Für eine Kollision der verketteten Form bräuchte es `vn+nn1+d1 = vn+nn2+d2`; das Datum ist immer exakt 8 Zeichen, also folgt `nn1=nn2` und `d1=d2`. Der Trenner kann kein Ergebnis ändern. **Richtig ist: die Unbeobachtbarkeit beweisen und dokumentieren, nicht einen wirkungslosen Test erzwingen.** Gleiche Lage beim Trennzeichen-Gleichstand in `csvImport.js`, wo der Coder das selbst erkannt und den puren Helfer exponiert hat.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
