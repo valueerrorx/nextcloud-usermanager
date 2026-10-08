@@ -5,7 +5,9 @@ Full goal: docs/GOAL.md. Architecture: docs/ARCHITECTURE.md. Progress: docs/PLAN
 
 ## Stack
 - JavaScript (ES modules), Node.js, Electron, Vue 3, Vite
-- Dialogs/confirmations: SweetAlert2 (swal2)
+- Dialogs/confirmations: SweetAlert2 (swal2), dark-themed via CSS variables
+- UI: Bootstrap 5 (CSS only, no Bootstrap JS) + bootstrap-icons; visual reference is the
+  Microsoft365-Manager project (GitHub-Dark/Primer palette, see docs/DECISIONS.md)
 - Tests: Vitest (unit tests for all pure logic; external HTTP mocked)
 - Lint: ESLint
 - Dev OS: Arch Linux
