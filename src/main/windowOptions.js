@@ -6,7 +6,7 @@ const preloadPath = path.join(import.meta.dirname, '..', 'preload', 'index.cjs')
 export const BROWSER_WINDOW_OPTIONS = {
   width: 1200,
   height: 800,
-  backgroundColor: '#15181d',
+  backgroundColor: '#0d1117',
   show: false,
   webPreferences: {
     preload: preloadPath,

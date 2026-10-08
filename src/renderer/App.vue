@@ -11,13 +11,13 @@ import ImportView from './views/ImportView.vue';
 
 // 'connect' stays reachable always; the other four need a successful connection (ARCHITECTURE §7
 // "Startverhalten" - Dashboard/Benutzer/Gruppen/Import sind erst nach erfolgreichem Verbinden
-// erreichbar).
+// erreichbar). icon ist nur Darstellung (bi-* Klasse aus der Icon-Tabelle in S09a).
 const views = {
-  connect: { label: 'Verbindung', component: ConnectView, gated: false },
-  dashboard: { label: 'Dashboard', component: DashboardView, gated: true },
-  users: { label: 'Benutzer', component: UsersView, gated: true },
-  groups: { label: 'Gruppen', component: GroupsView, gated: true },
-  import: { label: 'Import', component: ImportView, gated: true },
+  connect: { label: 'Verbindung', icon: 'bi-plug', component: ConnectView, gated: false },
+  dashboard: { label: 'Dashboard', icon: 'bi-speedometer2', component: DashboardView, gated: true },
+  users: { label: 'Benutzer', icon: 'bi-people-fill', component: UsersView, gated: true },
+  groups: { label: 'Gruppen', icon: 'bi-collection-fill', component: GroupsView, gated: true },
+  import: { label: 'Import', icon: 'bi-upload', component: ImportView, gated: true },
 };
 
 const currentComponent = computed(() => views[activeView.value].component);
@@ -94,87 +94,45 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="shell">
-    <nav class="sidebar">
+  <div class="app-layout">
+    <nav class="app-sidebar">
+      <div class="sidebar-brand">
+        Nextcloud User Manager
+      </div>
       <button
         v-for="(view, key) in views"
         :key="key"
+        type="button"
+        class="nav-link-custom"
         :class="{ active: activeView === key, disabled: view.gated && !connection.connected }"
         :disabled="view.gated && !connection.connected"
-        :title="view.gated && !connection.connected ? 'Bitte zuerst verbinden' : undefined"
+        :title="view.gated && !connection.connected ? 'Bitte zuerst verbinden' : view.label"
         @click="selectView(key)"
       >
-        {{ view.label }}
+        <i
+          class="bi"
+          :class="view.icon"
+          aria-hidden="true"
+        />
+        <span>{{ view.label }}</span>
       </button>
-      <div class="version">
+      <div class="sidebar-footer">
         v{{ version }}
       </div>
     </nav>
-    <main class="content">
+    <main class="main-area">
       <p
         v-if="certException"
         class="cert-banner"
       >
+        <i
+          class="bi bi-exclamation-triangle"
+          aria-hidden="true"
+        />
         Unsichere Zertifikatsausnahme aktiv für <strong>{{ certException.host }}</strong>
-        (<code>{{ certException.fingerprint }}</code>)
+        (<code class="mono">{{ certException.fingerprint }}</code>)
       </p>
       <component :is="currentComponent" />
     </main>
   </div>
 </template>
-
-<style scoped>
-.shell {
-  display: flex;
-  height: 100vh;
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  width: 200px;
-  background: var(--bg-elev);
-  border-right: 1px solid var(--border);
-  padding: 8px;
-}
-
-.sidebar button {
-  background: none;
-  border: none;
-  color: var(--fg-muted);
-  text-align: left;
-  padding: 8px;
-  cursor: pointer;
-}
-
-.sidebar button.active {
-  color: var(--fg);
-  background: var(--border);
-}
-
-.sidebar button.disabled {
-  color: var(--fg-muted);
-  cursor: default;
-  opacity: 0.5;
-}
-
-.version {
-  margin-top: auto;
-  color: var(--fg-muted);
-  font-size: 0.8em;
-}
-
-.content {
-  flex: 1;
-  padding: 16px;
-}
-
-.cert-banner {
-  background: #4a2a2a;
-  color: #ffb4b4;
-  border: 1px solid #7a3a3a;
-  border-radius: 4px;
-  padding: 8px 12px;
-  margin: 0 0 16px;
-}
-</style>

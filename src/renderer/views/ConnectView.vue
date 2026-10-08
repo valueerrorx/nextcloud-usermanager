@@ -104,143 +104,157 @@ async function forgetSaved() {
 </script>
 
 <template>
-  <h1>Verbindung</h1>
-
-  <form
-    class="connect-form"
-    @submit.prevent="connect"
-  >
-    <label>
-      Server-URL
-      <input
-        v-model="form.baseUrl"
-        type="text"
-        placeholder="https://cloud.beispiel.de"
-        :disabled="busy"
-      >
-    </label>
-    <label>
-      Admin-Benutzer
-      <input
-        v-model="form.adminUser"
-        type="text"
-        :disabled="busy"
-      >
-    </label>
-    <label>
-      App-Passwort
-      <input
-        v-model="form.appPassword"
-        type="password"
-        :disabled="busy"
-      >
-    </label>
-    <label class="checkbox">
-      <input
-        v-model="form.remember"
-        type="checkbox"
-        :disabled="busy"
-      >
-      Zugang speichern
-    </label>
-
-    <p
-      v-if="errorMessage"
-      class="error"
-    >
-      {{ errorMessage }}
+  <div class="page-header">
+    <h1 class="page-title">
+      <i
+        class="bi bi-plug"
+        aria-hidden="true"
+      />
+      Verbindung
+    </h1>
+    <p class="page-subtitle">
+      <span
+        class="conn-dot"
+        :class="connection.connected ? 'connected' : 'disconnected'"
+      />
+      {{ connection.connected ? 'Verbunden' : 'Nicht verbunden' }}
     </p>
-    <p
-      v-if="noKeyringNotice"
-      class="notice"
-    >
-      Zugang gilt nur für diese Sitzung
-    </p>
+  </div>
 
-    <div class="actions">
-      <button
-        type="submit"
-        :disabled="busy"
+  <div class="content-card">
+    <div class="content-card-body">
+      <form
+        class="connect-form"
+        @submit.prevent="connect"
       >
-        Verbinden
-      </button>
-      <button
-        v-if="connection.hasSaved"
-        type="button"
-        :disabled="busy"
-        @click="connectWithSaved"
-      >
-        Mit gespeichertem Zugang verbinden
-      </button>
-      <button
-        v-if="connection.hasSaved"
-        type="button"
-        :disabled="busy"
-        @click="forgetSaved"
-      >
-        Zugang löschen
-      </button>
+        <div class="mb-3">
+          <label
+            class="form-label"
+            for="connect-base-url"
+          >Server-URL</label>
+          <input
+            id="connect-base-url"
+            v-model="form.baseUrl"
+            type="text"
+            class="form-control"
+            placeholder="https://cloud.beispiel.de"
+            :disabled="busy"
+          >
+        </div>
+        <div class="mb-3">
+          <label
+            class="form-label"
+            for="connect-admin-user"
+          >Admin-Benutzer</label>
+          <input
+            id="connect-admin-user"
+            v-model="form.adminUser"
+            type="text"
+            class="form-control"
+            :disabled="busy"
+          >
+        </div>
+        <div class="mb-3">
+          <label
+            class="form-label"
+            for="connect-app-password"
+          >App-Passwort</label>
+          <input
+            id="connect-app-password"
+            v-model="form.appPassword"
+            type="password"
+            class="form-control"
+            :disabled="busy"
+          >
+        </div>
+        <div class="mb-3 form-check">
+          <input
+            id="connect-remember"
+            v-model="form.remember"
+            type="checkbox"
+            class="form-check-input"
+            :disabled="busy"
+          >
+          <label
+            class="form-check-label"
+            for="connect-remember"
+          >
+            Zugang speichern
+          </label>
+        </div>
+
+        <p
+          v-if="errorMessage"
+          class="text-danger"
+        >
+          <i
+            class="bi bi-exclamation-triangle"
+            aria-hidden="true"
+          />
+          {{ errorMessage }}
+        </p>
+        <p
+          v-if="noKeyringNotice"
+          class="text-secondary"
+        >
+          <i
+            class="bi bi-info-circle"
+            aria-hidden="true"
+          />
+          Zugang gilt nur für diese Sitzung
+        </p>
+
+        <div class="actions">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="busy"
+          >
+            <i
+              class="bi bi-plug"
+              aria-hidden="true"
+            />
+            Verbinden
+          </button>
+          <button
+            v-if="connection.hasSaved"
+            type="button"
+            class="btn btn-outline-secondary"
+            :disabled="busy"
+            @click="connectWithSaved"
+          >
+            Mit gespeichertem Zugang verbinden
+          </button>
+          <button
+            v-if="connection.hasSaved"
+            type="button"
+            class="btn btn-outline-danger"
+            title="Gespeicherten Zugang löschen"
+            :disabled="busy"
+            @click="forgetSaved"
+          >
+            <i
+              class="bi bi-trash"
+              aria-hidden="true"
+            />
+            Zugang löschen
+          </button>
+        </div>
+      </form>
     </div>
-  </form>
+  </div>
 </template>
 
 <style scoped>
 .connect-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   max-width: 420px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: var(--fg-muted);
-}
-
-label.checkbox {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-input[type='text'],
-input[type='password'] {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  padding: 6px 8px;
-  border-radius: 4px;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-button {
-  background: var(--accent);
-  border: none;
-  color: var(--fg);
-  padding: 8px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.error {
-  color: #ff6b6b;
-  margin: 0;
-}
-
-.notice {
-  color: var(--fg-muted);
-  margin: 0;
 }
 </style>

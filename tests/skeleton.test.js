@@ -47,8 +47,21 @@ describe('package.json', () => {
     }
   });
 
-  it('hat als Runtime-Dependencies ausschließlich vue und sweetalert2', () => {
-    expect(Object.keys(pkg.dependencies).sort()).toEqual(['sweetalert2', 'vue']);
+  // Verbotenes aufzählen, nicht Erlaubtes (REVIEW-NOTES [S01], fünfter Fall): die vorherige
+  // exakte Allowlist ['sweetalert2', 'vue'] diktierte, wo bootstrap/bootstrap-icons stehen
+  // dürfen, statt die tatsächlich benötigten Pakete zu prüfen. Umgedreht: die Runtime-Pakete,
+  // die der Code wirklich importiert, müssen da sein; Build-/Electron-/CSS-Pakete dürfen nicht
+  // als Runtime-Dependency landen (bootstrap/bootstrap-icons bleiben bewusst in devDependencies,
+  // siehe tests/uiDependencies.test.js).
+  it('hat vue und sweetalert2 als Runtime-Dependencies, keine Build- oder Electron-Pakete darin', () => {
+    const deps = Object.keys(pkg.dependencies ?? {});
+    for (const name of ['vue', 'sweetalert2']) {
+      expect(deps).toContain(name);
+    }
+    const forbidden = ['electron', 'vite', 'bootstrap', 'bootstrap-icons'];
+    for (const name of forbidden) {
+      expect(deps).not.toContain(name);
+    }
   });
 });
 
@@ -82,6 +95,27 @@ describe('dist/renderer/index.html (Scratch-Build, nicht das echte dist/)', () =
     const cspMatch = html.match(/<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/);
     expect(cspMatch).not.toBeNull();
     expect(cspMatch[1]).toContain("default-src 'self'");
+  });
+
+  // CRITICAL-Fix S09a-Review: img-src muss auch im gebauten Markup überleben, sonst blockiert
+  // default-src 'self' weiterhin die data:image/svg+xml-Indikatoren von Bootstrap (.form-select-
+  // Pfeil, angehakte Checkbox) - ein Smoke-Start allein beweist das nicht (REVIEW-NOTES [S09a]).
+  it('enthält img-src \'self\' data: im gebauten CSP-Meta-Tag', () => {
+    const distIndex = path.join(scratchOutDir, 'index.html');
+    const html = readFileSync(distIndex, 'utf8');
+    const cspMatch = html.match(/<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/);
+    expect(cspMatch).not.toBeNull();
+    expect(cspMatch[1]).toMatch(/img-src[^;]*'self'[^;]*data:/);
+  });
+
+  // Beweis, dass die Aufweichung tatsächlich etwas erlaubt: das gebaute Bootstrap-CSS enthält
+  // die data:image/svg+xml-Hintergrundbilder, die ohne img-src von default-src blockiert würden.
+  it('das gebündelte CSS enthält die data:image/svg+xml-Formularindikatoren, die img-src erlaubt', () => {
+    const assetsDir = path.join(scratchOutDir, 'assets');
+    const cssFile = readdirSync(assetsDir).find((name) => name.endsWith('.css'));
+    expect(cssFile).toBeDefined();
+    const css = readFileSync(path.join(assetsDir, cssFile), 'utf8');
+    expect(css).toContain('data:image/svg+xml');
   });
 });
 
@@ -274,16 +308,33 @@ describe('src/main/', () => {
 
 describe('src/renderer/index.html', () => {
   const html = readFileSync(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const cspMatch = html.match(/<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/);
 
   it('enthält ein Content-Security-Policy-Meta-Tag mit default-src \'self\'', () => {
-    const cspMatch = html.match(/<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/);
     expect(cspMatch).not.toBeNull();
     expect(cspMatch[1]).toContain("default-src 'self'");
   });
 
   it('erlaubt style-src nur mit unsafe-inline (swal2/Vue nutzen inline Styles)', () => {
-    const cspMatch = html.match(/<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content="([^"]+)"/);
     expect(cspMatch).not.toBeNull();
     expect(cspMatch[1]).toMatch(/style-src[^;]*'unsafe-inline'/);
+  });
+
+  // Testlücke S09a-Review: nur default-src und style-src waren gepinnt. font-src trägt die
+  // Icon-Font, img-src (DECISIONS "CSP: img-src 'self' data: ergänzt") die
+  // data:image/svg+xml-Formularindikatoren von Bootstrap - beide dürfen nicht lautlos verschwinden.
+  it('erlaubt font-src nur \'self\' (Icon-Font aus dem eigenen Bundle)', () => {
+    expect(cspMatch).not.toBeNull();
+    expect(cspMatch[1]).toMatch(/font-src[^;]*'self'/);
+  });
+
+  it('erlaubt img-src \'self\' und data: (Bootstrap-Formularindikatoren)', () => {
+    expect(cspMatch).not.toBeNull();
+    expect(cspMatch[1]).toMatch(/img-src[^;]*'self'[^;]*data:/);
+  });
+
+  // Explizite Spec-Vorgabe (docs/steps/S09a-ui-designsystem.md "Abhängigkeiten") ohne Guard.
+  it('setzt data-bs-theme="dark" auf <html>', () => {
+    expect(html).toMatch(/<html[^>]*data-bs-theme="dark"/);
   });
 });

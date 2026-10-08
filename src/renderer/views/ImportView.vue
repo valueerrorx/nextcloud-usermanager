@@ -3,5 +3,16 @@
 </script>
 
 <template>
-  <h1>Import</h1>
+  <div class="page-header">
+    <h1 class="page-title">
+      <i
+        class="bi bi-upload"
+        aria-hidden="true"
+      />
+      Import
+    </h1>
+  </div>
+  <div class="content-card">
+    <div class="content-card-body" />
+  </div>
 </template>

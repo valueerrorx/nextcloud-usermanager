@@ -143,14 +143,29 @@ function formatTimestamp(ms) {
 </script>
 
 <template>
-  <h1>Benutzer</h1>
+  <div class="page-header">
+    <h1 class="page-title">
+      <i
+        class="bi bi-people-fill"
+        aria-hidden="true"
+      />
+      Benutzer
+    </h1>
+  </div>
 
   <div class="toolbar">
     <button
       type="button"
+      class="btn btn-outline-secondary"
+      title="Userliste neu laden"
       :disabled="usersLadezustand === 'laedt'"
       @click="load"
     >
+      <i
+        class="bi bi-arrow-clockwise"
+        :class="{ spin: usersLadezustand === 'laedt' }"
+        aria-hidden="true"
+      />
       Neu laden
     </button>
     <span
@@ -179,13 +194,24 @@ function formatTimestamp(ms) {
     v-if="usersLadezustand === 'bereit'"
     class="filterleiste"
   >
-    <input
-      v-model="filterSuche"
-      type="text"
-      placeholder="Suche nach Benutzername, Anzeigename oder E-Mail"
-      class="suche"
+    <div class="suche input-group">
+      <span class="input-group-text">
+        <i
+          class="bi bi-search"
+          aria-hidden="true"
+        />
+      </span>
+      <input
+        v-model="filterSuche"
+        type="text"
+        placeholder="Suche nach Benutzername, Anzeigename oder E-Mail"
+        class="form-control"
+      >
+    </div>
+    <select
+      v-model="filterGruppe"
+      class="form-select"
     >
-    <select v-model="filterGruppe">
       <option :value="null">
         Alle Gruppen
       </option>
@@ -197,7 +223,10 @@ function formatTimestamp(ms) {
         {{ gruppe }}
       </option>
     </select>
-    <select v-model="filterStatus">
+    <select
+      v-model="filterStatus"
+      class="form-select"
+    >
       <option value="alle">
         Alle
       </option>
@@ -208,7 +237,10 @@ function formatTimestamp(ms) {
         Deaktiviert
       </option>
     </select>
-    <select v-model="filterQuotaStufe">
+    <select
+      v-model="filterQuotaStufe"
+      class="form-select"
+    >
       <option :value="null">
         Alle Kontingentstufen
       </option>
@@ -222,8 +254,14 @@ function formatTimestamp(ms) {
     </select>
     <button
       type="button"
+      class="btn btn-outline-secondary"
+      title="Filter zurücksetzen"
       @click="filterZuruecksetzen"
     >
+      <i
+        class="bi bi-funnel"
+        aria-hidden="true"
+      />
       Filter zurücksetzen
     </button>
   </div>
@@ -236,29 +274,33 @@ function formatTimestamp(ms) {
     {{ auswahl.size }} ausgewählt
   </p>
 
-  <StateBlock
-    :zustand="usersLadezustand"
-    :fehlermeldung="usersFehler ?? ''"
-    @retry="load"
-  >
-    <UserTable
-      v-if="gefilterteUndSortierte.length > 0"
-      :users="gefilterteUndSortierte"
-      :sort-feld="sortFeld"
-      :sort-richtung="sortRichtung"
-      :auswahl="auswahl"
-      :ausgewaehlte-anzahl="auswahl.size"
-      @sort="onSort"
-      @toggle="onToggle"
-      @toggle-alle="onToggleAlle"
-    />
-    <p
-      v-else
-      class="notice"
-    >
-      Keine Treffer für diesen Filter.
-    </p>
-  </StateBlock>
+  <div class="content-card">
+    <div class="content-card-body">
+      <StateBlock
+        :zustand="usersLadezustand"
+        :fehlermeldung="usersFehler ?? ''"
+        @retry="load"
+      >
+        <UserTable
+          v-if="gefilterteUndSortierte.length > 0"
+          :users="gefilterteUndSortierte"
+          :sort-feld="sortFeld"
+          :sort-richtung="sortRichtung"
+          :auswahl="auswahl"
+          :ausgewaehlte-anzahl="auswahl.size"
+          @sort="onSort"
+          @toggle="onToggle"
+          @toggle-alle="onToggleAlle"
+        />
+        <p
+          v-else
+          class="notice"
+        >
+          Keine Treffer für diesen Filter.
+        </p>
+      </StateBlock>
+    </div>
+  </div>
 
   <ActionBar
     v-if="usersLadezustand === 'bereit'"
@@ -278,27 +320,13 @@ function formatTimestamp(ms) {
   margin-bottom: 12px;
 }
 
-.toolbar button {
-  background: var(--accent);
-  border: none;
-  color: var(--fg);
-  padding: 8px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.toolbar button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .timestamp {
-  color: var(--fg-muted);
+  color: var(--text-secondary);
   font-size: 0.9em;
 }
 
 .notice {
-  color: var(--fg-muted);
+  color: var(--text-secondary);
   margin: 0 0 12px;
 }
 
@@ -315,26 +343,8 @@ function formatTimestamp(ms) {
   min-width: 220px;
 }
 
-.filterleiste input,
-.filterleiste select {
-  background: var(--bg-elev);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 8px;
-}
-
-.filterleiste button {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--fg-muted);
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
 .zusammenfassung {
-  color: var(--fg-muted);
+  color: var(--text-secondary);
   margin: 0 0 12px;
 }
 </style>

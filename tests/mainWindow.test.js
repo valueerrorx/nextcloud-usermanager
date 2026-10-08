@@ -20,7 +20,7 @@ describe('BROWSER_WINDOW_OPTIONS', () => {
   });
 
   it('ist dunkel hinterlegt', () => {
-    expect(BROWSER_WINDOW_OPTIONS.backgroundColor).toBe('#15181d');
+    expect(BROWSER_WINDOW_OPTIONS.backgroundColor).toBe('#0d1117');
   });
 
   it('bleibt unsichtbar bis ready-to-show (show: false, verhindert weißes Aufblitzen zusammen mit backgroundColor)', () => {

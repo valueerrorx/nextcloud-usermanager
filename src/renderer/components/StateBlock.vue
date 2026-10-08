@@ -11,25 +11,42 @@ defineEmits(['retry']);
 <template>
   <div
     v-if="zustand === 'laedt'"
-    class="state-block"
+    class="empty-state"
   >
+    <i
+      class="bi bi-arrow-clockwise spin"
+      aria-hidden="true"
+    />
     Lädt…
   </div>
   <div
     v-else-if="zustand === 'leer'"
-    class="state-block"
+    class="empty-state"
   >
+    <i
+      class="bi bi-inbox"
+      aria-hidden="true"
+    />
     Keine Einträge
   </div>
   <div
     v-else-if="zustand === 'fehler'"
-    class="state-block state-error"
+    class="empty-state state-error"
   >
+    <i
+      class="bi bi-exclamation-triangle"
+      aria-hidden="true"
+    />
     <p>{{ fehlermeldung }}</p>
     <button
       type="button"
+      class="btn btn-outline-danger"
       @click="$emit('retry')"
     >
+      <i
+        class="bi bi-arrow-clockwise"
+        aria-hidden="true"
+      />
       Erneut versuchen
     </button>
   </div>
@@ -37,23 +54,11 @@ defineEmits(['retry']);
 </template>
 
 <style scoped>
-.state-block {
-  padding: 24px;
-  text-align: center;
-  color: var(--fg-muted);
-}
-
-.state-error {
-  color: #ff6b6b;
+.state-error i {
+  color: var(--danger);
 }
 
 .state-error button {
   margin-top: 12px;
-  background: var(--accent);
-  border: none;
-  color: var(--fg);
-  padding: 8px 14px;
-  border-radius: 4px;
-  cursor: pointer;
 }
 </style>

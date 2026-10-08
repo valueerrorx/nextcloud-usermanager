@@ -75,104 +75,99 @@ async function onExport() {
 <template>
   <div
     v-if="jobLaeuft || jobSummary"
-    class="job-progress"
+    class="content-card job-progress"
   >
-    <template v-if="jobLaeuft">
-      <h2>Aktion läuft</h2>
-      <p v-if="jobFortschritt">
-        {{ jobFortschritt.done }} / {{ jobFortschritt.total }}
-      </p>
-      <button
-        type="button"
-        :disabled="stopDisabled"
-        @click="onAbbrechen"
-      >
-        Abbrechen
-      </button>
-      <p v-if="stopMeldung">
-        {{ stopMeldung }}
-      </p>
-    </template>
+    <div class="content-card-body">
+      <template v-if="jobLaeuft">
+        <h2 class="page-title">
+          <i
+            class="bi bi-arrow-clockwise spin"
+            aria-hidden="true"
+          />
+          Aktion läuft
+        </h2>
+        <p v-if="jobFortschritt">
+          {{ jobFortschritt.done }} / {{ jobFortschritt.total }}
+        </p>
+        <button
+          type="button"
+          class="btn btn-outline-danger"
+          :disabled="stopDisabled"
+          @click="onAbbrechen"
+        >
+          <i
+            class="bi bi-x-lg"
+            aria-hidden="true"
+          />
+          Abbrechen
+        </button>
+        <p v-if="stopMeldung">
+          {{ stopMeldung }}
+        </p>
+      </template>
 
-    <template v-else-if="anzeige">
-      <h2>Ergebnis</h2>
-      <p class="zusammenfassung">
-        {{ anzeige.ok }} erfolgreich, {{ anzeige.fehler }} Fehler
-        (davon {{ anzeige.teilweise }} teilweise), {{ anzeige.nichtAusgefuehrt }} nicht ausgeführt
-      </p>
-      <p
-        v-if="dryRunHinweis"
-        class="dry-run-hinweis"
-      >
-        {{ dryRunHinweis }}
-      </p>
-      <table class="result-table">
-        <thead>
-          <tr>
-            <th>Benutzer</th>
-            <th>Status</th>
-            <th>Begründung</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="result in jobResults"
-            :key="result.userid"
-          >
-            <td>{{ result.userid }}</td>
-            <td>{{ result.status }}</td>
-            <td>{{ resolveGrund(result.grund) ?? '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <button
-        type="button"
-        @click="onExport"
-      >
-        Ergebnis als CSV speichern
-      </button>
-    </template>
+      <template v-else-if="anzeige">
+        <h2 class="page-title">
+          <i
+            class="bi bi-check-lg"
+            aria-hidden="true"
+          />
+          Ergebnis
+        </h2>
+        <p class="zusammenfassung">
+          {{ anzeige.ok }} erfolgreich, {{ anzeige.fehler }} Fehler
+          (davon {{ anzeige.teilweise }} teilweise), {{ anzeige.nichtAusgefuehrt }} nicht ausgeführt
+        </p>
+        <p
+          v-if="dryRunHinweis"
+          class="dry-run-hinweis"
+        >
+          {{ dryRunHinweis }}
+        </p>
+        <div class="table-usermanager-wrap">
+          <table class="table-usermanager">
+            <thead>
+              <tr>
+                <th>Benutzer</th>
+                <th>Status</th>
+                <th>Begründung</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="result in jobResults"
+                :key="result.userid"
+              >
+                <td>{{ result.userid }}</td>
+                <td>{{ result.status }}</td>
+                <td>{{ resolveGrund(result.grund) ?? '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          @click="onExport"
+        >
+          <i
+            class="bi bi-download"
+            aria-hidden="true"
+          />
+          Ergebnis als CSV speichern
+        </button>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .job-progress {
   margin-top: 16px;
-  padding: 12px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-
-.job-progress button {
-  background: var(--accent);
-  border: none;
-  color: var(--fg);
-  padding: 8px 14px;
-  border-radius: 4px;
-  cursor: pointer;
 }
 
 .zusammenfassung,
 .dry-run-hinweis {
-  color: var(--fg-muted);
-}
-
-.result-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 12px 0;
-}
-
-.result-table th,
-.result-table td {
-  text-align: left;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.result-table th {
-  color: var(--fg-muted);
-  font-weight: normal;
+  color: var(--text-secondary);
 }
 </style>

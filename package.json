@@ -19,6 +19,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.9",
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
     "electron": "44.5.1",
     "electron-builder": "^26.15.3",
     "eslint": "^10.12.0",

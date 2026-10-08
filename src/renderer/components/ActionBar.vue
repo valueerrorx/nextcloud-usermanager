@@ -20,16 +20,30 @@ const props = defineProps({
 });
 const emit = defineEmits(['finished']);
 
+// icon ist reine Darstellung (bi-* Klasse aus der Icon-Tabelle in S09a), keine Logik.
 const ACTIONS = [
-  { id: 'user.enable', label: 'Aktivieren' },
-  { id: 'user.disable', label: 'Deaktivieren' },
-  { id: 'user.delete', label: 'Löschen' },
-  { id: 'user.setQuota', label: 'Kontingent setzen' },
-  { id: 'user.setPassword', label: 'Passwort setzen' },
-  { id: 'user.addToGroup', label: 'Zu Gruppe hinzufügen' },
-  { id: 'user.removeFromGroup', label: 'Aus Gruppe entfernen' },
-  { id: 'user.update', label: 'Anzeigename/E-Mail ändern' },
+  { id: 'user.enable', label: 'Aktivieren', icon: 'bi-person-check' },
+  { id: 'user.disable', label: 'Deaktivieren', icon: 'bi-person-slash' },
+  { id: 'user.delete', label: 'Löschen', icon: 'bi-trash' },
+  { id: 'user.setQuota', label: 'Kontingent setzen', icon: 'bi-hdd' },
+  { id: 'user.setPassword', label: 'Passwort setzen', icon: 'bi-key' },
+  { id: 'user.addToGroup', label: 'Zu Gruppe hinzufügen', icon: 'bi-people' },
+  { id: 'user.removeFromGroup', label: 'Aus Gruppe entfernen', icon: 'bi-person-dash' },
+  { id: 'user.update', label: 'Anzeigename/E-Mail ändern', icon: 'bi-pencil' },
 ];
+
+// Gleiche Icons wie ACTIONS, aber als Objekt statt linearem Array.find - ein fehlender Schlüssel
+// liefert undefined direkt, kein optional-chaining-Zweig versteckt eine unbekannte Action-ID.
+const ACTION_ICONS = {
+  'user.enable': 'bi-person-check',
+  'user.disable': 'bi-person-slash',
+  'user.delete': 'bi-trash',
+  'user.setQuota': 'bi-hdd',
+  'user.setPassword': 'bi-key',
+  'user.addToGroup': 'bi-people',
+  'user.removeFromGroup': 'bi-person-dash',
+  'user.update': 'bi-pencil',
+};
 
 const selectedAction = ref('user.enable');
 const groupId = ref('');
@@ -46,6 +60,11 @@ watch(selectedAction, () => {
 // Alphabetisch deduplizierte Gruppenliste aus der geladenen Userliste - keine eigene Ableitung
 // hier, dieselbe pure Funktion wie in UsersView.vue (ARCHITECTURE §4.1).
 const gruppenOptionenListe = computed(() => gruppenOptionen(props.users));
+
+// Nur Darstellung: Icon des gerade gewaehlten Eintrags der statischen ACTION_ICONS-Konstante,
+// kein Rechnen auf Businessdaten (REVIEW-NOTES [S06] betrifft Set/sort/filter/reduce/localeCompare
+// auf abgeleiteten Userdaten, nicht das Nachschlagen in einer festen Konstante).
+const selectedActionIcon = computed(() => ACTION_ICONS[selectedAction.value]);
 
 const vorschauDisabled = computed(() => {
   if (props.auswahl.size === 0 || jobLaeuft.value) return true;
@@ -219,9 +238,12 @@ async function onVorschau() {
 <template>
   <div
     v-if="auswahl.size > 0"
-    class="action-bar"
+    class="action-bar content-card"
   >
-    <select v-model="selectedAction">
+    <select
+      v-model="selectedAction"
+      class="form-select"
+    >
       <option
         v-for="action in ACTIONS"
         :key="action.id"
@@ -234,6 +256,7 @@ async function onVorschau() {
     <select
       v-if="selectedAction === 'user.addToGroup' || selectedAction === 'user.removeFromGroup'"
       v-model="groupId"
+      class="form-select"
     >
       <option value="">
         Gruppe wählen
@@ -250,6 +273,7 @@ async function onVorschau() {
     <select
       v-if="selectedAction === 'user.setQuota'"
       v-model="quotaPresetId"
+      class="form-select"
     >
       <option
         v-for="preset in QUOTA_PRESETS"
@@ -264,6 +288,7 @@ async function onVorschau() {
       v-if="selectedAction === 'user.setPassword'"
       v-model="password"
       type="password"
+      class="form-control"
       placeholder="Neues Passwort"
     >
 
@@ -271,11 +296,13 @@ async function onVorschau() {
       <input
         v-model="displayname"
         type="text"
+        class="form-control"
         placeholder="Neuer Anzeigename (leer = unverändert)"
       >
       <input
         v-model="email"
         type="text"
+        class="form-control"
         placeholder="Neue E-Mail (leer = unverändert)"
       >
     </template>
@@ -284,9 +311,16 @@ async function onVorschau() {
 
     <button
       type="button"
+      class="btn btn-primary"
       :disabled="vorschauDisabled"
       @click="onVorschau"
     >
+      <i
+        v-if="selectedActionIcon"
+        class="bi"
+        :class="selectedActionIcon"
+        aria-hidden="true"
+      />
       Vorschau
     </button>
   </div>
@@ -300,36 +334,15 @@ async function onVorschau() {
   flex-wrap: wrap;
   margin-bottom: 12px;
   padding: 10px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 4px;
 }
 
 .action-bar select,
 .action-bar input {
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 8px;
-}
-
-.action-bar button {
-  background: var(--accent);
-  border: none;
-  color: var(--fg);
-  padding: 8px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.action-bar button:disabled {
-  opacity: 0.6;
-  cursor: default;
+  width: auto;
 }
 
 .auswahl-anzahl {
-  color: var(--fg-muted);
+  color: var(--text-secondary);
   margin-left: auto;
 }
 </style>
