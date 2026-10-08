@@ -149,8 +149,29 @@ ist — das deckt `tests/pool.test.js` ab).
     `unbekannt`, ein User mit unbegrenztem Kontingent nur in `unbegrenzt`;
     kombinierte Filter schneiden die Mengen, Zähler aktualisiert sich; die Summe der fünf
     Stufenmengen ist die Gesamtzahl der User.
+38a. **Tun:** nach Benutzername und nach Kontingent sortieren (Spaltenkopf anklicken), jeweils
+    ein zweites Mal für die Gegenrichtung. **Erwartung:** die aktive Spalte ist optisch markiert
+    (Pfeil zeigt Richtung); bei Kontingent landen User mit unbegrenztem oder unbekanntem
+    Kontingent **immer** am Ende der Tabelle, egal in welcher Richtung sortiert wird.
+38b. **Tun:** einen Filter setzen (z. B. Gruppe), einige Checkboxen einzeln anklicken, dann
+    "alles auswählen" im Tabellenkopf anklicken, danach den Filter wieder ändern.
+    **Erwartung:** "alles auswählen" markiert genau die aktuell sichtbaren Zeilen; die Anzahl
+    neben "X von Y Benutzern" steht **exakt** für die Größe der Auswahl und stimmt mit der Zahl
+    der angehakten Checkboxen überein. Ändert sich danach der Filter, bleiben in der Auswahl
+    nur noch User, die im neuen Filterergebnis weiterhin sichtbar sind - verschwundene User
+    fallen aus der Auswahl, ihre Anzeige-Zahl sinkt entsprechend. Nochmaliges Klicken auf
+    "alles auswählen" bei voll ausgewähltem Filterergebnis hebt die Auswahl wieder auf.
+38c. **Tun:** "Filter zurücksetzen" klicken, nachdem Suche, Gruppe, Status und Kontingentstufe
+    gesetzt waren. **Erwartung:** alle vier Filter werden auf ihren Ausgangswert zurückgesetzt,
+    die Tabelle zeigt wieder alle User, eine zuvor getroffene Auswahl bleibt bestehen (wird
+    durch das Zurücksetzen nicht gelöscht, da keiner der ausgewählten User aus dem
+    - jetzt größeren - Filterergebnis herausfällt).
 39. **Tun:** Netzwerk trennen und "Neu laden" klicken.
     **Erwartung:** Error-State mit Wiederholen-Button, kein leerer Bildschirm, kein Absturz.
+39a. **Tun:** einige User auswählen, dann "Neu laden" klicken (erfolgreich, neue Verbindung
+    bleibt bestehen). **Erwartung:** die Auswahl bleibt für dieselben Usernamen erhalten, obwohl
+    die Userliste komplett neu geladen wurde (die Auswahl hält Benutzername-Strings, keine
+    Objektreferenzen auf die alte Liste).
 
 ## F. Einzel-User-Aktionen
 

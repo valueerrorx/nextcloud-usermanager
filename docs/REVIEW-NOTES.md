@@ -61,6 +61,13 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S05] **Bei einer Formel reicht es nicht, den falschen Weg auszuschließen — der richtige muss positiv belegt sein.** Ein Mutationstest belegte, dass `relative` ignoriert wird, aber nicht, dass die eigene Prozentrechnung stimmt: ohne `* 100` blieben alle 13 Quota-Tests grün, und die „fast voll"-Liste über 90 % hätte nie ausgelöst.
 - [S05] **Eine Liste von Auslösern in der Spec ist abschließend zu lesen.** „Genau diese fünf Trigger" wurde als „jeder Fehler" implementiert, weil alle Fehler dieselbe Form (`!ok`) haben. Specs müssen den Negativfall ausdrücklich nennen: *jeder andere Fehler tut X*.
 
+- [S06] **Lead: Mutationsläufe selbst validieren.** Zwei meiner Mutationen in S06 waren ungültig: eine traf das `sed`-Muster nicht (Code sah anders aus als vermutet), die andere erzeugte einen Parse-Fehler. Ein zerstörter Mutant meldet „1 failed" — das sieht aus wie ein erfolgreich getöteter Mutant, ist aber nur eine nicht ladbare Datei. **Immer: Syntax des Mutanten prüfen, Kontrollfall mitlaufen lassen, und die Trefferzahl des `sed` verifizieren.**
+- [S06] **Ein geänderter Locale-Tag ist keine Mutation für `localeCompare`.** `localeCompare(x, 'en-US')` sortiert Umlaute genauso brauchbar wie `'de'`. Der relevante Fehler ist der naive `<`-Vergleich — nur der muss rot werden.
+
+- [S06] **Jede abgeleitete Liste gehört in ein pures Modul, auch die scheinbar triviale.** `gruppenOptionen` (Set über alle `UserView.groups`, sortiert) stand in `UsersView.vue` — mit dem einzigen `localeCompare` außerhalb von `filters.js` und ohne Tests. GroupsView und ImportView brauchen dieselbe Ableitung. **Faustregel: sobald in einer `.vue`-Datei `Set`, `sort`, `filter`, `reduce` oder `localeCompare` steht, gehört es nach `src/shared/`.**
+- [S06] **Ein tragendes Prädikat darf nur einmal existieren.** „Sind alle sichtbaren Zeilen ausgewählt?" war zweimal unabhängig implementiert — in `UserTable.vue` für die Kopf-Checkbox und in `UsersView.vue` für `onToggleAlle`. Auf dieser Invariante stützt S08 die eingetippte Bestätigungszahl beim Batch-Löschen. Zwei Kopien driften.
+- [S06] **`watch` ohne `immediate: true` ist keine Invariante.** Die Auswahl wurde nur beschnitten, solange die View montiert war und sich die Identität des `computed` änderte — ein *fehlgeschlagener* Reload ließ die alte Auswahl stehen.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
