@@ -156,11 +156,16 @@ ist — das deckt `tests/pool.test.js` ab).
 38b. **Tun:** einen Filter setzen (z. B. Gruppe), einige Checkboxen einzeln anklicken, dann
     "alles auswählen" im Tabellenkopf anklicken, danach den Filter wieder ändern.
     **Erwartung:** "alles auswählen" markiert genau die aktuell sichtbaren Zeilen; die Anzahl
-    neben "X von Y Benutzern" steht **exakt** für die Größe der Auswahl und stimmt mit der Zahl
-    der angehakten Checkboxen überein. Ändert sich danach der Filter, bleiben in der Auswahl
-    nur noch User, die im neuen Filterergebnis weiterhin sichtbar sind - verschwundene User
-    fallen aus der Auswahl, ihre Anzeige-Zahl sinkt entsprechend. Nochmaliges Klicken auf
-    "alles auswählen" bei voll ausgewähltem Filterergebnis hebt die Auswahl wieder auf.
+    neben "X von Y Benutzern" **und** die Zahl direkt neben der Kopf-Checkbox stehen **exakt**
+    für die Größe der Auswahl und stimmen mit der Zahl der angehakten Checkboxen überein.
+    Ändert sich danach der Filter, bleiben in der Auswahl nur noch User, die im neuen
+    Filterergebnis weiterhin sichtbar sind - verschwundene User fallen aus der Auswahl, ihre
+    Anzeige-Zahl sinkt entsprechend. Nochmaliges Klicken auf "alles auswählen" bei voll
+    ausgewähltem Filterergebnis hebt **nur die sichtbaren** Einträge wieder auf - zuvor über
+    einen anderen Filter ausgewählte, jetzt unsichtbare User (falls vorhanden) bleiben
+    unberührt. Setzt man einen Filter, der **keinen** Treffer liefert, ist die Kopf-Checkbox
+    **nicht** angehakt (ein leeres Filterergebnis gilt nicht als "alle ausgewählt") und die
+    Tabelle zeigt statt der leeren Kopfzeile den Hinweis "Keine Treffer für diesen Filter.".
 38c. **Tun:** "Filter zurücksetzen" klicken, nachdem Suche, Gruppe, Status und Kontingentstufe
     gesetzt waren. **Erwartung:** alle vier Filter werden auf ihren Ausgangswert zurückgesetzt,
     die Tabelle zeigt wieder alle User, eine zuvor getroffene Auswahl bleibt bestehen (wird
@@ -171,7 +176,11 @@ ist — das deckt `tests/pool.test.js` ab).
 39a. **Tun:** einige User auswählen, dann "Neu laden" klicken (erfolgreich, neue Verbindung
     bleibt bestehen). **Erwartung:** die Auswahl bleibt für dieselben Usernamen erhalten, obwohl
     die Userliste komplett neu geladen wurde (die Auswahl hält Benutzername-Strings, keine
-    Objektreferenzen auf die alte Liste).
+    Objektreferenzen auf die alte Liste). Anschließend einige User auswählen, dann das Netzwerk
+    trennen und "Neu laden" klicken, bis der Error-State erscheint. **Erwartung:** die Auswahl
+    wird bei einem **fehlgeschlagenen** Neuladen geleert ("X von Y Benutzern, 0 ausgewählt"
+    nach dem nächsten erfolgreichen Laden) - eine stehengebliebene Auswahl auf einer nicht neu
+    geladenen Liste wäre sonst die Zahl, die später beim Batch-Löschen eingetippt werden muss.
 
 ## F. Einzel-User-Aktionen
 
