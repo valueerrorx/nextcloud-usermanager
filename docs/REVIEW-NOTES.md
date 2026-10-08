@@ -68,6 +68,10 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S06] **Ein tragendes Prädikat darf nur einmal existieren.** „Sind alle sichtbaren Zeilen ausgewählt?" war zweimal unabhängig implementiert — in `UserTable.vue` für die Kopf-Checkbox und in `UsersView.vue` für `onToggleAlle`. Auf dieser Invariante stützt S08 die eingetippte Bestätigungszahl beim Batch-Löschen. Zwei Kopien driften.
 - [S06] **`watch` ohne `immediate: true` ist keine Invariante.** Die Auswahl wurde nur beschnitten, solange die View montiert war und sich die Identität des `computed` änderte — ein *fehlgeschlagener* Reload ließ die alte Auswahl stehen.
 
+- [S07] **Fortschritt ist eine zeitliche Zusicherung, keine Zählzusicherung.** `onProgress` wurde erst **nach** `await runPool(...)` in einer Schleife gefeuert: zehn Items, zehn Events, `done` lief 1..10 — formal „nach jedem Item", praktisch alles am Ende. Bei 120 Usern keine Rückmeldung während des Laufs. **Testbar nur zeitlich: mindestens ein Event muss eintreffen, bevor die Funktion auflöst.**
+- [S07] **„Nie global fehlerhaft" heißt auch: wirft nie.** Eine unbekannte Action-ID flog als Exception aus `actions.run` heraus und machte den invoke-Kanal rejectend, obwohl ARCHITECTURE §3 das ausschließt. Programmierfehler dürfen im Main-Prozess werfen, aber nicht über die IPC-Grenze.
+- [S07] **„Kein Request" muss am Request gemessen werden, nicht am Status.** Ein Item kann `nicht ausgeführt` tragen und trotzdem einen Request abgesetzt haben. Die Assertion gehört an den Request-Zähler bzw. das gemockte `fetchImpl`.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
