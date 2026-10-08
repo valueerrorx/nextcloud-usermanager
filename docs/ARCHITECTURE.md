@@ -386,8 +386,14 @@ separat** aus („3 Fehler, davon 1 teilweise“) — berechnet von `dashboard.j
 nicht im Template.
 
 **Dry-Run** (`shared/dryRun.js`, pur, kein Re-Fetch — rechnet nur auf der geladenen Liste):
-`planActions(action, auswahl, params, { adminUserId })` ->
-`{ aenderungen: [...], keineAenderung: [...], ausgeschlossen: [{ userid, grund }] }`.
+`planActions({ users, auswahl, action, params, adminUserId })` ->
+`{ auszufuehren: Plan[], keineAenderung: Plan[], ausgeschlossen: Plan[], anzahl }`
+mit `Plan = { userid, vorher, nachher, grund? }`.
+**Korrektur (2026-10-08):** Eine frühere Fassung nannte positionale Argumente und den Schlüssel
+`aenderungen` ohne `anzahl`. Verbindlich ist die Objektform oben — `auswahl` ist eine Liste von
+`userid`-Strings (die Auswahl hält Strings, nicht Objekte, S06), `users` die geladene Liste.
+**`anzahl === auszufuehren.length`** und ist die Zahl, die beim Löschen eingetippt werden muss —
+nie die Größe der Rohauswahl.
 - `keineAenderung`: schon aktiv/deaktiviert, schon in Gruppe, nicht in Gruppe, Kontingent identisch.
 - `ausgeschlossen`: `nicht gefunden` (nur bei Username-CSV-Auswahl, DECISIONS „Batch-Input
   CSV-Liste von Usernamen“) und `eigener Admin-Zugang` bei `user.delete`/`user.disable`
