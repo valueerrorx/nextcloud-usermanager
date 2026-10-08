@@ -1,11 +1,88 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { MESSAGES } from '../../shared/messages.js';
 import {
+  alleAusgewaehlt, filterUsers, gruppenOptionen, pruneAuswahl, sortUsers,
+} from '../../shared/filters.js';
+import {
+  auswahl, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, sortFeld, sortRichtung,
   users, usersFehler, usersFetchedAt, usersLadezustand, usersMode, usersUebersprungen,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
 import UserTable from '../components/UserTable.vue';
+
+const QUOTA_STUFEN = [
+  { wert: 'unter50', label: '< 50 %' },
+  { wert: 'f50bis90', label: '50 - 90 %' },
+  { wert: 'ueber90', label: '> 90 %' },
+  { wert: 'unbegrenzt', label: 'unbegrenzt' },
+  { wert: 'unbekannt', label: 'unbekannt' },
+];
+
+// Alphabetisch (deutsch) aus der geladenen Userliste abgeleitet, keine eigene Gruppenquelle (S06).
+// Nur Aufruf der puren Funktion aus filters.js - kein Rechnen in der Komponente (ARCHITECTURE §4.1).
+const gruppenOptionenListe = computed(() => gruppenOptionen(users.value));
+
+// Einzige Stelle, die filterUsers/sortUsers aufruft - keine Filter- oder Sortierlogik in der
+// Komponente (ARCHITECTURE §4.1).
+const gefilterteUndSortierte = computed(() => sortUsers(
+  filterUsers(users.value, {
+    suche: filterSuche.value,
+    gruppe: filterGruppe.value,
+    status: filterStatus.value,
+    quotaStufe: filterQuotaStufe.value,
+  }),
+  { feld: sortFeld.value, richtung: sortRichtung.value },
+));
+
+// Ändert sich das Filterergebnis, bleiben nur noch sichtbare User in der Auswahl (ARCHITECTURE
+// §4.1) - keine unsichtbaren User werden mitgeschleppt. immediate: true, damit die Invariante
+// auch dann gilt, wenn ein fehlgeschlagenes Neuladen die Liste identisch lässt (sonst würde der
+// watch nicht feuern und eine inzwischen ungültige Auswahl stehen bleiben).
+watch(gefilterteUndSortierte, (liste) => {
+  auswahl.value = new Set(pruneAuswahl(auswahl.value, liste));
+}, { immediate: true });
+
+function onSort(feld) {
+  if (sortFeld.value === feld) {
+    sortRichtung.value = sortRichtung.value === 'aufsteigend' ? 'absteigend' : 'aufsteigend';
+  } else {
+    sortFeld.value = feld;
+    sortRichtung.value = 'aufsteigend';
+  }
+}
+
+function onToggle(userid) {
+  const neu = new Set(auswahl.value);
+  if (neu.has(userid)) {
+    neu.delete(userid);
+  } else {
+    neu.add(userid);
+  }
+  auswahl.value = neu;
+}
+
+// "Alles auswählen" trifft genau das aktuelle Filterergebnis, nicht die ganze Liste (DECISIONS).
+// alleAusgewaehlt ist dieselbe Funktion wie in UserTable.vue (CRITICAL-Fix S06-Review) - eine
+// Wahrheit für den Checkbox-Zustand. Abwählen entfernt nur die sichtbaren userids aus der
+// Auswahl statt sie komplett zu leeren.
+function onToggleAlle() {
+  const sichtbar = gefilterteUndSortierte.value;
+  const neu = new Set(auswahl.value);
+  if (alleAusgewaehlt(auswahl.value, sichtbar)) {
+    sichtbar.forEach((u) => neu.delete(u.userid));
+  } else {
+    sichtbar.forEach((u) => neu.add(u.userid));
+  }
+  auswahl.value = neu;
+}
+
+function filterZuruecksetzen() {
+  filterSuche.value = '';
+  filterGruppe.value = null;
+  filterStatus.value = 'alle';
+  filterQuotaStufe.value = null;
+}
 
 // { geladen, gesamt } während des N+1-Fallbacks, sonst null - nur in dieser View interessant,
 // deshalb kein eigenes state.js-Feld.
@@ -24,6 +101,7 @@ async function load() {
     if (!result.ok) {
       usersLadezustand.value = 'fehler';
       usersFehler.value = result.message ?? MESSAGES.userliste_fehlgeschlagen;
+      auswahl.value = new Set();
       return;
     }
     users.value = result.users;
@@ -34,6 +112,7 @@ async function load() {
   } catch (error) {
     usersLadezustand.value = 'fehler';
     usersFehler.value = MESSAGES.unerwarteter_serverfehler;
+    auswahl.value = new Set();
     console.error('Failed to load user list:', error);
   } finally {
     fortschritt.value = null;
@@ -93,12 +172,89 @@ function formatTimestamp(ms) {
     {{ MESSAGES.einige_user_uebersprungen }} ({{ usersUebersprungen }})
   </p>
 
+  <div
+    v-if="usersLadezustand === 'bereit'"
+    class="filterleiste"
+  >
+    <input
+      v-model="filterSuche"
+      type="text"
+      placeholder="Suche nach Benutzername, Anzeigename oder E-Mail"
+      class="suche"
+    >
+    <select v-model="filterGruppe">
+      <option :value="null">
+        Alle Gruppen
+      </option>
+      <option
+        v-for="gruppe in gruppenOptionenListe"
+        :key="gruppe"
+        :value="gruppe"
+      >
+        {{ gruppe }}
+      </option>
+    </select>
+    <select v-model="filterStatus">
+      <option value="alle">
+        Alle
+      </option>
+      <option value="aktiv">
+        Aktiv
+      </option>
+      <option value="deaktiviert">
+        Deaktiviert
+      </option>
+    </select>
+    <select v-model="filterQuotaStufe">
+      <option :value="null">
+        Alle Kontingentstufen
+      </option>
+      <option
+        v-for="stufe in QUOTA_STUFEN"
+        :key="stufe.wert"
+        :value="stufe.wert"
+      >
+        {{ stufe.label }}
+      </option>
+    </select>
+    <button
+      type="button"
+      @click="filterZuruecksetzen"
+    >
+      Filter zurücksetzen
+    </button>
+  </div>
+
+  <p
+    v-if="usersLadezustand === 'bereit'"
+    class="zusammenfassung"
+  >
+    {{ gefilterteUndSortierte.length }} von {{ users.length }} Benutzern,
+    {{ auswahl.size }} ausgewählt
+  </p>
+
   <StateBlock
     :zustand="usersLadezustand"
     :fehlermeldung="usersFehler ?? ''"
     @retry="load"
   >
-    <UserTable :users="users" />
+    <UserTable
+      v-if="gefilterteUndSortierte.length > 0"
+      :users="gefilterteUndSortierte"
+      :sort-feld="sortFeld"
+      :sort-richtung="sortRichtung"
+      :auswahl="auswahl"
+      :ausgewaehlte-anzahl="auswahl.size"
+      @sort="onSort"
+      @toggle="onToggle"
+      @toggle-alle="onToggleAlle"
+    />
+    <p
+      v-else
+      class="notice"
+    >
+      Keine Treffer für diesen Filter.
+    </p>
   </StateBlock>
 </template>
 
@@ -130,6 +286,42 @@ function formatTimestamp(ms) {
 }
 
 .notice {
+  color: var(--fg-muted);
+  margin: 0 0 12px;
+}
+
+.filterleiste {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.filterleiste .suche {
+  flex: 1;
+  min-width: 220px;
+}
+
+.filterleiste input,
+.filterleiste select {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.filterleiste button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.zusammenfassung {
   color: var(--fg-muted);
   margin: 0 0 12px;
 }

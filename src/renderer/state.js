@@ -35,3 +35,14 @@ export const usersLadezustand = ref('laedt');
 export const usersFehler = ref(null);
 // Anzahl der im N+1-Fallback fehlgeschlagenen Einzelabfragen (fehlen in `users`).
 export const usersUebersprungen = ref(0);
+
+// Suche/Filter/Sortierung der Usertabelle (S06, ARCHITECTURE §4.1) - rein clientseitig, kein
+// Request. Die eigentliche Logik steckt in shared/filters.js, nicht hier.
+export const filterSuche = ref('');
+export const filterGruppe = ref(null); // null = alle Gruppen
+export const filterStatus = ref('alle'); // 'alle' | 'aktiv' | 'deaktiviert'
+export const filterQuotaStufe = ref(null); // null = alle Stufen
+export const sortFeld = ref('userid'); // 'userid' | 'displayname' | 'quota'
+export const sortRichtung = ref('aufsteigend'); // 'aufsteigend' | 'absteigend'
+// Set von userid-Strings, keine Objektreferenzen - nach "Neu laden" sind die User-Objekte neu.
+export const auswahl = ref(new Set());
