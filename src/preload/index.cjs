@@ -29,4 +29,5 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('actions.onProgress', listener);
     return () => ipcRenderer.removeListener('actions.onProgress', listener);
   },
+  filesSaveCsv: (args) => ipcRenderer.invoke('files.saveCsv', args),
 });

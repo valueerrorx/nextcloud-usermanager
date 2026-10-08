@@ -5,11 +5,14 @@ import {
   alleAusgewaehlt, filterUsers, gruppenOptionen, pruneAuswahl, sortUsers,
 } from '../../shared/filters.js';
 import {
-  auswahl, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, sortFeld, sortRichtung,
-  users, usersFehler, usersFetchedAt, usersLadezustand, usersMode, usersUebersprungen,
+  auswahl, connection, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, sortFeld,
+  sortRichtung, users, usersFehler, usersFetchedAt, usersLadezustand, usersMode,
+  usersUebersprungen,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
 import UserTable from '../components/UserTable.vue';
+import ActionBar from '../components/ActionBar.vue';
+import JobProgress from '../components/JobProgress.vue';
 
 const QUOTA_STUFEN = [
   { wert: 'unter50', label: '< 50 %' },
@@ -256,6 +259,15 @@ function formatTimestamp(ms) {
       Keine Treffer für diesen Filter.
     </p>
   </StateBlock>
+
+  <ActionBar
+    v-if="usersLadezustand === 'bereit'"
+    :users="users"
+    :auswahl="auswahl"
+    :admin-user-id="connection.adminUserId"
+    @finished="load"
+  />
+  <JobProgress />
 </template>
 
 <style scoped>

@@ -72,3 +72,24 @@ export function formatPercent(percent) {
   if (percent === null || percent === undefined) return 'unbekannt';
   return `${percent.toFixed(1).replace('.', ',')} %`;
 }
+
+// GiB base 1073741824 (DECISIONS "Kontingent-Eingabe"), only presets, no free-text quota entry.
+const GIB = 1073741824;
+export const QUOTA_PRESETS = Object.freeze([
+  { id: '1gb', label: '1 GB', bytes: 1 * GIB },
+  { id: '2gb', label: '2 GB', bytes: 2 * GIB },
+  { id: '5gb', label: '5 GB', bytes: 5 * GIB },
+  { id: '10gb', label: '10 GB', bytes: 10 * GIB },
+  { id: '20gb', label: '20 GB', bytes: 20 * GIB },
+  { id: 'unbegrenzt', label: 'Unbegrenzt', bytes: null },
+]);
+
+// Bytes as a string for the OCS PUT quota call, or 'none' for unlimited (DECISIONS: "unbegrenzt als none").
+export function formatQuotaForApi(preset) {
+  return preset.bytes === null ? 'none' : String(preset.bytes);
+}
+
+// Looks up a preset by its id - moved out of ActionBar.vue (REVIEW-NOTES [S06]).
+export function findQuotaPreset(id) {
+  return QUOTA_PRESETS.find((p) => p.id === id);
+}

@@ -14,6 +14,7 @@ vi.mock('electron', () => ({
   app: fakeApp,
   net: { fetch: vi.fn() },
   BrowserWindow: { getAllWindows: vi.fn(() => []) },
+  dialog: { showSaveDialog: vi.fn() },
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => false),
     getSelectedStorageBackend: vi.fn(() => 'basic_text'),
@@ -28,7 +29,7 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { BrowserWindow, net, safeStorage } from 'electron';
+import { BrowserWindow, dialog, net, safeStorage } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { session } from '../src/main/session.js';
 
@@ -350,5 +351,34 @@ describe('connection.status — kein Secret im Rückgabewert', () => {
     const serialized = JSON.stringify(status);
     expect(serialized).not.toContain('super-geheimes-passwort');
     expect(serialized).not.toContain(Buffer.from('super-geheimes-passwort').toString('base64'));
+  });
+});
+
+// S08 A4: files.saveCsv delegiert an src/main/files.js#saveCsv (Verdrahtung, nicht nur Logik).
+describe('files.saveCsv', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('leitet das Argument an dialog.showSaveDialog weiter und liefert { ok: true, path } bei Erfolg', async () => {
+    dialog.showSaveDialog.mockResolvedValue({ canceled: false, filePath: '/home/user/ergebnis.csv' });
+    writeFile.mockResolvedValue(undefined);
+
+    const result = await handlers.get('files.saveCsv')(null, { vorschlag: 'ergebnis.csv', inhalt: 'userid;aktion\r\n' });
+
+    expect(dialog.showSaveDialog).toHaveBeenCalledWith({ defaultPath: 'ergebnis.csv' });
+    expect(result).toEqual({ ok: true, path: '/home/user/ergebnis.csv' });
+  });
+
+  it('Abbruch im Dialog -> { ok: false, messageId: abgebrochen }', async () => {
+    dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined });
+
+    const result = await handlers.get('files.saveCsv')(null, { vorschlag: 'ergebnis.csv', inhalt: 'x' });
+
+    expect(result).toEqual({ ok: false, messageId: 'abgebrochen', message: expect.any(String) });
   });
 });

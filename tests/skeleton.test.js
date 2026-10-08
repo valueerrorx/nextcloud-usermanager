@@ -173,6 +173,7 @@ describe('src/preload/index.cjs', () => {
       'actionsRun',
       'actionsStop',
       'onActionsProgress',
+      'filesSaveCsv',
     ];
     for (const name of required) {
       expect(Object.keys(exposedApi)).toContain(name);
@@ -234,6 +235,13 @@ describe('src/preload/index.cjs', () => {
     expect(invokeCalls).toEqual([{ channel: 'actions.stop', args: [args] }]);
   });
 
+  it('filesSaveCsv() leitet das Argument unverändert an den Kanal files.saveCsv weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { vorschlag: 'ergebnis.csv', inhalt: 'userid;aktion\r\n' };
+    await exposedApi.filesSaveCsv(args);
+    expect(invokeCalls).toEqual([{ channel: 'files.saveCsv', args: [args] }]);
+  });
+
   it('onActionsProgress() abonniert actions.onProgress und gibt einen Disposer zurück', () => {
     const { exposedApi, onCalls, removeListenerCalls } = loadPreloadWithStubbedElectron();
     const callback = () => {};
@@ -254,9 +262,10 @@ describe('src/main/', () => {
   // 'src/shared/' nach S02). 'session.js', 'credentials.js' und 'tls.js' sind mit S04 entfernt -
   // sie entstehen jetzt legitim (REVIEW-NOTES [S03]). 'actions' ist mit S07 entfernt - das
   // Verzeichnis existiert ab dann (REVIEW-NOTES [S03]: Scope-Guards bei jedem neuen Modul mitpflegen).
+  // 'files.js' ist mit S08 entfernt - es entsteht jetzt legitim (REVIEW-NOTES [S03]).
   it('enthält keines der in S01 verbotenen Module/Verzeichnisse', () => {
     const entries = readdirSync(path.join(root, 'src', 'main'));
-    const forbidden = ['log.js', 'files.js'];
+    const forbidden = ['log.js'];
     for (const name of forbidden) {
       expect(entries).not.toContain(name);
     }

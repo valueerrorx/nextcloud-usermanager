@@ -7,6 +7,7 @@ import { runJob } from './actions/pipeline.js';
 import { session } from './session.js';
 import * as credentials from './credentials.js';
 import { createTlsController } from './tls.js';
+import { saveCsv } from './files.js';
 
 // net.fetch is Electron's Chromium-backed fetch, never globalThis.fetch (ARCHITEKTURKORREKTUR):
 // app.on('certificate-error') only fires for Chromium requests, so only net.fetch lets the user's
@@ -196,6 +197,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('users.list', () => handleUsersList());
   ipcMain.handle('actions.run', (event, args) => handleActionsRun(args));
   ipcMain.handle('actions.stop', (event, args) => handleActionsStop(args));
+  ipcMain.handle('files.saveCsv', (event, args) => saveCsv(args));
   ipcMain.handle('tls.respondCertificate', (event, args) => {
     const result = tlsController.respond(args);
     // Push the accepted exception into session so buildStatus() reports it (REVIEW-NOTES [S04]:

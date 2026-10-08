@@ -46,3 +46,13 @@ export const sortFeld = ref('userid'); // 'userid' | 'displayname' | 'quota'
 export const sortRichtung = ref('aufsteigend'); // 'aufsteigend' | 'absteigend'
 // Set von userid-Strings, keine Objektreferenzen - nach "Neu laden" sind die User-Objekte neu.
 export const auswahl = ref(new Set());
+
+// Batch-Aktions-Job (S08, ARCHITECTURE §5) - gemeinsamer Zustand von ActionBar.vue (startet den
+// Job über actions.run) und JobProgress.vue (zeigt Fortschritt und Bericht). Kein Store, nur
+// reaktive refs wie der Rest dieser Datei.
+export const jobLaeuft = ref(false);
+export const jobId = ref(null);
+export const jobFortschritt = ref(null); // { done, total } | null
+export const jobResults = ref([]); // ItemResult[] aus actions.run
+export const jobSummary = ref(null); // { ok, fehler, nichtAusgefuehrt, teilweise } | null
+export const dryRunPlan = ref(null); // letzter bestätigter planActions()-Output

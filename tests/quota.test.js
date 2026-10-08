@@ -1,6 +1,7 @@
 // S05 A1: every row of the ARCHITECTURE §4 table, plus the relative-ignore test, plus formatBytes.
+// S08 A2: QUOTA_PRESETS and formatQuotaForApi.
 import { describe, expect, it } from 'vitest';
-import { parseQuota, formatBytes, formatPercent } from '../src/shared/quota.js';
+import { parseQuota, formatBytes, formatPercent, QUOTA_PRESETS, formatQuotaForApi } from '../src/shared/quota.js';
 
 describe('parseQuota — ARCHITECTURE §4 Tabelle', () => {
   it('Objekt mit quota: -3 -> unlimited, used bleibt erhalten', () => {
@@ -94,5 +95,31 @@ describe('formatBytes', () => {
 
   it('1,5 GiB mit deutschem Komma -> "1,5 GiB"', () => {
     expect(formatBytes(1.5 * 1024 ** 3)).toBe('1,5 GiB');
+  });
+});
+
+describe('QUOTA_PRESETS / formatQuotaForApi — DECISIONS "Kontingent-Eingabe"', () => {
+  it('enthält genau die sechs Presets 1/2/5/10/20 GB und unbegrenzt', () => {
+    expect(QUOTA_PRESETS.map((p) => p.id)).toEqual(['1gb', '2gb', '5gb', '10gb', '20gb', 'unbegrenzt']);
+  });
+
+  it('jedes begrenzte Preset benutzt die GiB-Basis 1073741824', () => {
+    const erwartet = { '1gb': 1073741824, '2gb': 2147483648, '5gb': 5368709120, '10gb': 10737418240, '20gb': 21474836480 };
+    for (const preset of QUOTA_PRESETS) {
+      if (preset.id === 'unbegrenzt') continue;
+      expect(preset.bytes).toBe(erwartet[preset.id]);
+    }
+  });
+
+  it('formatQuotaForApi gibt für jedes begrenzte Preset die Bytes als String', () => {
+    for (const preset of QUOTA_PRESETS) {
+      if (preset.bytes === null) continue;
+      expect(formatQuotaForApi(preset)).toBe(String(preset.bytes));
+    }
+  });
+
+  it('formatQuotaForApi(unbegrenzt) -> "none"', () => {
+    const unbegrenzt = QUOTA_PRESETS.find((p) => p.id === 'unbegrenzt');
+    expect(formatQuotaForApi(unbegrenzt)).toBe('none');
   });
 });
