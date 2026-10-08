@@ -76,6 +76,8 @@ src/shared/                       PURE MODULE: kein import von node:*, electron,
   quota.js                        defensiver Quota-Reader + Presets + formatQuotaForApi + formatBytes
   pool.js                         runPool(items, worker, { concurrency, shouldStop })
   dryRun.js                       planActions(): Änderungen / keine Änderung / ausgeschlossen
+  jobReport.js                    resolveGrund (messageId -> Text), summaryAnzeige,
+                                  Bestaetigungs-Praedikat und planToItems (S08)
   resultCsv.js                    Ergebniszeilen -> CSV-Text (fixe Spalten aus §5)
   userView.js                     Normalisierung Roh-OCS-User -> Renderer-Shape (§4)
   filters.js                      Suchprädikat, quotaStufe (5 Stufen), Filter, Sortierung

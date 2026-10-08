@@ -73,6 +73,10 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S07] **„Nie global fehlerhaft" heißt auch: wirft nie.** Eine unbekannte Action-ID flog als Exception aus `actions.run` heraus und machte den invoke-Kanal rejectend, obwohl ARCHITECTURE §3 das ausschließt. Programmierfehler dürfen im Main-Prozess werfen, aber nicht über die IPC-Grenze.
 - [S07] **„Kein Request" muss am Request gemessen werden, nicht am Status.** Ein Item kann `nicht ausgeführt` tragen und trotzdem einen Request abgesetzt haben. Die Assertion gehört an den Request-Zähler bzw. das gemockte `fetchImpl`.
 
+- [S08] **Case-insensitive Zuordnung ist auf einem Löschpfad gefährlich.** Die User-Suche in `dryRun.js` verglich `userid` case-insensitiv — die Auswahl von `alice` konnte die Zeile von `Alice` einplanen. Echte Instanzen enthalten gemischte Schreibweisen (verifiziert: `Aaron.w`). **Case-Insensitivität gilt nur für den Selbstschutz-Vergleich, nie für die Zuordnung Auswahl -> Datensatz.**
+- [S08] **Still verworfene Eingaben sind ein Datenrisiko, wenn eine Zahl daran hängt.** Nicht gefundene Auswahl-Einträge wurden per `continue` verworfen; der Admin hätte eine kleinere `anzahl` ohne Erklärung bestätigt. Sie gehören sichtbar nach `ausgeschlossen`.
+- [S08] **Ein Spy-Argument, das niemand liest, ist kein Beweis.** Der „kein Request"-Test übergab `{ client }` als `params` — nichts im Modul liest das, der Test konnte auch gegen eine kaputte Implementierung nicht fehlschlagen. Gleiche Vakuums-Klasse wie die Regex-Assertion aus S01.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.

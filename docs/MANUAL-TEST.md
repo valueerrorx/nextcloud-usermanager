@@ -248,6 +248,12 @@ ist — das deckt `tests/pool.test.js` ab).
     **Erwartung:** Dry-Run zeigt die 5 als Änderung (die bereits aktiven als "keine
     Änderung"), nach Bestätigung sind alle in Nextcloud aktiv, Bericht 5 × `ok`,
     Statusspalte in der Tabelle nach "Aktualisieren" korrekt.
+58b. **Tun:** eine Auswahl bilden, die gleichzeitig den eigenen Admin-Account, einen bereits
+    deaktivierten und mindestens einen aktiven User enthält, Aktion "deaktivieren", "Vorschau"
+    klicken. **Erwartung:** die Vorschau zeigt alle **drei Blöcke gleichzeitig** befüllt:
+    "Wird ausgeführt" mit dem aktiven User (vorher -> nachher), "Keine Änderung" mit dem
+    bereits deaktivierten User samt Begründung, "Ausgeschlossen" mit dem Admin-Account samt
+    Begründung "eigener Admin-Zugang".
 59. **Tun:** Filter setzen, "alles auswählen" klicken.
     **Erwartung:** Auswahl entspricht genau dem aktuellen Filterergebnis, nicht allen Usern der Instanz.
 60. **Tun:** Batch "zu Gruppe hinzufügen" auf eine Auswahl, in der einige User schon Mitglied sind.
@@ -265,6 +271,10 @@ ist — das deckt `tests/pool.test.js` ab).
     User mitlöscht**. Nach dem Löschen eines Users mit Dateien gegenprüfen, dass dessen
     Dateien in Nextcloud tatsächlich weg sind — der Hinweis beschreibt also das reale
     Verhalten. Derselbe Hinweis erscheint auch bei der Einzellöschung (#48).
+62a. **Tun:** im Batch-Löschdialog zunächst eine **falsche** Zahl eingeben (abweichend von der
+    Dry-Run-Zahl), danach die **richtige**. **Erwartung:** der Bestätigen-Button bleibt bei der
+    falschen Zahl deaktiviert und aktiviert sich erst bei exakter, getrimmter Übereinstimmung —
+    auch wenn die Dry-Run-Zahl genau **1** ist (eine Auswahl mit nur einem zu löschenden User).
 63. **Tun:** Batch-Löschen mit einer Auswahl, die den eigenen Admin-Account enthält.
     **Erwartung:** Admin ist ausgeschlossen, die zu tippende Zahl ist um 1 kleiner als die Rohauswahl.
 64. **Tun:** Batch über 30+ User laufen lassen und den Fortschritt beobachten.
@@ -299,6 +309,11 @@ ist — das deckt `tests/pool.test.js` ab).
 71. **Tun:** Batch-Auswahl per CSV-Userliste (`userliste-mit-header.csv` und ohne Header),
     darin ein nicht existierender Username. **Erwartung:** unbekannter Name erscheint in der
     Vorschau als "nicht gefunden" und wird von der Ausführung ausgeschlossen.
+71a. **Tun:** nach einem abgeschlossenen Batch-Job (egal ob normal beendet oder abgebrochen)
+    die Usertabelle beobachten, **ohne** manuell "Neu laden" zu klicken.
+    **Erwartung:** die Liste lädt sich automatisch neu (der "Stand:"-Zeitstempel aktualisiert
+    sich), die soeben geänderten Werte (z. B. Status nach Aktivieren/Deaktivieren, Mitgliedschaft
+    nach Gruppenänderung) sind sofort korrekt sichtbar, ohne dass der Admin selbst nachlädt.
 72. *(gestrichen — gleichzeitige Requests sind von Hand nicht verlässlich zählbar. Die
     Parallelität 4 ist durch `tests/pool.test.js` und `tests/pipeline.test.js` abgedeckt.
     Manuell bleibt nur: im UI steht nirgends eine Zahl als "Nextcloud-Limit", und es gibt
