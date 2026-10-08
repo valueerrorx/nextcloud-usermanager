@@ -296,6 +296,43 @@ describe('users.list / users.onLoadProgress', () => {
   });
 });
 
+// S07 A5 Abnahme 9: actions.run ist nie global fehlerhaft, außer wenn keine Verbindung besteht.
+describe('actions.run — ohne Verbindung', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('ohne Verbindung -> { ok: false, messageId: nicht_verbunden }', async () => {
+    const result = await handlers.get('actions.run')(null, { jobId: 'job', action: 'user.enable', items: ['alice'], params: {} });
+    expect(result).toEqual({ ok: false, messageId: 'nicht_verbunden', message: expect.any(String) });
+  });
+});
+
+// Defect fix: eine unbekannte Action-ID wirft innerhalb von operations.js#getSteps (gewollt, A2),
+// aber actions.run darf dadurch nie zu einem abgelehnten invoke werden (ARCHITECTURE §3).
+describe('actions.run — unbekannte Aktion', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim', remember: false });
+  });
+
+  it('löst auf statt abzulehnen und liefert { ok: false, messageId: unbekannte_aktion }', async () => {
+    await expect(
+      handlers.get('actions.run')(null, { jobId: 'job-unbekannt', action: 'user.doesNotExist', items: ['alice'], params: {} }),
+    ).resolves.toEqual({ ok: false, messageId: 'unbekannte_aktion', message: expect.any(String) });
+  });
+});
+
 describe('connection.status — kein Secret im Rückgabewert', () => {
   beforeEach(async () => {
     handlers.clear();

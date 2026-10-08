@@ -170,6 +170,9 @@ describe('src/preload/index.cjs', () => {
       'onCertificatePrompt',
       'usersList',
       'onUsersLoadProgress',
+      'actionsRun',
+      'actionsStop',
+      'onActionsProgress',
     ];
     for (const name of required) {
       expect(Object.keys(exposedApi)).toContain(name);
@@ -216,6 +219,31 @@ describe('src/preload/index.cjs', () => {
     dispose();
     expect(removeListenerCalls).toEqual([{ channel: 'users.onLoadProgress', listener: onCalls[0].listener }]);
   });
+
+  it('actionsRun() leitet das Argument unverändert an den Kanal actions.run weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { jobId: 'job1', action: 'user.enable', items: ['alice'], params: {} };
+    await exposedApi.actionsRun(args);
+    expect(invokeCalls).toEqual([{ channel: 'actions.run', args: [args] }]);
+  });
+
+  it('actionsStop() leitet das Argument unverändert an den Kanal actions.stop weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { jobId: 'job1' };
+    await exposedApi.actionsStop(args);
+    expect(invokeCalls).toEqual([{ channel: 'actions.stop', args: [args] }]);
+  });
+
+  it('onActionsProgress() abonniert actions.onProgress und gibt einen Disposer zurück', () => {
+    const { exposedApi, onCalls, removeListenerCalls } = loadPreloadWithStubbedElectron();
+    const callback = () => {};
+    const dispose = exposedApi.onActionsProgress(callback);
+    expect(onCalls).toHaveLength(1);
+    expect(onCalls[0].channel).toBe('actions.onProgress');
+    expect(typeof dispose).toBe('function');
+    dispose();
+    expect(removeListenerCalls).toEqual([{ channel: 'actions.onProgress', listener: onCalls[0].listener }]);
+  });
 });
 
 describe('src/main/', () => {
@@ -224,10 +252,11 @@ describe('src/main/', () => {
   // daher keine exakte Allowlist (REVIEW-NOTES: "Verbotenes aufzählen, nicht Erlaubtes").
   // 'ocs' ist mit S03 entfernt - das Verzeichnis existiert ab dann (gleiches Schema wie
   // 'src/shared/' nach S02). 'session.js', 'credentials.js' und 'tls.js' sind mit S04 entfernt -
-  // sie entstehen jetzt legitim (REVIEW-NOTES [S03]).
+  // sie entstehen jetzt legitim (REVIEW-NOTES [S03]). 'actions' ist mit S07 entfernt - das
+  // Verzeichnis existiert ab dann (REVIEW-NOTES [S03]: Scope-Guards bei jedem neuen Modul mitpflegen).
   it('enthält keines der in S01 verbotenen Module/Verzeichnisse', () => {
     const entries = readdirSync(path.join(root, 'src', 'main'));
-    const forbidden = ['log.js', 'files.js', 'actions'];
+    const forbidden = ['log.js', 'files.js'];
     for (const name of forbidden) {
       expect(entries).not.toContain(name);
     }

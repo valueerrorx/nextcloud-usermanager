@@ -21,4 +21,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('users.onLoadProgress', listener);
     return () => ipcRenderer.removeListener('users.onLoadProgress', listener);
   },
+  actionsRun: (args) => ipcRenderer.invoke('actions.run', args),
+  actionsStop: (args) => ipcRenderer.invoke('actions.stop', args),
+  // Returns a disposer so a remount never stacks listeners.
+  onActionsProgress: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on('actions.onProgress', listener);
+    return () => ipcRenderer.removeListener('actions.onProgress', listener);
+  },
 });

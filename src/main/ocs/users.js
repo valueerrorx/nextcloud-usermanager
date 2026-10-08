@@ -31,3 +31,79 @@ export async function getUser(client, userid) {
   if (!result.ok) return mapOcsError(result, GET_USER_ERRORS, 'userliste_fehlgeschlagen');
   return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
 }
+
+// Enable/Disable/Delete: only 100/101 confirmed (RESEARCH-OCS §5); 101 is the only
+// endpoint-specific code, every other failure kind falls through via mapOcsError unchanged.
+const ENABLE_USER_ERRORS = { 101: 'aktion_fehlgeschlagen' };
+
+// PUT /cloud/users/{userid}/enable
+export async function enableUser(client, userid) {
+  const result = await client.request({ method: 'PUT', path: `/cloud/users/${encodeURIComponent(userid)}/enable` });
+  if (!result.ok) return mapOcsError(result, ENABLE_USER_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+const DISABLE_USER_ERRORS = { 101: 'aktion_fehlgeschlagen' };
+
+// PUT /cloud/users/{userid}/disable
+export async function disableUser(client, userid) {
+  const result = await client.request({ method: 'PUT', path: `/cloud/users/${encodeURIComponent(userid)}/disable` });
+  if (!result.ok) return mapOcsError(result, DISABLE_USER_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+const DELETE_USER_ERRORS = { 101: 'aktion_fehlgeschlagen' };
+
+// DELETE /cloud/users/{userid}
+export async function deleteUser(client, userid) {
+  const result = await client.request({ method: 'DELETE', path: `/cloud/users/${encodeURIComponent(userid)}` });
+  if (!result.ok) return mapOcsError(result, DELETE_USER_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+// "User bearbeiten" codes (RESEARCH-OCS §5): 101 ungültiges Argument, 107 Passwort-Policy,
+// 112 Backend unterstützt Passwortsetzen nicht, 113 Feld nicht editierbar.
+const SET_USER_FIELD_ERRORS = {
+  101: 'aktion_fehlgeschlagen',
+  107: 'passwort_policy',
+  112: 'passwort_backend_nicht_unterstuetzt',
+  113: 'feld_nicht_editierbar',
+};
+
+// PUT /cloud/users/{userid} with one key/value pair - the only way to change a single field.
+export async function setUserField(client, userid, key, value) {
+  const result = await client.request({
+    method: 'PUT',
+    path: `/cloud/users/${encodeURIComponent(userid)}`,
+    form: { key, value },
+  });
+  if (!result.ok) return mapOcsError(result, SET_USER_FIELD_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+// Gruppen-Codes für User-zu-Gruppe (S07-batch-kern.md A1): 102 Gruppe existiert nicht, 103 kein Recht.
+const ADD_USER_TO_GROUP_ERRORS = { 102: 'gruppe_existiert_nicht', 103: 'kein_recht_fuer_gruppe' };
+
+// POST /cloud/users/{userid}/groups
+export async function addUserToGroup(client, userid, groupid) {
+  const result = await client.request({
+    method: 'POST',
+    path: `/cloud/users/${encodeURIComponent(userid)}/groups`,
+    form: { groupid },
+  });
+  if (!result.ok) return mapOcsError(result, ADD_USER_TO_GROUP_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+const REMOVE_USER_FROM_GROUP_ERRORS = { 102: 'gruppe_existiert_nicht', 103: 'kein_recht_fuer_gruppe' };
+
+// DELETE /cloud/users/{userid}/groups
+export async function removeUserFromGroup(client, userid, groupid) {
+  const result = await client.request({
+    method: 'DELETE',
+    path: `/cloud/users/${encodeURIComponent(userid)}/groups`,
+    form: { groupid },
+  });
+  if (!result.ok) return mapOcsError(result, REMOVE_USER_FROM_GROUP_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}

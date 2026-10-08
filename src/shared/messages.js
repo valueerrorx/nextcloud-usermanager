@@ -31,4 +31,11 @@ export const MESSAGES = Object.freeze({
   userliste_fehlgeschlagen: 'Die Benutzerliste konnte nicht geladen werden.',
   einzelabfragen_aktiv: 'Einzelabfragen aktiv, das kann dauern.',
   einige_user_uebersprungen: 'Einige Benutzer konnten nicht geladen werden und fehlen in der Liste.',
+  aktion_fehlgeschlagen: 'Die Aktion ist fehlgeschlagen.',
+  feld_nicht_editierbar: 'Dieses Feld kann nicht geändert werden.',
+  passwort_policy: 'Das Passwort erfüllt die Passwortrichtlinie nicht.',
+  passwort_backend_nicht_unterstuetzt: 'Dieses Benutzer-Backend unterstützt kein Passwort-Setzen.',
+  gruppe_existiert_nicht: 'Diese Gruppe existiert nicht.',
+  kein_recht_fuer_gruppe: 'Keine Berechtigung für diese Gruppe.',
+  unbekannte_aktion: 'Unbekannte Aktion.',
 });

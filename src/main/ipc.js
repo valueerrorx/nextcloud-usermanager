@@ -3,6 +3,7 @@ import { normalizeBaseUrl } from '../shared/url.js';
 import { MESSAGES } from '../shared/messages.js';
 import { checkConnection } from './ocs/connection.js';
 import { fetchAllUsers } from './ocs/userList.js';
+import { runJob } from './actions/pipeline.js';
 import { session } from './session.js';
 import * as credentials from './credentials.js';
 import { createTlsController } from './tls.js';
@@ -146,6 +147,45 @@ async function handleUsersList() {
   return { ok: true, users: result.users, mode: result.mode, uebersprungen: result.uebersprungen, fetchedAt: Date.now() };
 }
 
+// actions.run never fails globally (ARCHITECTURE §3) - only "not connected" returns ok:false,
+// every per-item error lives in results. The finally always runs, even if runJob throws, so a
+// job's state never gets stuck at 'laufend' and its stop flag never leaks past the job's end.
+async function handleActionsRun({ jobId, action, items, params }) {
+  if (!session.connected) {
+    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+  }
+  session.setJobState(jobId, 'laufend');
+  try {
+    return await runJob({
+      jobId,
+      action,
+      items,
+      params,
+      client: session.client,
+      shouldStop: () => session.shouldStop(jobId),
+      onProgress: (payload) => broadcast('actions.onProgress', payload),
+    });
+  } catch {
+    // operations.js#getSteps throws for an unknown action id - a programmer error inside main
+    // (by design, see operations.js), but this invoke channel must still resolve, never reject
+    // (ARCHITECTURE §3: "nie global fehlerhaft").
+    return { ok: false, messageId: 'unbekannte_aktion', message: MESSAGES.unbekannte_aktion };
+  } finally {
+    session.setJobState(jobId, 'beendet');
+    session.clearStopFlag(jobId);
+  }
+}
+
+// Never throws, always a defined zustand (ARCHITECTURE §5) - a double click on "Abbrechen" is
+// harmless because 'bereits_beendet' and 'unbekannt' are both non-error outcomes.
+function handleActionsStop({ jobId }) {
+  const zustand = session.getJobState(jobId);
+  if (zustand === null) return { ok: true, zustand: 'unbekannt' };
+  if (zustand === 'beendet') return { ok: true, zustand: 'bereits_beendet' };
+  session.setStopFlag(jobId);
+  return { ok: true, zustand: 'gestoppt' };
+}
+
 // Only place with ipcMain.handle/on (ARCHITECTURE §2).
 export function registerIpcHandlers() {
   ipcMain.handle('app.version', () => ({ ok: true, version: app.getVersion() }));
@@ -154,6 +194,8 @@ export function registerIpcHandlers() {
   ipcMain.handle('connection.status', () => handleStatus());
   ipcMain.handle('connection.forgetSaved', () => credentials.forget());
   ipcMain.handle('users.list', () => handleUsersList());
+  ipcMain.handle('actions.run', (event, args) => handleActionsRun(args));
+  ipcMain.handle('actions.stop', (event, args) => handleActionsStop(args));
   ipcMain.handle('tls.respondCertificate', (event, args) => {
     const result = tlsController.respond(args);
     // Push the accepted exception into session so buildStatus() reports it (REVIEW-NOTES [S04]:
