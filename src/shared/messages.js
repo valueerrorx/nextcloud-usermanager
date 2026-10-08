@@ -74,4 +74,9 @@ export const MESSAGES = Object.freeze({
   prefix_laenge: 'Das Prefix muss zwischen 3 und 20 Zeichen lang sein.',
   prefix_zeichen: 'Das Prefix darf nur Buchstaben und Ziffern enthalten.',
   prefix_grossbuchstabe: 'Das Prefix muss mit einem Großbuchstaben beginnen.',
+  // S10: Importvorschau - Datei- und Gruppen-Fehler jenseits der Zeilenfehler aus S09.
+  datei_lesen_fehlgeschlagen: 'Die Datei konnte nicht gelesen werden.',
+  gruppe_existiert: 'Diese Gruppe existiert schon.',
+  gruppe_anlegen_fehlgeschlagen: 'Die Gruppe konnte nicht angelegt werden.',
+  gruppenliste_fehlgeschlagen: 'Die Gruppenliste konnte nicht geladen werden.',
 });

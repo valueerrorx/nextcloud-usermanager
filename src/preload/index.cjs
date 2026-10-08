@@ -30,4 +30,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('actions.onProgress', listener);
   },
   filesSaveCsv: (args) => ipcRenderer.invoke('files.saveCsv', args),
+  groupsList: () => ipcRenderer.invoke('groups.list'),
+  groupsCreate: (args) => ipcRenderer.invoke('groups.create', args),
+  filesOpenCsv: (args) => ipcRenderer.invoke('files.openCsv', args),
 });

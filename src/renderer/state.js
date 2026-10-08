@@ -56,3 +56,15 @@ export const jobFortschritt = ref(null); // { done, total } | null
 export const jobResults = ref([]); // ItemResult[] aus actions.run
 export const jobSummary = ref(null); // { ok, fehler, nichtAusgefuehrt, teilweise } | null
 export const dryRunPlan = ref(null); // letzter bestätigter planActions()-Output
+
+// Importvorschau (S10, ARCHITECTURE §3.1/§6) - CSV, Optionen und Vorschau-Status von
+// ImportView.vue. buildImportPlan läuft rein im Renderer (shared/importPlan.js), kein Kanal nötig.
+export const importDatei = ref(null); // { path, zeilenAnzahl } | null
+export const importRows = ref([]); // RawRow[] aus parseImportCsv
+export const importPlanRows = ref([]); // PreviewRow[] aus buildImportPlan
+export const importSummary = ref(null); // { neu, kollisionAufgeloest, fehler } | null
+export const importPrefix = ref('');
+export const importOrder = ref('givenFirst'); // 'givenFirst' | 'surnameFirst'
+export const importGruppen = ref([]); // ausgewählte Zielgruppen, groupId-Strings
+export const importQuota = ref(null); // QUOTA_PRESETS-id | null, Kontingent für neue User
+export const importFehler = ref(null); // deutscher Dateifehlertext, nur bei ungültiger Datei gesetzt

@@ -3,11 +3,12 @@ import { normalizeBaseUrl } from '../shared/url.js';
 import { MESSAGES } from '../shared/messages.js';
 import { checkConnection } from './ocs/connection.js';
 import { fetchAllUsers } from './ocs/userList.js';
+import { listGroups, createGroup } from './ocs/groups.js';
 import { runJob } from './actions/pipeline.js';
 import { session } from './session.js';
 import * as credentials from './credentials.js';
 import { createTlsController } from './tls.js';
-import { saveCsv } from './files.js';
+import { saveCsv, openCsv } from './files.js';
 
 // net.fetch is Electron's Chromium-backed fetch, never globalThis.fetch (ARCHITEKTURKORREKTUR):
 // app.on('certificate-error') only fires for Chromium requests, so only net.fetch lets the user's
@@ -177,6 +178,32 @@ async function handleActionsRun({ jobId, action, items, params }) {
   }
 }
 
+// groups.list / groups.create (S10 A3) - gleiche nicht_verbunden-Wächter wie users.list/actions.run,
+// sonst dieselbe Schmalspur-Delegation an ocs/groups.js.
+async function handleGroupsList() {
+  if (!session.connected) {
+    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+  }
+  const result = await listGroups(session.client);
+  if (!result.ok) return result;
+  return { ok: true, groups: result.data };
+}
+
+// groupid wird hier validiert, nicht nur im Renderer (S10-Review MINOR 2): ein schreibender
+// Server-Call verlässt sich nicht auf die Clientprüfung, ein leerer/nur-Leerzeichen-Name geht
+// sonst unvalidiert bis zu POST /cloud/groups durch.
+async function handleGroupsCreate({ groupid }) {
+  if (!session.connected) {
+    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+  }
+  if (!groupid || groupid.trim() === '') {
+    return { ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen', message: MESSAGES.gruppe_anlegen_fehlgeschlagen };
+  }
+  const result = await createGroup(session.client, groupid);
+  if (!result.ok) return result;
+  return { ok: true };
+}
+
 // Never throws, always a defined zustand (ARCHITECTURE §5) - a double click on "Abbrechen" is
 // harmless because 'bereits_beendet' and 'unbekannt' are both non-error outcomes.
 function handleActionsStop({ jobId }) {
@@ -197,7 +224,10 @@ export function registerIpcHandlers() {
   ipcMain.handle('users.list', () => handleUsersList());
   ipcMain.handle('actions.run', (event, args) => handleActionsRun(args));
   ipcMain.handle('actions.stop', (event, args) => handleActionsStop(args));
+  ipcMain.handle('groups.list', () => handleGroupsList());
+  ipcMain.handle('groups.create', (event, args) => handleGroupsCreate(args));
   ipcMain.handle('files.saveCsv', (event, args) => saveCsv(args));
+  ipcMain.handle('files.openCsv', (event, args) => openCsv(args));
   ipcMain.handle('tls.respondCertificate', (event, args) => {
     const result = tlsController.respond(args);
     // Push the accepted exception into session so buildStatus() reports it (REVIEW-NOTES [S04]:

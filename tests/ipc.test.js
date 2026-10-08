@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
   app: fakeApp,
   net: { fetch: vi.fn() },
   BrowserWindow: { getAllWindows: vi.fn(() => []) },
-  dialog: { showSaveDialog: vi.fn() },
+  dialog: { showSaveDialog: vi.fn(), showOpenDialog: vi.fn() },
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => false),
     getSelectedStorageBackend: vi.fn(() => 'basic_text'),
@@ -380,5 +380,78 @@ describe('files.saveCsv', () => {
     const result = await handlers.get('files.saveCsv')(null, { vorschlag: 'ergebnis.csv', inhalt: 'x' });
 
     expect(result).toEqual({ ok: false, messageId: 'abgebrochen', message: expect.any(String) });
+  });
+});
+
+// S10 A3: groups.list / groups.create / files.openCsv — neue Kanäle, namentlich im Preload,
+// dieselbe nicht_verbunden-Wächter wie users.list/actions.run.
+describe('groups.list / groups.create / files.openCsv', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('registriert die drei neuen Kanäle', () => {
+    const channels = [...handlers.keys()];
+    expect(channels).toContain('groups.list');
+    expect(channels).toContain('groups.create');
+    expect(channels).toContain('files.openCsv');
+  });
+
+  it('groups.list ohne Verbindung -> { ok: false, messageId: nicht_verbunden }', async () => {
+    const result = await handlers.get('groups.list')();
+    expect(result).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+  });
+
+  it('groups.create ohne Verbindung -> { ok: false, messageId: nicht_verbunden }', async () => {
+    const result = await handlers.get('groups.create')(null, { groupid: 'admins' });
+    expect(result).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+  });
+
+  it('groups.list verbunden liefert { ok: true, groups }', async () => {
+    net.fetch.mockImplementation(async (url) => {
+      if (url.includes('/cloud/groups')) return fakeResponse({ status: 200, body: envelope(100, { groups: ['admins'] }) });
+      return okResponse();
+    });
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+
+    const result = await handlers.get('groups.list')();
+    expect(result).toEqual({ ok: true, groups: ['admins'] });
+  });
+
+  it('groups.create verbunden ruft POST /cloud/groups und liefert { ok: true }', async () => {
+    net.fetch.mockImplementation(async (url, options) => {
+      if (url.includes('/cloud/groups') && options.method === 'POST') return fakeResponse({ status: 200, body: envelope(100, null) });
+      return okResponse();
+    });
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+
+    const result = await handlers.get('groups.create')(null, { groupid: 'neu' });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('files.openCsv delegiert an dialog.showOpenDialog, wirft nicht bei einem Dialogfehler', async () => {
+    dialog.showOpenDialog.mockRejectedValue(new Error('dialog kaputt'));
+
+    const result = await handlers.get('files.openCsv')(null, { zweck: 'import' });
+
+    expect(result).toEqual({ ok: false, messageId: 'datei_lesen_fehlgeschlagen', message: expect.any(String) });
+  });
+
+  // MINOR-Fix S10-Review 2: ein leerer/nur-Leerzeichen-Name darf POST /cloud/groups nie erreichen -
+  // Validierung gehört in Main, nicht nur in die View.
+  it('groups.create mit leerem/Leerzeichen-Namen -> gruppe_anlegen_fehlgeschlagen, kein Request', async () => {
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    net.fetch.mockClear();
+
+    const result = await handlers.get('groups.create')(null, { groupid: '   ' });
+
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen' });
+    expect(net.fetch).not.toHaveBeenCalled();
   });
 });

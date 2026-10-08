@@ -19,3 +19,31 @@ export async function saveCsv(args) {
     return { ok: false, messageId: 'export_fehlgeschlagen', message: MESSAGES.export_fehlgeschlagen };
   }
 }
+
+// Dialogtitel je Zweck (S10-Review MINOR 6: `zweck` war in Preload/IPC-Signatur, aber hier toter
+// Parameter). Unbekannter/fehlender Zweck fällt auf einen generischen Titel zurück.
+const TITEL_JE_ZWECK = {
+  import: 'CSV für den Import wählen',
+  userliste: 'CSV mit Benutzerliste wählen',
+};
+
+// files.openCsv (S10 A1): Dateiauswahl für CSV-Import und Username-Liste. Einfachauswahl, Filter
+// auf .csv. Ganzer Rumpf in einem try/catch (ARCHITECTURE §3: invoke-Kanäle werfen nie) - das war
+// bei saveCsv ein CRITICAL in S08.
+export async function openCsv(args = {}) {
+  try {
+    const { zweck } = args;
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: TITEL_JE_ZWECK[zweck] ?? 'CSV wählen',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || !filePaths || filePaths.length === 0) {
+      return { ok: false, messageId: 'abgebrochen', message: MESSAGES.abgebrochen };
+    }
+    const text = await fs.readFile(filePaths[0], 'utf8');
+    return { ok: true, path: filePaths[0], text };
+  } catch {
+    return { ok: false, messageId: 'datei_lesen_fehlgeschlagen', message: MESSAGES.datei_lesen_fehlgeschlagen };
+  }
+}

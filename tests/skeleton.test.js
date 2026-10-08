@@ -208,6 +208,9 @@ describe('src/preload/index.cjs', () => {
       'actionsStop',
       'onActionsProgress',
       'filesSaveCsv',
+      'groupsList',
+      'groupsCreate',
+      'filesOpenCsv',
     ];
     for (const name of required) {
       expect(Object.keys(exposedApi)).toContain(name);
@@ -285,6 +288,29 @@ describe('src/preload/index.cjs', () => {
     expect(typeof dispose).toBe('function');
     dispose();
     expect(removeListenerCalls).toEqual([{ channel: 'actions.onProgress', listener: onCalls[0].listener }]);
+  });
+
+  // Testlücke S10-Review: groupsList/groupsCreate/filesOpenCsv standen nur in der required-Liste
+  // oben, aber ohne Routing-Test (Kanal + Argumente) wie appVersion/connect/usersList - Abnahme 4 war
+  // dadurch nicht geprüft.
+  it('groupsList() ruft ausschließlich den Kanal groups.list ohne Argumente auf', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    await exposedApi.groupsList();
+    expect(invokeCalls).toEqual([{ channel: 'groups.list', args: [] }]);
+  });
+
+  it('groupsCreate() leitet das Argument unverändert an den Kanal groups.create weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { groupid: 'neue-gruppe' };
+    await exposedApi.groupsCreate(args);
+    expect(invokeCalls).toEqual([{ channel: 'groups.create', args: [args] }]);
+  });
+
+  it('filesOpenCsv() leitet das Argument unverändert an den Kanal files.openCsv weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { zweck: 'import' };
+    await exposedApi.filesOpenCsv(args);
+    expect(invokeCalls).toEqual([{ channel: 'files.openCsv', args: [args] }]);
   });
 });
 
