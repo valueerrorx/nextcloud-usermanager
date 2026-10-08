@@ -441,3 +441,42 @@ ist — das deckt `tests/pool.test.js` ab).
      **Erwartung:** keine Passwortspalte, keine Geburtsdaten.
 101. **Tun:** einen Link in der App anklicken bzw. `window.open` provozieren.
      **Erwartung:** kein neues Electron-Fenster, keine Navigation weg von der App.
+
+## K. UI-Designsystem (S09a, reiner Umbau der Darstellung)
+
+102. **Tun:** App starten, Sidebar betrachten. **Erwartung:** dunkle Sidebar (`#161b22`) mit
+     Icon je Menüpunkt (Verbindung/Dashboard/Benutzer/Gruppen/Import), aktiver Eintrag optisch
+     hervorgehoben, gesperrte Einträge vor dem Verbinden abgeblendet mit Tooltip
+     "Bitte zuerst verbinden".
+103. **Tun:** Verbindungsansicht ansehen. **Erwartung:** Kartenrahmen, Bootstrap-Formularfelder
+     dunkel, Status-Punkt (`conn-dot`) vor "Verbunden"/"Nicht verbunden", Icon-Button zum
+     Löschen des gespeicherten Zugangs hat Tooltip und ist per Tastatur/Screenreader über
+     `aria-label` erkennbar.
+104. **Tun:** Zertifikatsausnahme aktivieren (Verbindung zu einem Server mit selbstsigniertem
+     Zertifikat). **Erwartung:** rotes Banner mit Warn-Icon oben im Hauptbereich, bleibt über
+     Viewwechsel sichtbar.
+105. **Tun:** Benutzertabelle mit vielen Einträgen füllen und scrollen.
+     **Erwartung:** Kopfzeile (groß geschrieben, gedämpfte Farbe) bleibt beim Scrollen stehen
+     (Sticky-Header), kein Zebra-Streifen, dezenter Hover-Tint auf der Zeile unter dem Cursor,
+     Status als farbige Pill ("aktiv"/"deaktiviert"), Gruppen als kleine Chips, aktive
+     Sortierspalte zeigt ein Pfeil-Icon.
+106. **Tun:** "Neu laden" klicken, während die Liste noch lädt beobachten.
+     **Erwartung:** Reload-Icon dreht sich (`spin`), Button ist währenddessen gesperrt.
+107. **Tun:** Aktionsleiste mit einer Auswahl öffnen, zwischen den Aktionen wechseln.
+     **Erwartung:** dunkle Bootstrap-Formularfelder, der "Vorschau"-Button zeigt das zur Aktion
+     passende Icon aus der Tabelle in S09a (z. B. Papierkorb bei "Löschen").
+108. **Tun:** eine Batch-Aktion mit Vorschau starten, inkl. Löschbestätigung mit Zahleneingabe.
+     **Erwartung:** swal2-Dialog erscheint dunkel (Karten-Hintergrund, helle Schrift, blauer
+     Bestätigen-Button), die Löschbestätigung verhält sich **exakt wie vorher** (Button bis zur
+     exakten Zahleneingabe gesperrt, Hinweis auf das Mitlöschen der Dateien) - keine
+     Funktionsänderung, nur Optik.
+109. **Tun:** einen Batch-Job laufen lassen und abbrechen. **Erwartung:** Fortschrittsanzeige
+     und "Abbrechen"-Button mit X-Icon, nach Abschluss Ergebnis-Tabelle und CSV-Export-Button
+     mit Download-Icon, Verhalten unverändert zur Zeit vor S09a.
+110. **Tun:** eine Ansicht ohne Treffer/Inhalt aufrufen (z. B. Benutzerfilter ohne Treffer,
+     oder Dashboard/Gruppen/Import vor ihrer Implementierung). **Erwartung:** zentrierter
+     Empty-State mit großem, gedämpftem Icon und Text statt einer leeren weißen Fläche.
+111. **Tun:** `npx vite build && timeout 20 npx electron .` headless ausführen.
+     **Erwartung:** Prozess startet und läuft bis zum Timeout ohne Absturz; keine
+     Konsolenfehler außer der erwarteten Terminierung durch `timeout`. Fenstervisuelle Prüfung
+     ist headless nicht möglich - bei Gelegenheit zusätzlich mit echtem Display nachholen.

@@ -79,6 +79,10 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 
 - [S09] **Eine überlebende Mutation ist nicht automatisch eine Testlücke — manchmal ist der Code nicht beobachtbar.** Der `'|'`-Trenner im Identitätsschlüssel (`normVorname|normNachname|ddmmyyyy`) überlebt jede Mutation. Beweis, warum kein Test möglich ist: Der Identitätsvergleich findet nur bei **gleichem finalen Username** statt, was einen identischen Vornamen erzwingt (der wird nie gekürzt). Für eine Kollision der verketteten Form bräuchte es `vn+nn1+d1 = vn+nn2+d2`; das Datum ist immer exakt 8 Zeichen, also folgt `nn1=nn2` und `d1=d2`. Der Trenner kann kein Ergebnis ändern. **Richtig ist: die Unbeobachtbarkeit beweisen und dokumentieren, nicht einen wirkungslosen Test erzwingen.** Gleiche Lage beim Trennzeichen-Gleichstand in `csvImport.js`, wo der Coder das selbst erkannt und den puren Helfer exponiert hat.
 
+- [S09a] **Eine CSP-Erweiterung für ein Asset deckt nicht alle Assets derselben Bibliothek.** `font-src 'self'` wurde für die Icon-Font ergänzt, aber Bootstrap rendert Formular-Indikatoren als `data:image/svg+xml` — ohne `img-src` blockiert `default-src` sie, und `.form-select` hat zusätzlich `-webkit-appearance: none`, also gar keinen Pfeil mehr. **Bei jeder neuen UI-Bibliothek alle Asset-Arten prüfen: Fonts, Bilder, Data-URIs.**
+- [S09a] **Ein Smoke-Start beweist nur, was auf dem ersten Bildschirm sichtbar ist.** `timeout 20 npx electron .` lief fehlerfrei, obwohl alle Dropdowns defekt waren — `.form-select` erscheint erst nach erfolgreicher Verbindung. **Smoke-Tests nie als Abdeckung verkaufen.**
+- [S09a] **Ein Restyle kann Accessibility zerstören.** `<label>` umschloss das Input (implizite Zuordnung), danach stand es als Geschwister ohne `for` daneben — drei Felder inklusive App-Passwort hatten keinen zugänglichen Namen. **Bei jedem Umbau von Formular-Markup `for`/`id` prüfen.**
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
