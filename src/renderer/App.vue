@@ -2,18 +2,20 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import Swal from 'sweetalert2';
 import { MESSAGES } from '../shared/messages.js';
-import { activeView, certException, connectError, connection } from './state.js';
-import ConnectView from './views/ConnectView.vue';
+import { uiPhase } from '../shared/connectionUi.js';
+import { startup } from './connectFlow.js';
+import { activeView, certException, connectError, connection, startupGeprueft } from './state.js';
+import AboutModal from './components/AboutModal.vue';
+import ConnectDialog from './components/ConnectDialog.vue';
+import SidebarFooter from './components/SidebarFooter.vue';
 import DashboardView from './views/DashboardView.vue';
 import UsersView from './views/UsersView.vue';
 import GroupsView from './views/GroupsView.vue';
 import ImportView from './views/ImportView.vue';
 
-// 'connect' stays reachable always; the other four need a successful connection (ARCHITECTURE §7
-// "Startverhalten" - Dashboard/Benutzer/Gruppen/Import sind erst nach erfolgreichem Verbinden
-// erreichbar). icon ist nur Darstellung (bi-* Klasse aus der Icon-Tabelle in S09a).
+// All views need a connection; until then the connection popup sits above them. icon ist nur
+// Darstellung (bi-* Klasse aus der Icon-Tabelle in S09a).
 const views = {
-  connect: { label: 'Verbindung', icon: 'bi-plug', component: ConnectView, gated: false },
   dashboard: { label: 'Dashboard', icon: 'bi-speedometer2', component: DashboardView, gated: true },
   users: { label: 'Benutzer', icon: 'bi-people-fill', component: UsersView, gated: true },
   groups: { label: 'Gruppen', icon: 'bi-collection-fill', component: GroupsView, gated: true },
@@ -28,6 +30,8 @@ function selectView(key) {
 }
 
 const version = ref('');
+const showAbout = ref(false);
+const phase = computed(() => uiPhase({ checked: startupGeprueft.value, connected: connection.connected }));
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -64,7 +68,7 @@ async function handleCertificatePrompt({ requestId, host, fingerprint, subject, 
     certException.value = { host, fingerprint };
     return;
   }
-  // The decline is otherwise dead: route it into ConnectView's error path so the user sees it,
+  // The decline is otherwise dead: route it into the connection popup's error path so the user sees it,
   // instead of relying on the pending connect() call to resolve first (REVIEW-NOTES [S04]).
   connectError.value = response.messageId ? MESSAGES[response.messageId] : MESSAGES.zertifikat_abgelehnt;
 }
@@ -76,6 +80,10 @@ onMounted(async () => {
     handleCertificatePrompt(payload).catch((error) => {
       console.error('Failed to handle certificate prompt:', error);
     });
+  });
+
+  startup().catch((error) => {
+    console.error('Startup check failed:', error);
   });
 
   try {
@@ -116,9 +124,10 @@ onUnmounted(() => {
         />
         <span>{{ view.label }}</span>
       </button>
-      <div class="sidebar-footer">
-        v{{ version }}
-      </div>
+      <SidebarFooter
+        :version="version"
+        @about="showAbout = true"
+      />
     </nav>
     <main class="main-area">
       <p
@@ -132,7 +141,26 @@ onUnmounted(() => {
         Unsichere Zertifikatsausnahme aktiv für <strong>{{ certException.host }}</strong>
         (<code class="mono">{{ certException.fingerprint }}</code>)
       </p>
-      <component :is="currentComponent" />
+      <p
+        v-if="phase === 'pruefe'"
+        class="startup-check"
+      >
+        <i
+          class="bi bi-hourglass-split"
+          aria-hidden="true"
+        />
+        Verbindung wird geprüft…
+      </p>
+      <component
+        :is="currentComponent"
+        v-else-if="phase === 'bereit'"
+      />
     </main>
+    <ConnectDialog v-if="phase === 'dialog'" />
+    <AboutModal
+      v-if="showAbout"
+      :version="version"
+      @close="showAbout = false"
+    />
   </div>
 </template>

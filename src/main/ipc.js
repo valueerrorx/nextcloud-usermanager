@@ -1,6 +1,8 @@
-import { ipcMain, app, net, BrowserWindow } from 'electron';
+import { ipcMain, app, net, shell, BrowserWindow } from 'electron';
 import { normalizeBaseUrl } from '../shared/url.js';
 import { MESSAGES } from '../shared/messages.js';
+import { describeError } from '../shared/logSafe.js';
+import { isAllowedExternalUrl } from '../shared/externalUrl.js';
 import { checkConnection } from './ocs/connection.js';
 import { fetchAllUsers } from './ocs/userList.js';
 import { listGroups, createGroup, deleteGroup } from './ocs/groups.js';
@@ -69,8 +71,10 @@ function buildStatus() {
 // invoke-Kanäle werfen nie"). Destrukturierung jetzt innerhalb des try, wie files.js es schon
 // immer richtig gemacht hat.
 async function handleConnect(args) {
+  let secrets = [];
   try {
     const { baseUrl, adminUser, appPassword, remember } = args;
+    secrets = [appPassword];
     const normalized = normalizeBaseUrl(baseUrl);
     if (!normalized.ok) {
       return { ok: false, messageId: normalized.messageId, message: MESSAGES[normalized.messageId] };
@@ -103,16 +107,29 @@ async function handleConnect(args) {
       response.message = MESSAGES[saved.messageId];
     }
     return response;
-  } catch {
+  } catch (error) {
+    // Logged (never the password) - a swallowed exception made real failures invisible.
+    console.error('connection.connect failed:', describeError(error, secrets));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
 
 async function handleConnectSaved() {
+  let secrets = [];
+  try {
+    return await connectSaved((saved) => { secrets = [saved.appPassword]; });
+  } catch (error) {
+    console.error('connection.connectSaved failed:', describeError(error, secrets));
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
+}
+
+async function connectSaved(onLoaded) {
   const saved = await credentials.load();
   if (!saved) {
     return { ok: false, messageId: 'kein_gespeicherter_zugang', message: MESSAGES.kein_gespeicherter_zugang };
   }
+  onLoaded(saved);
 
   const result = await checkConnection({ ...saved, fetchImpl });
   if (!result.ok) {
@@ -133,6 +150,32 @@ async function handleConnectSaved() {
     secretStorage: 'keyring',
   });
   return { ok: true, status: buildStatus() };
+}
+
+// Logout: drops the session and deletes the saved credential so auto-connect cannot reconnect.
+async function handleLogout() {
+  try {
+    session.disconnect();
+    return await credentials.forget();
+  } catch (error) {
+    console.error('connection.logout failed:', describeError(error));
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
+}
+
+// Only allow-listed https URLs reach the OS browser (shell.openExternal).
+async function handleOpenExternal(args) {
+  try {
+    const { url } = args;
+    if (!isAllowedExternalUrl(url)) {
+      return { ok: false, messageId: 'link_nicht_erlaubt', message: MESSAGES.link_nicht_erlaubt };
+    }
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (error) {
+    console.error('app.openExternal failed:', describeError(error));
+    return { ok: false, messageId: 'link_nicht_erlaubt', message: MESSAGES.link_nicht_erlaubt };
+  }
 }
 
 // Never decrypts (credentials.peek) - the password must never be touched on a status poll.
@@ -276,7 +319,8 @@ export function registerIpcHandlers() {
   ipcMain.handle('connection.connect', (event, args) => handleConnect(args));
   ipcMain.handle('connection.connectSaved', () => handleConnectSaved());
   ipcMain.handle('connection.status', () => handleStatus());
-  ipcMain.handle('connection.forgetSaved', () => credentials.forget());
+  ipcMain.handle('connection.logout', () => handleLogout());
+  ipcMain.handle('app.openExternal', (event, args) => handleOpenExternal(args));
   ipcMain.handle('users.list', () => handleUsersList());
   ipcMain.handle('actions.run', (event, args) => handleActionsRun(args));
   ipcMain.handle('actions.stop', (event, args) => handleActionsStop(args));

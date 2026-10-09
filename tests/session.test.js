@@ -75,3 +75,17 @@ describe('actions.run / actions.stop - Jobzustand und Stop-Flag', () => {
     expect(session.shouldStop('job3')).toBe(false);
   });
 });
+
+describe('session.disconnect', () => {
+  it('leert Client und Zugangsdaten', () => {
+    session.setConnected({
+      client: {}, baseUrl: 'https://h', adminUser: 'a', adminUserId: 'a', appPassword: 'p', secretStorage: 'keyring',
+    });
+    session.disconnect();
+    expect(session.connected).toBe(false);
+    expect(session.baseUrl).toBeNull();
+    expect(session.appPassword).toBeNull();
+    expect(session.secretStorage).toBe('session');
+    session.resetForTests();
+  });
+});

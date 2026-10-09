@@ -6,7 +6,8 @@ contextBridge.exposeInMainWorld('api', {
   connect: (args) => ipcRenderer.invoke('connection.connect', args),
   connectSaved: () => ipcRenderer.invoke('connection.connectSaved'),
   connectionStatus: () => ipcRenderer.invoke('connection.status'),
-  forgetSaved: () => ipcRenderer.invoke('connection.forgetSaved'),
+  logout: () => ipcRenderer.invoke('connection.logout'),
+  openExternal: (args) => ipcRenderer.invoke('app.openExternal', args),
   respondCertificate: (args) => ipcRenderer.invoke('tls.respondCertificate', args),
   // Returns a disposer so a remount never stacks listeners.
   onCertificatePrompt: (callback) => {

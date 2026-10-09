@@ -480,3 +480,140 @@ body {
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* ---- Startpruefung, Verbindungs-Popup, Sidebar-Fuss, About-Karte (S16, Vorlage M365-Manager) ---- */
+.startup-check {
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 4rem;
+}
+
+.connect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(1, 4, 9, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.connect-card {
+  width: min(480px, 100%);
+  padding: 1.75rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--sidebar-border);
+  background: var(--card-bg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.connect-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 1.25rem;
+}
+
+/* swal2 (TLS prompt, warnings) must sit above the connection popup. */
+.swal2-container {
+  z-index: 3000 !important;
+}
+
+.sidebar-conn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sidebar-host {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-last {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0 0.5rem;
+}
+
+.sidebar-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  background: rgba(248, 81, 73, 0.08);
+  color: #f85149;
+  cursor: pointer;
+}
+
+.sidebar-logout-btn:hover {
+  background: rgba(248, 81, 73, 0.16);
+  border-color: rgba(248, 81, 73, 0.55);
+  color: #ff7b72;
+}
+
+.sidebar-version-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 0.68rem;
+  color: #6e7681;
+  cursor: pointer;
+}
+
+.sidebar-version-btn:hover {
+  color: var(--text-secondary);
+}
+
+.about-modal-backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2500;
+}
+
+.about-modal-content {
+  background: #21262d;
+  border: 1px solid var(--sidebar-border);
+  color: var(--text-primary);
+}
+
+.about-copyleft {
+  font-size: 3.25rem;
+  line-height: 1;
+  transform: scaleX(-1);
+}
+
+.about-year,
+.about-version {
+  color: var(--text-secondary);
+}
+
+.about-year {
+  font-size: 0.8rem;
+}
+
+.about-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.about-version {
+  font-size: 0.82rem;
+}
+
+.about-author {
+  font-size: 1.08rem;
+  margin: 0.75rem 0 0.25rem;
+}

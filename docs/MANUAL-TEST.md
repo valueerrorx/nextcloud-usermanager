@@ -42,11 +42,13 @@ ist — das deckt `tests/pool.test.js` ab).
 
 ## B. Verbindung und Zugangsdaten
 
-8. **Tun:** korrekte URL der Test-Instanz (`https://cloud.xapient.solutions`, DECISIONS
-   „Test-Instanz für die manuelle Abnahme“), Admin-User und App-Passwort eingeben, "Verbinden".
-   **Erwartung:** **ein** Vorgang prüft und verbindet (kein getrennter "Testen"-Schritt),
-   Erfolgsmeldung, Dashboard wird erreichbar. Es gibt keinen "Trennen"-Button; "Zugang löschen"
-   entfernt nur den gespeicherten Satz.
+8. **Tun:** App ohne gespeicherten Zugang starten. **Erwartung:** kurz "Verbindung wird geprüft…",
+   dann das Verbindungs-Popup über dem Dashboard, URL mit `https://cloud.xapient.solutions`
+   vorbelegt, Enter im Passwortfeld sendet ab, das Popup lässt sich nicht schließen.
+   Admin-User und App-Passwort eingeben, "Verbinden". **Erwartung:** Spinner im Button, danach
+   schließt das Popup, Erfolgs-Toast unten rechts ("Verbunden mit <host>"), Dashboard lädt Daten,
+   Sidebar zeigt grünen Punkt, Host und "Zuletzt: <Zeit>". Ein Fehlversuch zeigt den deutschen
+   Fehlertext im Popup (nie ein stilles Nichts).
 9. **Tun:** URL mit Trailing Slash eingeben (`https://host/`), ebenso
    `https://host/index.php` und `https://host/ocs/v1.php`.
    **Erwartung:** alle drei funktionieren identisch, URL wird normalisiert.
@@ -64,21 +66,24 @@ ist — das deckt `tests/pool.test.js` ab).
 15. **Tun:** 5-10 mal hintereinander mit falschem Passwort testen, bis Nextcloud `429` liefert.
     **Erwartung:** Meldung "Server blockt vorübergehend, bitte warten" — ausdrücklich **nicht**
     "falsches Passwort" und nicht "nicht erreichbar". Kein automatischer Wiederholungsversuch.
-16. **Tun:** mit "Zugang speichern" verbinden (Keyring aktiv, z. B. gnome-keyring läuft).
-    App beenden und neu starten. **Erwartung:** URL und Admin-Name vorbefüllt, Passwortfeld leer,
-    Button "Mit gespeichertem Zugang verbinden" funktioniert ohne erneute Eingabe.
+16. **Tun:** mit "Zugang speichern" verbinden (Keyring aktiv), App beenden und neu starten.
+    **Erwartung:** Auto-Connect ohne Popup, Erfolgs-Toast, Dashboard geladen.
 17. **Tun:** Keyring stoppen (`systemctl --user stop gnome-keyring-daemon` o. ä. bzw. Session
     ohne Keyring), App starten und mit "Zugang speichern" verbinden.
-    **Erwartung:** swal2-Warnung "kein Schlüsselbund verfügbar", Zugang wird **nicht**
-    gespeichert, Verbinden funktioniert trotzdem, dauerhafter Hinweis
-    "Zugang gilt nur für diese Sitzung". Nach Neustart ist kein gespeicherter Zugang vorhanden.
-18. **Tun:** gespeicherten Zugang anlegen, dann das App-Passwort in Nextcloud widerrufen,
-    App neu starten und "Mit gespeichertem Zugang verbinden".
-    **Erwartung:** Meldung "gespeichertes Passwort wurde abgelehnt", Dialog bleibt offen,
-    Passwortfeld leer, der gespeicherte Satz bleibt bis "Zugang löschen" erhalten.
+    **Erwartung:** swal2-Warnung "kein Schlüsselbund", Zugang wird **nicht** gespeichert,
+    Verbinden funktioniert trotzdem. Nach Neustart erscheint das Popup (nichts gespeichert).
+18. **Tun:** gespeicherten Zugang anlegen, App-Passwort in Nextcloud widerrufen, App neu starten.
+    **Erwartung:** genau **ein** Versuch, dann Popup mit "gespeichertes Passwort wurde abgelehnt",
+    kein automatischer Wiederholungsversuch, Passwortfeld leer.
 19. *(entfallen — in #99 aufgegangen: `credentials.json` wird dort mit allen anderen Dateien in
     `~/.config/<appname>/` gegengeprüft.)*
-20. **Tun:** "Zugang löschen". **Erwartung:** Datei bzw. Secret entfernt, nach Neustart leerer Dialog.
+20. **Tun:** unten in der Sidebar "Abmelden". **Erwartung:** Toast "Abgemeldet", Popup erscheint,
+    Views sind gesperrt, `credentials.json` ist gelöscht, Benutzerliste/Dashboard-Daten sind
+    verworfen. Nach Neustart kein Auto-Connect, Popup mit vorbelegter Standard-URL.
+20a. **Tun:** in der Sidebar auf die Versionsnummer klicken. **Erwartung:** About-Karte mit
+    gespiegeltem ©, 2026, "Nextcloud User Manager", "Version <x>", "Thomas Michael Weissel" und
+    Link `https://xapient.solutions/` (öffnet im System-Browser). Klick auf den dunklen
+    Hintergrund schließt sie. Kein GPL-Volltext.
 
 ## C. Selbstsigniertes Zertifikat / interne CA
 

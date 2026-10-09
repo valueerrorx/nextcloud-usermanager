@@ -199,7 +199,8 @@ describe('src/preload/index.cjs', () => {
       'connect',
       'connectSaved',
       'connectionStatus',
-      'forgetSaved',
+      'logout',
+      'openExternal',
       'respondCertificate',
       'onCertificatePrompt',
       'usersList',
@@ -320,6 +321,25 @@ describe('src/preload/index.cjs', () => {
     const args = { zweck: 'import' };
     await exposedApi.filesOpenCsv(args);
     expect(invokeCalls).toEqual([{ channel: 'files.openCsv', args: [args] }]);
+  });
+
+  // S16-Kanäle
+  it('exponiert forgetSaved nicht mehr (Löschen läuft nur über logout)', () => {
+    const { exposedApi } = loadPreloadWithStubbedElectron();
+    expect(Object.keys(exposedApi)).not.toContain('forgetSaved');
+  });
+
+  it('logout() ruft ausschließlich den Kanal connection.logout ohne Argumente auf', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    await exposedApi.logout();
+    expect(invokeCalls).toEqual([{ channel: 'connection.logout', args: [] }]);
+  });
+
+  it('openExternal() leitet das Argument unverändert an den Kanal app.openExternal weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { url: 'https://xapient.solutions/' };
+    await exposedApi.openExternal(args);
+    expect(invokeCalls).toEqual([{ channel: 'app.openExternal', args: [args] }]);
   });
 });
 

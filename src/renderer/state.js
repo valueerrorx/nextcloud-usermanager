@@ -1,6 +1,11 @@
 import { reactive, ref } from 'vue';
 
-export const activeView = ref('connect');
+export const activeView = ref('dashboard');
+
+// True once the startup status check (and auto-connect) has finished; until then the app shows
+// "Verbindung wird geprüft…". connecting is true during any connect attempt (sidebar dot).
+export const startupGeprueft = ref(false);
+export const connecting = ref(false);
 
 // Mirrors connection.status (ARCHITECTURE §3); connected gates Dashboard/Benutzer/Gruppen/Import.
 export const connection = reactive({
@@ -18,8 +23,8 @@ export const connection = reactive({
 // updates without waiting for the next connection.status poll.
 export const certException = ref(null);
 
-// Set by App.vue when a certificate prompt is declined/expired; ConnectView surfaces it as its
-// form error so a rejection is never silently dropped (REVIEW-NOTES [S04]).
+// Set by App.vue when a certificate prompt is declined/expired or auto-connect failed; the
+// connection popup surfaces it as its error so a rejection is never silently dropped (REVIEW-NOTES [S04]).
 export const connectError = ref(null);
 
 // Userliste (ARCHITECTURE §4/§7). UsersView.vue lädt bei jedem Betreten neu, kein Cache-Treffer
@@ -87,8 +92,8 @@ export const importFehler = ref(null); // deutscher Dateifehlertext, nur bei ung
 // Reset zeigt das Dashboard weiter Zahlen/Zeitstempel der vorherigen Instanz). users/groups/
 // jobHistorie gehören zur alten Verbindung und müssen weg; die Importvorschau trägt zusätzlich
 // Initialpasswörter (ARCHITECTURE §6) und die Auswahl zeigt auf User-Objekte, die es auf der
-// neuen Instanz so nicht gibt. Aufgerufen von ConnectView.vue nach einem erfolgreichen connect/
-// connectSaved - kein Store, nur ein gebündelter Reset derselben Refs wie oben.
+// neuen Instanz so nicht gibt. Aufgerufen von connectFlow.js nach erfolgreichem connect/connectSaved
+// und nach Logout - kein Store, nur ein gebündelter Reset derselben Refs wie oben.
 export function resetOnConnect() {
   users.value = [];
   usersMode.value = null;

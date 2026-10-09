@@ -15,6 +15,7 @@ vi.mock('electron', () => ({
   net: { fetch: vi.fn() },
   BrowserWindow: { getAllWindows: vi.fn(() => []) },
   dialog: { showSaveDialog: vi.fn(), showOpenDialog: vi.fn() },
+  shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
   safeStorage: {
     isEncryptionAvailable: vi.fn(() => false),
     getSelectedStorageBackend: vi.fn(() => 'basic_text'),
@@ -29,7 +30,7 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { BrowserWindow, dialog, net, safeStorage } from 'electron';
+import { BrowserWindow, dialog, net, safeStorage, shell } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { session } from '../src/main/session.js';
 
@@ -140,9 +141,56 @@ describe('registerIpcHandlers — connection.* und tls.respondCertificate', () =
     expect(session.secretStorage).toBe('keyring');
   });
 
-  it('forgetSaved ruft credentials.forget auf', async () => {
-    const result = await handlers.get('connection.forgetSaved')();
+  it('connection.forgetSaved ist kein Kanal mehr (nur noch hinter logout)', () => {
+    expect([...handlers.keys()]).not.toContain('connection.forgetSaved');
+  });
+
+  it('logout trennt die Sitzung und löscht den gespeicherten Zugang', async () => {
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim', remember: false });
+    expect(session.connected).toBe(true);
+    const { unlink } = await import('node:fs/promises');
+    const result = await handlers.get('connection.logout')();
     expect(result).toEqual({ ok: true });
+    expect(session.connected).toBe(false);
+    expect(unlink).toHaveBeenCalledTimes(1);
+  });
+
+  it('logout liefert bei Löschfehler ok:false mit Text, die Sitzung ist trotzdem getrennt', async () => {
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim', remember: false });
+    const { unlink } = await import('node:fs/promises');
+    unlink.mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+    const result = await handlers.get('connection.logout')();
+    expect(result.ok).toBe(false);
+    expect(result.message).toEqual(expect.any(String));
+    expect(session.connected).toBe(false);
+  });
+
+  it('app.openExternal öffnet die erlaubte https-URL', async () => {
+    const result = await handlers.get('app.openExternal')(null, { url: 'https://xapient.solutions/' });
+    expect(result).toEqual({ ok: true });
+    expect(shell.openExternal).toHaveBeenCalledWith('https://xapient.solutions/');
+  });
+
+  it('app.openExternal lehnt fremde Hosts, http und file: ab, ohne shell aufzurufen', async () => {
+    for (const url of ['https://evil.example/', 'http://xapient.solutions/', 'file:///etc/passwd', 'https://xapient.solutions.evil.example/', 'javascript:alert(1)']) {
+      const result = await handlers.get('app.openExternal')(null, { url });
+      expect(result.ok).toBe(false);
+      expect(result.messageId).toBe('link_nicht_erlaubt');
+    }
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('connect: eine unerwartete Exception wird geloggt (ohne Passwort) und als Result gemeldet', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const setConnected = vi.spyOn(session, 'setConnected').mockImplementation(() => { throw new Error('kaputt geheim123 Basic Z2VoZWltOjEyMw=='); });
+    const result = await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim123', remember: false });
+    expect(result.ok).toBe(false);
+    const logged = JSON.stringify(spy.mock.calls);
+    expect(spy).toHaveBeenCalled();
+    expect(logged).not.toContain('geheim123');
+    expect(logged).not.toContain('Z2VoZWltOjEyMw==');
+    spy.mockRestore();
+    setConnected.mockRestore();
   });
 
   it('tls.respondCertificate delegiert an den TlsController und liefert ok:false für eine unbekannte requestId', async () => {
@@ -543,7 +591,7 @@ describe('registerIpcHandlers — jeder Kanal löst auch ohne Argument auf (nie 
 
   for (const channel of [
     'app.version', 'connection.connect', 'connection.connectSaved', 'connection.status',
-    'connection.forgetSaved', 'users.list', 'actions.run', 'actions.stop', 'groups.list',
+    'connection.logout', 'app.openExternal', 'users.list', 'actions.run', 'actions.stop', 'groups.list',
     'groups.create', 'groups.delete', 'files.saveCsv', 'files.openCsv', 'tls.respondCertificate',
   ]) {
     // Kanalnamen oben nur zur lesbaren Testbezeichnung je Kanal - geprüft wird unten über die

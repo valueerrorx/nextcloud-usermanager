@@ -55,6 +55,17 @@ export const session = {
     state.userListMode = null;
   },
 
+  // Logout: drops client and credentials; the TLS exception belongs to the TLS controller and stays.
+  disconnect() {
+    state.client = null;
+    state.baseUrl = null;
+    state.adminUser = null;
+    state.adminUserId = null;
+    state.appPassword = null;
+    state.secretStorage = 'session';
+    state.userListMode = null;
+  },
+
   setSecretStorage(secretStorage) {
     state.secretStorage = secretStorage;
   },

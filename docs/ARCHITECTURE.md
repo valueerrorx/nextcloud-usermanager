@@ -100,7 +100,7 @@ src/renderer/
   App.vue                         dunkle Shell, Sidebar, Zertifikats-Banner, aktive View
   state.js                        reaktive refs: connection, users, groups, jobs(5), ladezustände
   styles/theme.css                Dark-Theme-Tokens, kein Light-Pfad
-  views/ConnectView.vue           Server-URL, Admin, App-Passwort, verbinden
+  components/ConnectDialog.vue    Verbindungs-Popup (S16): Server-URL, Admin, App-Passwort, verbinden
   views/DashboardView.vue         rendert NUR die Rückgaben von shared/dashboard.js, rechnet nichts
   views/UsersView.vue             Tabelle, Suche/Filter/Sortierung, Mehrfachauswahl, Aktionsleiste
   views/GroupsView.vue            Gruppen anlegen/löschen, Mitglieder, User zu/ab
@@ -185,7 +185,8 @@ auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 | `connection.connect` | invoke | `{ baseUrl, adminUser, appPassword, remember }` | `{ ok, status }` | URL ungültig, 401, 403/997, 429, HTML-Antwort, Netz, Zertifikat, `secret_nicht_gespeichert` |
 | `connection.connectSaved` | invoke | – | `{ ok, status }` | `kein_gespeicherter_zugang`, 401 -> `gespeichertes_passwort_abgelehnt` |
 | `connection.status` | invoke | – | `{ connected, baseUrl, adminUserId, secretStorage, certException, hasSaved, savedBaseUrl, savedAdminUser }` | – |
-| `connection.forgetSaved` | invoke | – | `{ ok }` | Schreibfehler |
+| `connection.logout` | invoke | – | `{ ok }` | Löschfehler (`zugang_loeschen_fehlgeschlagen`); trennt die Sitzung immer und löscht den gespeicherten Zugang (S16, ersetzt `connection.forgetSaved`) |
+| `app.openExternal` | invoke | `{ url }` | `{ ok }` | `link_nicht_erlaubt` (nur https und Host `xapient.solutions`) |
 | `users.list` | invoke | – | `{ ok, users: UserView[], mode, fetchedAt }` | 401, 429, Netz, `details_und_fallback_fehlgeschlagen` |
 | `users.onLoadProgress` | main->renderer | – | `{ done, total }` | – (nur im N+1-Fallback) |
 | `groups.list` | invoke | – | `{ ok, groups: GroupView[] }` | 401, 429, Netz |
@@ -771,12 +772,13 @@ Erfolg = HTTP 200 **und** `statuscode === 100`. Klassifikation mit eigenen Meldu
 Erst wenn diese Prüfung `100` liefert, schreibt `ipc.js` Credentials und `adminUserId` in die
 Session — ein Fehlschlag lässt die Session unverändert.
 
-**Startverhalten:** kein Auto-Connect (DECISIONS „Kein Auto-Connect beim App-Start“). Beim Start
-zeigt `ConnectView` die Felder `savedBaseUrl`/`savedAdminUser` aus `connection.status`
-vorbefüllt (nie das Passwort) mit Button "Mit gespeichertem Zugang verbinden".
-Wird das gespeicherte Passwort abgelehnt, bleibt der Dialog offen, Passwortfeld leer, Meldung
-`gespeichertes_passwort_abgelehnt`, gespeicherter Satz bleibt bis zu "Zugang löschen" erhalten.
-Dashboard, Benutzer, Gruppen und Import sind erst nach erfolgreichem Verbinden erreichbar.
+**Startverhalten (S16, ersetzt den früheren „kein Auto-Connect"):** Die App startet im Dashboard
+und zeigt bis zur Statusprüfung „Verbindung wird geprüft…". Ist ein Zugang gespeichert, wird er
+**einmal** automatisch benutzt (`connectSaved`). Fehlt er oder scheitert er, erscheint das
+Verbindungs-Popup (`ConnectDialog.vue`, URL vorbelegt) mit der Fehlermeldung; ein abgelehntes
+gespeichertes Passwort wird nicht automatisch wiederholt. Logout (`connection.logout`) trennt die
+Sitzung, löscht den gespeicherten Zugang, setzt den Renderer-Zustand zurück und öffnet das Popup.
+Die frühere `ConnectView`-Seite und der Kanal `connection.forgetSaved` existieren nicht mehr.
 
 ## 8. Zugangsdaten und TLS
 
