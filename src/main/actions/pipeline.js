@@ -3,8 +3,18 @@
 import { runPool } from '../../shared/pool.js';
 import { getSteps } from './operations.js';
 
-// Runs an item's steps in order. The first failing step stops the item immediately - a second
-// PUT for user.update must never fire once the first one failed (A3).
+// Default wording for a failed non-first step, same sentence S07 already shipped for
+// user.update's email step. A step can override it (S11: user.create's group steps name the
+// group, not "gruppe-x", and use "zugewiesen" instead of "gesetzt").
+function teilfehlerGrund(step) {
+  return step.teilfehlerGrund ?? `${step.name} konnte nicht gesetzt werden`;
+}
+
+// Runs an item's steps in order. The first step is a precondition for every later one: if it
+// fails, the item is 'fehler' and no later step ever runs (A3/S11 A2 - a failed create must
+// never fire the group-assignment requests). Steps after the first are independent of each other
+// (S11 A2: no rollback, each addUserToGroup is its own request) and all run regardless of an
+// earlier one failing; the FIRST failure among them names the 'teilweise' reason.
 async function runSteps(client, steps) {
   if (steps.length === 0) {
     return { status: 'ok', grund: null, httpStatus: null, ocsCode: null };
@@ -21,17 +31,27 @@ async function runSteps(client, steps) {
     return { status: 'ok', grund: null, httpStatus: first.httpStatus, ocsCode: null };
   }
 
-  const second = await steps[1].run(client);
-  if (!second.ok) {
+  let lastHttpStatus = first.httpStatus;
+  let failure = null; // first failing later step, kept even if a subsequent step succeeds
+  for (let i = 1; i < steps.length; i += 1) {
+    const result = await steps[i].run(client);
+    if (result.ok) {
+      lastHttpStatus = result.httpStatus;
+    } else if (!failure) {
+      failure = { step: steps[i], result };
+    }
+  }
+
+  if (failure) {
     // 'teilweise': grund names which sub-step failed (A3 example: "email konnte nicht gesetzt werden").
     return {
       status: 'teilweise',
-      grund: `${steps[1].name} konnte nicht gesetzt werden`,
-      httpStatus: second.httpStatus,
-      ocsCode: second.ocsCode,
+      grund: teilfehlerGrund(failure.step),
+      httpStatus: failure.result.httpStatus,
+      ocsCode: failure.result.ocsCode,
     };
   }
-  return { status: 'ok', grund: null, httpStatus: second.httpStatus, ocsCode: null };
+  return { status: 'ok', grund: null, httpStatus: lastHttpStatus, ocsCode: null };
 }
 
 export async function runJob({ jobId, action, items, params, client, shouldStop, onProgress }) {

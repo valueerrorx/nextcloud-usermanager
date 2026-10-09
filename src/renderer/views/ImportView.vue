@@ -8,13 +8,15 @@ import { MESSAGES } from '../../shared/messages.js';
 import { parseImportCsv } from '../../shared/csvImport.js';
 import { buildImportPlan } from '../../shared/importPlan.js';
 import { validatePrefix, beispielPasswort } from '../../shared/password.js';
-import { QUOTA_PRESETS } from '../../shared/quota.js';
-import { anzahlAnzulegen, dateiName, serverUserIds } from '../../shared/importView.js';
+import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
+import { anzahlAnzulegen, buildCreateUserItems, dateiName, serverUserIds } from '../../shared/importView.js';
 import {
   importDatei, importRows, importPlanRows, importSummary, importPrefix, importOrder,
   importGruppen, importQuota, importFehler, users, usersLadezustand, usersFehler,
+  jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
+import JobProgress from '../components/JobProgress.vue';
 
 const ORDER_OPTIONS = [
   { wert: 'givenFirst', label: 'vorname.nachname' },
@@ -216,9 +218,50 @@ const anlegenDisabled = computed(() => (
   !prefixValidierung.value.ok || !userlisteBereit.value || anzahlAnzulegenWert.value === 0
 ));
 
-// Das tatsächliche Anlegen folgt in S11 - hier nur ein Platzhalter-Hinweis (S10 spec B4).
+// S11 B1: erst Bestätigung mit der Anzahl (keine Zahleneingabe, das ist nur beim Löschen), dann
+// derselbe actions.run-Weg wie jede andere Aktion (ARCHITECTURE §5) - items/byUserid kommen rein
+// aus buildCreateUserItems, keine eigene Berechnung hier.
 async function onAnlegen() {
-  await Swal.fire({ title: 'Anlegen', text: 'Das Anlegen der Benutzer folgt in einem späteren Schritt.', icon: 'info' });
+  const bestaetigt = await Swal.fire({
+    title: 'Benutzer anlegen',
+    html: `<p>${anzahlAnzulegenWert.value} ${MESSAGES.import_bestaetigen}</p>`,
+    showCancelButton: true,
+    confirmButtonText: 'Anlegen',
+    cancelButtonText: 'Abbrechen',
+  });
+  if (!bestaetigt.isConfirmed) return;
+
+  const { items, byUserid } = buildCreateUserItems(importPlanRows.value);
+  const quotaPreset = importQuota.value ? findQuotaPreset(importQuota.value) : null;
+  const params = {
+    byUserid,
+    groups: importGruppen.value,
+    quota: quotaPreset ? formatQuotaForApi(quotaPreset) : null,
+  };
+
+  const neueJobId = `job-${Date.now()}`;
+  jobId.value = neueJobId;
+  jobLaeuft.value = true;
+  jobFortschritt.value = { done: 0, total: items.length };
+  jobResults.value = [];
+  jobSummary.value = null;
+
+  try {
+    const result = await window.api.actionsRun({ jobId: neueJobId, action: 'user.create', items, params });
+    if (result.ok) {
+      jobResults.value = result.results;
+      jobSummary.value = result.summary;
+    } else {
+      await Swal.fire({ title: 'Fehler', text: result.message ?? MESSAGES.aktion_fehlgeschlagen, icon: 'error' });
+    }
+  } catch (error) {
+    console.error('Import-Job fehlgeschlagen:', error);
+    await Swal.fire({ title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error' });
+  } finally {
+    jobLaeuft.value = false;
+    // Die angelegten User fehlen sonst in der Tabelle (S11 B3).
+    await ladeUserliste();
+  }
 }
 </script>
 
@@ -488,6 +531,8 @@ async function onAnlegen() {
       </button>
     </div>
   </div>
+
+  <JobProgress :import-plan-rows="importPlanRows" />
 </template>
 
 <style scoped>

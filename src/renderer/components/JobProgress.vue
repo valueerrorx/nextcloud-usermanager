@@ -4,12 +4,20 @@
 // (ARCHITECTURE §4.1).
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import Swal from 'sweetalert2';
-import { buildResultCsvReport } from '../../shared/resultCsv.js';
+import { buildResultCsvReport, buildImportResultCsvReport } from '../../shared/resultCsv.js';
 import { resolveGrund, summaryAnzeige } from '../../shared/jobReport.js';
+import { buildImportExportRows } from '../../shared/importView.js';
 import { MESSAGES } from '../../shared/messages.js';
 import {
   jobFortschritt, jobId, jobLaeuft, jobResults, jobSummary, dryRunPlan,
 } from '../state.js';
+
+// S11 B2: ImportView.vue reicht ihre Vorschauzeilen durch, statt JobProgress nachzubauen
+// (S11 spec "Ausdrücklich NICHT" - kein zweiter Ausführungspfad). null (Default) heißt: normaler
+// Batch-Bericht ohne Passwortspalte, wie bisher.
+const props = defineProps({
+  importPlanRows: { type: Array, default: null },
+});
 
 const anzeige = computed(() => (jobSummary.value ? summaryAnzeige(jobSummary.value) : null));
 
@@ -58,9 +66,26 @@ async function onAbbrechen() {
 
 // Auch nach einem Abbruch möglich (DECISIONS "Abbruch-Semantik im Batch") - verfügbar, sobald
 // der Bericht steht, unabhängig davon, wie der Job endete.
+// S11 B2: importPlanRows gesetzt -> 7-spaltiger Import-Export mit Klartext-Passwörtern
+// (buildImportExportRows deckt Pipeline-Ergebnisse PLUS Vorschaufehler ab, ARCHITECTURE §5),
+// sonst der bisherige 6-spaltige Batch-Bericht ohne Passwortspalte.
 async function onExport() {
+  const istImportExport = Boolean(props.importPlanRows && props.importPlanRows.length > 0);
+  if (istImportExport) {
+    const warnung = await Swal.fire({
+      title: 'Passwort-Export',
+      text: MESSAGES.passwort_export_warnung,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Exportieren',
+      cancelButtonText: 'Abbrechen',
+    });
+    if (!warnung.isConfirmed) return;
+  }
   try {
-    const csv = buildResultCsvReport(jobResults.value);
+    const csv = istImportExport
+      ? buildImportResultCsvReport(buildImportExportRows(props.importPlanRows, jobResults.value))
+      : buildResultCsvReport(jobResults.value);
     const result = await window.api.filesSaveCsv({ vorschlag: `ergebnis-${jobId.value}.csv`, inhalt: csv });
     if (!result.ok && result.messageId !== 'abgebrochen') {
       await Swal.fire({ title: 'Fehler', text: MESSAGES[result.messageId] ?? MESSAGES.export_fehlgeschlagen, icon: 'error' });

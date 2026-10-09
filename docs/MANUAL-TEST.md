@@ -409,6 +409,16 @@ ist — das deckt `tests/pool.test.js` ab).
     Vorschau abgewiesenen Fehlerzeilen mit ihrem Grund. Bei Zeilen, für die nie ein Username
     entstand (z. B. leerer Vorname, kaputtes Datum), steht in Spalte 1 die **Zeilennummer**
     (`Zeile 17`). Jede Zeile der Eingabedatei ist genau einmal auffindbar.
+94a. **Tun:** direkt im Anschluss an #94 den Export-Button erneut klicken und in der
+    swal2-Warnung diesmal **"Abbrechen"** anklicken. **Erwartung:** kein Speicherdialog öffnet
+    sich, es wird keine Datei geschrieben (Verzeichnis danach gegenprüfen). Export-Button
+    erneut klicken, diesmal die Warnung **bestätigen** und einen Pfad wählen.
+    **Erwartung:** Datei hat genau sieben Spalten in der dokumentierten Reihenfolge
+    (`userid;aktion;status;grund;httpStatus;ocsCode;passwort`); jede Zeile mit Status `ok` oder
+    `teilweise` trägt in Spalte 7 das **echte**, bei diesem Import verwendete Initialpasswort
+    (nicht leer, nicht maskiert); Fehlerzeilen haben Spalte 7 leer. Zum Vergleich einen
+    gewöhnlichen Batch-Bericht (z. B. aus #67) exportieren: dieselbe swal2-Warnung erscheint dort
+    **nicht**, und die Datei hat nur sechs Spalten ohne `passwort`.
 95. **Tun:** Importansicht verlassen und zurückkehren. **Erwartung:** Passwortliste ist weg,
     kein nachträglicher Export mehr möglich (Hinweis statt alter Daten).
 96. **Tun:** **dieselbe CSV erneut importieren** (nach erfolgreichem Lauf aus #91, Userliste

@@ -162,6 +162,100 @@ describe('runJob - ein Einzelfehler bricht den Job nie ab (Abnahme 4)', () => {
   });
 });
 
+// S11 Abnahme 2-5: user.create als zweistufiger Vorgang innerhalb von runJob - teilweise bei
+// einer scheiternden Gruppe, fehler bei scheiterndem create ohne Gruppen-Request, und ein
+// Teilfehler bricht den Import nicht ab (GOAL-Abnahme-Pflichttest).
+describe('runJob - user.create (S11 Abnahme 2-5)', () => {
+  function paramsFor(usernames, groups = ['lehrer', 'schueler']) {
+    const byUserid = {};
+    for (const u of usernames) byUserid[u] = { password: `${u}-pw`, displayName: u };
+    return { byUserid, groups, quota: '5 GB' };
+  }
+
+  it('zwei Zielgruppen, zweite scheitert -> teilweise, grund nennt die Gruppe', async () => {
+    const client = {
+      request: vi.fn(async ({ method, path, form }) => {
+        if (method === 'POST' && path === '/cloud/users') {
+          return { ok: true, data: { id: 'alice' }, httpStatus: 200, versuche: 1 };
+        }
+        if (form?.groupid === 'schueler') {
+          return { ok: false, kind: 'ocs', httpStatus: 200, ocsCode: 102, messageId: 'gruppe_existiert_nicht', versuche: 1 };
+        }
+        return { ok: true, data: null, httpStatus: 200, versuche: 1 };
+      }),
+    };
+
+    const { results } = await runJob({
+      jobId: 'create-teilweise',
+      action: 'user.create',
+      items: ['alice'],
+      params: paramsFor(['alice']),
+      client,
+      shouldStop: () => false,
+    });
+
+    expect(results[0].status).toBe('teilweise');
+    expect(results[0].grund).toBe('Gruppe "schueler" konnte nicht zugewiesen werden');
+    expect(client.request).toHaveBeenCalledTimes(3); // create + beide Gruppen-Requests laufen beide
+  });
+
+  it('erster Schritt (create) scheitert -> fehler, und es wird kein Gruppen-Request gesendet', async () => {
+    const client = {
+      request: vi.fn(async ({ method, path }) => {
+        if (method === 'POST' && path === '/cloud/users') {
+          return { ok: false, kind: 'ocs', httpStatus: 200, ocsCode: 102, messageId: 'benutzer_existiert_bereits', versuche: 1 };
+        }
+        return { ok: true, data: null, httpStatus: 200, versuche: 1 };
+      }),
+    };
+
+    const { results } = await runJob({
+      jobId: 'create-fehler',
+      action: 'user.create',
+      items: ['alice'],
+      params: paramsFor(['alice']),
+      client,
+      shouldStop: () => false,
+    });
+
+    expect(results[0].status).toBe('fehler');
+    expect(results[0].grund).toBe('benutzer_existiert_bereits');
+    // Am Request-Zähler gemessen, nicht am Status (REVIEW-NOTES [S07]): nur der create-POST lief.
+    expect(client.request).toHaveBeenCalledTimes(1);
+    expect(client.request.mock.calls[0][0]).toMatchObject({ method: 'POST', path: '/cloud/users' });
+  });
+
+  it('Zeile 3 scheitert beim Anlegen, Zeilen 1, 2, 4, 5 werden trotzdem angelegt (GOAL-Abnahme)', async () => {
+    const items = ['user1', 'user2', 'user3', 'user4', 'user5'];
+    const client = {
+      request: vi.fn(async ({ method, path, form }) => {
+        if (method === 'POST' && path === '/cloud/users') {
+          if (form.userid === 'user3') {
+            return { ok: false, kind: 'ocs', httpStatus: 200, ocsCode: 102, messageId: 'benutzer_existiert_bereits', versuche: 1 };
+          }
+          return { ok: true, data: { id: form.userid }, httpStatus: 200, versuche: 1 };
+        }
+        return { ok: true, data: null, httpStatus: 200, versuche: 1 };
+      }),
+    };
+
+    const { results } = await runJob({
+      jobId: 'create-teilfehler-kein-abbruch',
+      action: 'user.create',
+      items,
+      params: paramsFor(items, []),
+      client,
+      shouldStop: () => false,
+    });
+
+    expect(results.map((r) => r.userid)).toEqual(items);
+    expect(results[2]).toMatchObject({ userid: 'user3', status: 'fehler' });
+    for (const r of [results[0], results[1], results[3], results[4]]) {
+      expect(r.status).toBe('ok');
+    }
+  });
+});
+
 describe('runJob - shouldStop ist injiziert, kein session-Zugriff', () => {
   it('zwei Aufrufe mit derselben jobId, aber unterschiedlichem injiziertem shouldStop, verhalten sich unabhängig', async () => {
     const client = { request: vi.fn(async () => ({ ok: true, data: null, httpStatus: 200, versuche: 1 })) };

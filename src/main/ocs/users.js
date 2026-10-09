@@ -32,6 +32,34 @@ export async function getUser(client, userid) {
   return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
 }
 
+// "User anlegen" codes (RESEARCH-OCS §5 / S11 A1). 108/110 (E-Mail erforderlich) can only happen
+// if an instance is configured to require email even with a password set - we always set a
+// password (DECISIONS), so this is unreachable in practice but still mapped defensively.
+const CREATE_USER_ERRORS = {
+  101: 'aktion_fehlgeschlagen',
+  102: 'benutzer_existiert_bereits',
+  104: 'gruppe_existiert_nicht',
+  105: 'kein_recht_fuer_gruppe',
+  107: 'passwort_policy',
+  108: 'aktion_fehlgeschlagen',
+  110: 'aktion_fehlgeschlagen',
+  111: 'userid_nicht_erzeugbar',
+};
+
+// POST /cloud/users. No `groups[]` here on purpose (S11 A1/A2, ARCHITECTURE §5): sending groups
+// along with the create call would make a group failure indistinguishable from a create failure.
+// client.request/buildFormBody already drops undefined/null form values, so a missing quota is
+// simply omitted, never sent as the string "undefined".
+export async function createUser(client, { userid, password, displayName, quota }) {
+  const result = await client.request({
+    method: 'POST',
+    path: '/cloud/users',
+    form: { userid, password, displayName, quota },
+  });
+  if (!result.ok) return mapOcsError(result, CREATE_USER_ERRORS, 'aktion_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
 // Enable/Disable/Delete: only 100/101 confirmed (RESEARCH-OCS §5); 101 is the only
 // endpoint-specific code, every other failure kind falls through via mapOcsError unchanged.
 const ENABLE_USER_ERRORS = { 101: 'aktion_fehlgeschlagen' };

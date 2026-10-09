@@ -34,3 +34,25 @@ export function buildResultCsv(results) {
 export function buildResultCsvReport(results) {
   return buildResultCsv(results.map((r) => ({ ...r, grund: resolveGrund(r.grund) })));
 }
+
+// Import export (S11 A3, DECISIONS "Ergebnis-CSV: Spalten des Import-Exports"): columns 1-6
+// identical to the batch report, plus a 7th column `passwort` - only filled by the caller for
+// 'ok'/'teilweise' rows (ARCHITECTURE §5), empty otherwise via the same escapeField/null handling.
+const IMPORT_HEADER = 'userid;aktion;status;grund;httpStatus;ocsCode;passwort';
+
+function buildImportRow(result) {
+  return [result.userid, result.aktion, result.status, result.grund, result.httpStatus, result.ocsCode, result.passwort]
+    .map(escapeField)
+    .join(';');
+}
+
+export function buildImportResultCsv(results) {
+  const lines = [IMPORT_HEADER, ...results.map(buildImportRow)];
+  return `﻿${lines.join('\r\n')}\r\n`;
+}
+
+// Same grund-resolution step as buildResultCsvReport, applied to the already-merged import rows
+// (shared/importView.js#buildImportExportRows combines pipeline results with preview-rejected rows).
+export function buildImportResultCsvReport(results) {
+  return buildImportResultCsv(results.map((r) => ({ ...r, grund: resolveGrund(r.grund) })));
+}

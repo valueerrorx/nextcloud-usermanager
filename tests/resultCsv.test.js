@@ -1,6 +1,6 @@
 // S08 A3: exact header, column order, separator, CRLF, BOM, null handling, quoting.
 import { describe, expect, it } from 'vitest';
-import { buildResultCsv, buildResultCsvReport } from '../src/shared/resultCsv.js';
+import { buildResultCsv, buildResultCsvReport, buildImportResultCsv, buildImportResultCsvReport } from '../src/shared/resultCsv.js';
 import { MESSAGES } from '../src/shared/messages.js';
 
 describe('buildResultCsv', () => {
@@ -56,6 +56,85 @@ describe('buildResultCsv', () => {
       'bob;user.enable;fehler;Abgelehnt.;403;997',
       '',
     ]);
+  });
+});
+
+// S11 A3 / Abnahme 6: der Import-Export hat eine siebte Spalte "passwort", Spalten 1-6 bleiben
+// identisch zum Batch-Bericht (DECISIONS "Ergebnis-CSV: Spalten des Import-Exports").
+describe('buildImportResultCsv', () => {
+  it('beginnt mit der UTF-8-BOM, Kopfzeile hat sieben Spalten in der dokumentierten Reihenfolge', () => {
+    const csv = buildImportResultCsv([]);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    expect(csv.slice(1)).toBe('userid;aktion;status;grund;httpStatus;ocsCode;passwort\r\n');
+  });
+
+  it('Spalten 1-6 sind byte-identisch zum Batch-Bericht für dieselben Zeilen, inkl. ";" im grund einer teilweise-Zeile', () => {
+    const rows = [
+      { userid: 'alice', aktion: 'user.create', status: 'ok', grund: null, httpStatus: 200, ocsCode: null, passwort: 'Geheim123!' },
+      {
+        userid: 'bob',
+        aktion: 'user.create',
+        status: 'teilweise',
+        grund: 'Gruppe x; Gruppe y konnte nicht zugewiesen werden',
+        httpStatus: 200,
+        ocsCode: 102,
+        passwort: 'Bob456!',
+      },
+    ];
+    const batchLines = buildResultCsv(rows).slice(1).split('\r\n');
+    const importLines = buildImportResultCsv(rows).slice(1).split('\r\n');
+
+    expect(importLines[0]).toBe(`${batchLines[0]};passwort`);
+    expect(importLines[1]).toBe(`${batchLines[1]};Geheim123!`);
+    expect(importLines[2]).toBe(`${batchLines[2]};Bob456!`);
+  });
+
+  it('Spalte 7 (passwort) enthält das Initialpasswort bei Status ok', () => {
+    const csv = buildImportResultCsv([
+      { userid: 'alice', aktion: 'user.create', status: 'ok', grund: null, httpStatus: 200, ocsCode: null, passwort: 'Geheim123!' },
+    ]);
+    const line = csv.slice(1).split('\r\n')[1];
+    expect(line).toBe('alice;user.create;ok;;200;;Geheim123!');
+  });
+
+  it('Zeile ohne Username (Vorschaufehler vor der Benutzername-Erzeugung) -> Spalte 1 ist "Zeile n"', () => {
+    const csv = buildImportResultCsv([
+      { userid: 'Zeile 3', aktion: 'user.create', status: 'fehler', grund: 'name_nicht_abbildbar', httpStatus: null, ocsCode: null, passwort: null },
+    ]);
+    const line = csv.slice(1).split('\r\n')[1];
+    expect(line.split(';')[0]).toBe('Zeile 3');
+  });
+
+  it('ein ";" im grund-Feld wird in Anführungszeichen gesetzt, das leere Passwort-Feld bleibt am Ende', () => {
+    const csv = buildImportResultCsv([
+      { userid: 'carol', aktion: 'user.create', status: 'fehler', grund: 'Fehler; Ursache unbekannt', httpStatus: 500, ocsCode: 101, passwort: null },
+    ]);
+    const line = csv.slice(1).split('\r\n')[1];
+    expect(line).toBe('carol;user.create;fehler;"Fehler; Ursache unbekannt";500;101;');
+  });
+
+  it('mehrere Zeilen sind mit \\r\\n getrennt, in Eingabereihenfolge, mit abschließendem CRLF', () => {
+    const csv = buildImportResultCsv([
+      { userid: 'alice', aktion: 'user.create', status: 'ok', grund: null, httpStatus: 200, ocsCode: null, passwort: 'pw1' },
+      { userid: 'bob', aktion: 'user.create', status: 'fehler', grund: 'userid_nicht_erzeugbar', httpStatus: 200, ocsCode: 111, passwort: null },
+    ]);
+    const lines = csv.slice(1).split('\r\n');
+    expect(lines).toEqual([
+      'userid;aktion;status;grund;httpStatus;ocsCode;passwort',
+      'alice;user.create;ok;;200;;pw1',
+      'bob;user.create;fehler;userid_nicht_erzeugbar;200;111;',
+      '',
+    ]);
+  });
+});
+
+describe('buildImportResultCsvReport - löst messageId-grund vor dem Bauen der CSV auf', () => {
+  it('eine ItemResult.grund-messageId wird zum deutschen Text, Spalte 7 (passwort) bleibt unverändert', () => {
+    const csv = buildImportResultCsvReport([
+      { userid: 'alice', aktion: 'user.create', status: 'fehler', grund: 'userid_nicht_erzeugbar', httpStatus: 200, ocsCode: 111, passwort: null },
+    ]);
+    const line = csv.slice(1).split('\r\n')[1];
+    expect(line).toBe(`alice;user.create;fehler;${MESSAGES.userid_nicht_erzeugbar};200;111;`);
   });
 });
 

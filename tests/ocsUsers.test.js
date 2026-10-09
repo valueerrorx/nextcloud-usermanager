@@ -6,6 +6,7 @@ import {
   listUserIds,
   listUserDetails,
   getUser,
+  createUser,
   enableUser,
   disableUser,
   deleteUser,
@@ -63,6 +64,58 @@ describe('getUser', () => {
     const calledUrl = fetchImpl.mock.calls[0][0];
     expect(calledUrl).toContain(`/cloud/users/${encodeURIComponent('ab cd@x')}`);
     expect(calledUrl).not.toContain('/cloud/users/ab cd@x');
+  });
+});
+
+// S11 A1 (Abnahme 1): createUser - success, its own error-code map (102/107/111), a non-'ocs'
+// kind keeps its own messageId, and the request body never carries groups[] (ARCHITECTURE §5:
+// sending groups along with the create call would make a group failure indistinguishable from a
+// create failure).
+describe('createUser', () => {
+  it('POST /cloud/users mit userid, password, displayName, quota - ohne groups[]', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, { id: 'alice' }) }));
+    const result = await createUser(makeClient(fetchImpl), {
+      userid: 'alice',
+      password: 'Geheim123!',
+      displayName: 'Alice A.',
+      quota: '5 GB',
+    });
+    expect(result.ok).toBe(true);
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url.split('?')[0]).toMatch(/\/cloud\/users$/);
+    expect(options.method).toBe('POST');
+    const sent = new URLSearchParams(options.body);
+    expect(sent.get('userid')).toBe('alice');
+    expect(sent.get('password')).toBe('Geheim123!');
+    expect(sent.get('displayName')).toBe('Alice A.');
+    expect(sent.get('quota')).toBe('5 GB');
+    expect(sent.has('groups')).toBe(false);
+    expect(sent.has('groups[]')).toBe(false);
+    expect(options.body).not.toContain('groups');
+  });
+
+  it('OCS-Code 102 -> messageId benutzer_existiert_bereits', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(102, null) }));
+    const result = await createUser(makeClient(fetchImpl), { userid: 'alice', password: 'x', displayName: 'Alice', quota: null });
+    expect(result).toMatchObject({ ok: false, messageId: 'benutzer_existiert_bereits' });
+  });
+
+  it('OCS-Code 107 -> messageId passwort_policy', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(107, null) }));
+    const result = await createUser(makeClient(fetchImpl), { userid: 'alice', password: 'x', displayName: 'Alice', quota: null });
+    expect(result).toMatchObject({ ok: false, messageId: 'passwort_policy' });
+  });
+
+  it('OCS-Code 111 -> messageId userid_nicht_erzeugbar', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(111, null) }));
+    const result = await createUser(makeClient(fetchImpl), { userid: 'alice', password: 'x', displayName: 'Alice', quota: null });
+    expect(result).toMatchObject({ ok: false, messageId: 'userid_nicht_erzeugbar' });
+  });
+
+  it('kind auth (HTTP 401) behält seine eigene messageId, die Endpunkt-Map wird dafür nicht befragt', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ status: 401 }));
+    const result = await createUser(makeClient(fetchImpl), { userid: 'alice', password: 'x', displayName: 'Alice', quota: null });
+    expect(result).toMatchObject({ ok: false, kind: 'auth', messageId: 'falsche_zugangsdaten' });
   });
 });
 

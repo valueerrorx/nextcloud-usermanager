@@ -1,5 +1,6 @@
 // Action-ID -> one or two OCS steps (ARCHITECTURE §5, S07-batch-kern.md A2).
 import {
+  createUser,
   enableUser,
   disableUser,
   deleteUser,
@@ -27,7 +28,26 @@ const OPERATIONS = {
   'user.removeFromGroup': (userid, params) => [
     { name: 'removeFromGroup', run: (client) => removeUserFromGroup(client, userid, params.groupid) },
   ],
-  // The only multi-step action: PUT /cloud/users/{userid} takes exactly one key/value pair
+  // S11 A2: user.create is deliberately two-step - POST /cloud/users without groups[], then one
+  // addUserToGroup per target group. params.byUserid carries the per-row password/displayName
+  // (every item has its own, unlike every other action's shared params); params.groups and
+  // params.quota are the same for the whole job. A group step's own name is the groupid, so the
+  // pipeline's 'teilweise' sentence names the group that could not be assigned.
+  'user.create': (userid, params) => {
+    const { password, displayName } = params.byUserid[userid];
+    const steps = [
+      { name: 'create', run: (client) => createUser(client, { userid, password, displayName, quota: params.quota }) },
+    ];
+    for (const groupid of params.groups ?? []) {
+      steps.push({
+        name: groupid,
+        teilfehlerGrund: `Gruppe "${groupid}" konnte nicht zugewiesen werden`,
+        run: (client) => addUserToGroup(client, userid, groupid),
+      });
+    }
+    return steps;
+  },
+  // The only other multi-step action: PUT /cloud/users/{userid} takes exactly one key/value pair
   // (RESEARCH-OCS §2), so changing both fields is two requests. Only the fields present in
   // params become a step, so changing one field stays single-step.
   'user.update': (userid, params) => {

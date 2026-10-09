@@ -37,6 +37,7 @@ export const MESSAGES = Object.freeze({
   passwort_backend_nicht_unterstuetzt: 'Dieses Benutzer-Backend unterstützt kein Passwort-Setzen.',
   gruppe_existiert_nicht: 'Diese Gruppe existiert nicht.',
   kein_recht_fuer_gruppe: 'Keine Berechtigung für diese Gruppe.',
+  userid_nicht_erzeugbar: 'Dieser Benutzername konnte nicht angelegt werden.',
   unbekannte_aktion: 'Unbekannte Aktion.',
   selbstschutz_admin: 'Der eigene Admin-Zugang kann nicht gelöscht oder deaktiviert werden.',
   abgebrochen: 'Der Vorgang wurde abgebrochen.',
@@ -79,4 +80,8 @@ export const MESSAGES = Object.freeze({
   gruppe_existiert: 'Diese Gruppe existiert schon.',
   gruppe_anlegen_fehlgeschlagen: 'Die Gruppe konnte nicht angelegt werden.',
   gruppenliste_fehlgeschlagen: 'Die Gruppenliste konnte nicht geladen werden.',
+  // S11: Import ausführen - Bestätigung vor dem Anlegen, Warnung vor dem Passwort-Export.
+  import_bestaetigen: 'Benutzer werden jetzt mit einem Initialpasswort angelegt. Fortfahren?',
+  passwort_export_warnung:
+    'Die exportierte Datei enthält die Initialpasswörter im Klartext. Bitte sicher aufbewahren und nach Gebrauch löschen.',
 });
