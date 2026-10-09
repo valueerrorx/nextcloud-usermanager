@@ -66,3 +66,17 @@ Vier API-Fakten sind unverifiziert; der Entwurf ist darauf defensiv ausgelegt. K
 - Gruppen-Anzeigename ändern, Subadmin-Verwaltung
 - Rollback für teilweise angewandte Importe
 - Paginierung und serverseitige Suche (erst ab deutlich über 5000 Usern nötig)
+
+## Abnahme gegen GOAL.md (2026-10-09)
+
+| GOAL-Kriterium | Stand |
+|---|---|
+| Username-Generator: Unit-Tests mit allen Regeln und Beispielen aus dem Referenzprojekt, 100 % grün | erfüllt — 186 Tests, Port codepoint-identisch zum Referenzprojekt verifiziert |
+| Batch-Jobs mit gemockter API inkl. Teilfehlern | erfüllt — Lastfall 50 Items / 7 Fehler / 429 / Abbruch, `teilweise`, Einzelfehler bricht nie ab |
+| `npm test` und `npm run lint` grün | erfüllt — 848 Tests, Lint über alle Dateien inkl. `.vue` |
+| `npm run build` erzeugt lauffähige App unter Linux | erfüllt — AppImage gebaut; Start mit Display vom Nutzer zu bestätigen |
+| Alle Funktionen gegen eine echte Test-Nextcloud manuell durchgespielt | **offen — beim Nutzer**, Checkliste in `docs/MANUAL-TEST.md` |
+
+Bewusst nicht umgesetzt (Nutzerentscheidungen): Batch-Aktion „Einstellungen ändern" (gestrichen),
+persistente Job-Historie (nur Sitzung), E-Mail beim Einzel-Anlegen (Bearbeiten deckt E-Mail ab).
+
