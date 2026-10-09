@@ -63,39 +63,49 @@ function buildStatus() {
   };
 }
 
-async function handleConnect({ baseUrl, adminUser, appPassword, remember }) {
-  const normalized = normalizeBaseUrl(baseUrl);
-  if (!normalized.ok) {
-    return { ok: false, messageId: normalized.messageId, message: MESSAGES[normalized.messageId] };
+// CRITICAL-Fix (REVIEW-NOTES [S08]/[S09a]/[S10], wiederholt in S13-Review): die Argumente wurden
+// bisher in der Funktionssignatur destrukturiert - window.api.connect() ohne Argument liess das
+// als TypeError über die IPC-Grenze platzen statt ein Result zu liefern (ARCHITECTURE §3 "Alle
+// invoke-Kanäle werfen nie"). Destrukturierung jetzt innerhalb des try, wie files.js es schon
+// immer richtig gemacht hat.
+async function handleConnect(args) {
+  try {
+    const { baseUrl, adminUser, appPassword, remember } = args;
+    const normalized = normalizeBaseUrl(baseUrl);
+    if (!normalized.ok) {
+      return { ok: false, messageId: normalized.messageId, message: MESSAGES[normalized.messageId] };
+    }
+
+    const result = await checkConnection({ baseUrl: normalized.baseUrl, adminUser, appPassword, fetchImpl });
+    // client already classified it (REVIEW-NOTES 3) - applyTlsOutcome only overrides a cert
+    // misdiagnosis, no second error table.
+    if (!result.ok) return applyTlsOutcome(result, normalized.baseUrl);
+
+    // Session is written only now, on success - a failed attempt above leaves it untouched.
+    session.setConnected({
+      client: result.client,
+      baseUrl: normalized.baseUrl,
+      adminUser,
+      adminUserId: result.adminUserId,
+      appPassword,
+      secretStorage: 'session',
+    });
+
+    if (!remember) {
+      return { ok: true, status: buildStatus() };
+    }
+
+    const saved = await credentials.save({ baseUrl: normalized.baseUrl, adminUser, appPassword });
+    session.setSecretStorage(saved.secretStorage);
+    const response = { ok: true, status: buildStatus() };
+    if (saved.messageId) {
+      response.messageId = saved.messageId;
+      response.message = MESSAGES[saved.messageId];
+    }
+    return response;
+  } catch {
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
-
-  const result = await checkConnection({ baseUrl: normalized.baseUrl, adminUser, appPassword, fetchImpl });
-  // client already classified it (REVIEW-NOTES 3) - applyTlsOutcome only overrides a cert
-  // misdiagnosis, no second error table.
-  if (!result.ok) return applyTlsOutcome(result, normalized.baseUrl);
-
-  // Session is written only now, on success - a failed attempt above leaves it untouched.
-  session.setConnected({
-    client: result.client,
-    baseUrl: normalized.baseUrl,
-    adminUser,
-    adminUserId: result.adminUserId,
-    appPassword,
-    secretStorage: 'session',
-  });
-
-  if (!remember) {
-    return { ok: true, status: buildStatus() };
-  }
-
-  const saved = await credentials.save({ baseUrl: normalized.baseUrl, adminUser, appPassword });
-  session.setSecretStorage(saved.secretStorage);
-  const response = { ok: true, status: buildStatus() };
-  if (saved.messageId) {
-    response.messageId = saved.messageId;
-    response.message = MESSAGES[saved.messageId];
-  }
-  return response;
 }
 
 async function handleConnectSaved() {
@@ -153,29 +163,35 @@ async function handleUsersList() {
 // actions.run never fails globally (ARCHITECTURE §3) - only "not connected" returns ok:false,
 // every per-item error lives in results. The finally always runs, even if runJob throws, so a
 // job's state never gets stuck at 'laufend' and its stop flag never leaks past the job's end.
-async function handleActionsRun({ jobId, action, items, params }) {
-  if (!session.connected) {
-    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
-  }
-  session.setJobState(jobId, 'laufend');
+// CRITICAL-Fix (REVIEW-NOTES [S13]): Destrukturierung jetzt innerhalb des try, siehe handleConnect.
+async function handleActionsRun(args) {
   try {
-    return await runJob({
-      jobId,
-      action,
-      items,
-      params,
-      client: session.client,
-      shouldStop: () => session.shouldStop(jobId),
-      onProgress: (payload) => broadcast('actions.onProgress', payload),
-    });
+    const { jobId, action, items, params } = args;
+    if (!session.connected) {
+      return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+    }
+    session.setJobState(jobId, 'laufend');
+    try {
+      return await runJob({
+        jobId,
+        action,
+        items,
+        params,
+        client: session.client,
+        shouldStop: () => session.shouldStop(jobId),
+        onProgress: (payload) => broadcast('actions.onProgress', payload),
+      });
+    } catch {
+      // operations.js#getSteps throws for an unknown action id - a programmer error inside main
+      // (by design, see operations.js), but this invoke channel must still resolve, never reject
+      // (ARCHITECTURE §3: "nie global fehlerhaft").
+      return { ok: false, messageId: 'unbekannte_aktion', message: MESSAGES.unbekannte_aktion };
+    } finally {
+      session.setJobState(jobId, 'beendet');
+      session.clearStopFlag(jobId);
+    }
   } catch {
-    // operations.js#getSteps throws for an unknown action id - a programmer error inside main
-    // (by design, see operations.js), but this invoke channel must still resolve, never reject
-    // (ARCHITECTURE §3: "nie global fehlerhaft").
-    return { ok: false, messageId: 'unbekannte_aktion', message: MESSAGES.unbekannte_aktion };
-  } finally {
-    session.setJobState(jobId, 'beendet');
-    session.clearStopFlag(jobId);
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
 
@@ -193,45 +209,65 @@ async function handleGroupsList() {
 // groupid wird hier validiert, nicht nur im Renderer (S10-Review MINOR 2): ein schreibender
 // Server-Call verlässt sich nicht auf die Clientprüfung, ein leerer/nur-Leerzeichen-Name geht
 // sonst unvalidiert bis zu POST /cloud/groups durch.
-async function handleGroupsCreate({ groupid }) {
-  if (!session.connected) {
-    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+// CRITICAL-Fix (REVIEW-NOTES [S13]): Destrukturierung jetzt innerhalb des try, siehe handleConnect.
+async function handleGroupsCreate(args) {
+  try {
+    const { groupid } = args;
+    if (!session.connected) {
+      return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+    }
+    if (!groupid || groupid.trim() === '') {
+      return { ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen', message: MESSAGES.gruppe_anlegen_fehlgeschlagen };
+    }
+    const result = await createGroup(session.client, groupid);
+    if (!result.ok) return result;
+    return { ok: true };
+  } catch {
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
-  if (!groupid || groupid.trim() === '') {
-    return { ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen', message: MESSAGES.gruppe_anlegen_fehlgeschlagen };
-  }
-  const result = await createGroup(session.client, groupid);
-  if (!result.ok) return result;
-  return { ok: true };
 }
 
 // groups.delete (S12 A3): gleiche nicht_verbunden- und Leerstring-Wächter wie groups.create.
 // Der admin-Schutz prüft hier zusätzlich über die pure Funktion aus shared/groups.js (S12 "Die
 // Lehre aus S10") - ein Schutz, der nur im Dialog säße, wäre von jedem anderen Aufrufer umgehbar,
 // genau wie der Selbstschutz in dryRun.js.
-async function handleGroupsDelete({ groupid }) {
-  if (!session.connected) {
-    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+// CRITICAL-Fix (REVIEW-NOTES [S13]): Destrukturierung jetzt innerhalb des try, siehe handleConnect.
+async function handleGroupsDelete(args) {
+  try {
+    const { groupid } = args;
+    if (!session.connected) {
+      return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+    }
+    if (!groupid || groupid.trim() === '') {
+      return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
+    }
+    if (!istGruppeLoeschbar(groupid)) {
+      return { ok: false, messageId: 'gruppe_admin_geschuetzt', message: MESSAGES.gruppe_admin_geschuetzt };
+    }
+    const result = await deleteGroup(session.client, groupid);
+    if (!result.ok) return result;
+    return { ok: true };
+  } catch {
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
-  if (!groupid || groupid.trim() === '') {
-    return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
-  }
-  if (!istGruppeLoeschbar(groupid)) {
-    return { ok: false, messageId: 'gruppe_admin_geschuetzt', message: MESSAGES.gruppe_admin_geschuetzt };
-  }
-  const result = await deleteGroup(session.client, groupid);
-  if (!result.ok) return result;
-  return { ok: true };
 }
 
 // Never throws, always a defined zustand (ARCHITECTURE §5) - a double click on "Abbrechen" is
 // harmless because 'bereits_beendet' and 'unbekannt' are both non-error outcomes.
-function handleActionsStop({ jobId }) {
-  const zustand = session.getJobState(jobId);
-  if (zustand === null) return { ok: true, zustand: 'unbekannt' };
-  if (zustand === 'beendet') return { ok: true, zustand: 'bereits_beendet' };
-  session.setStopFlag(jobId);
-  return { ok: true, zustand: 'gestoppt' };
+// CRITICAL-Fix (REVIEW-NOTES [S13]): Destrukturierung jetzt innerhalb des try, siehe handleConnect
+// - ein fehlendes Argument wird wie eine unbekannte jobId behandelt, nicht wie ein Fehler, weil
+// §5 für diesen Kanal gar keinen Fehlerfall vorsieht.
+function handleActionsStop(args) {
+  try {
+    const { jobId } = args;
+    const zustand = session.getJobState(jobId);
+    if (zustand === null) return { ok: true, zustand: 'unbekannt' };
+    if (zustand === 'beendet') return { ok: true, zustand: 'bereits_beendet' };
+    session.setStopFlag(jobId);
+    return { ok: true, zustand: 'gestoppt' };
+  } catch {
+    return { ok: true, zustand: 'unbekannt' };
+  }
 }
 
 // Only place with ipcMain.handle/on (ARCHITECTURE §2).

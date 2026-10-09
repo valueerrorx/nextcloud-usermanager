@@ -72,7 +72,11 @@ export function createTlsController({ sendPrompt, timeoutMs = PROMPT_TIMEOUT_MS 
   }
 
   // Unknown or expired requestId is discarded (A5) - there is no callback left to answer.
-  function respond({ requestId, akzeptiert }) {
+  // args ?? {} (REVIEW-NOTES [S13] CRITICAL-Fix-Umfeld): tls.respondCertificate ohne Argument
+  // darf nicht an einer Destrukturierung von undefined scheitern - ein fehlender requestId ist
+  // einfach eine abgelaufene/unbekannte Anfrage, kein Programmfehler.
+  function respond(args) {
+    const { requestId, akzeptiert } = args ?? {};
     const entry = pending.get(requestId);
     if (!entry) {
       return { ok: false, messageId: 'zertifikat_anfrage_abgelaufen', message: MESSAGES.zertifikat_anfrage_abgelaufen };

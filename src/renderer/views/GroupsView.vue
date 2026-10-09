@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 import { MESSAGES } from '../../shared/messages.js';
 import { groupViews, membersOf, nichtMitgliederVon, istGruppeLoeschbar } from '../../shared/groups.js';
 import { resolveGrund } from '../../shared/jobReport.js';
+import { ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
   groups, groupsLadezustand, groupsFehler, ausgewaehlteGruppe,
   users, usersLadezustand, usersFehler,
@@ -20,47 +21,6 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
-}
-
-async function ladeGruppen() {
-  groupsLadezustand.value = 'laedt';
-  groupsFehler.value = null;
-  try {
-    const result = await window.api.groupsList();
-    if (!result.ok) {
-      groupsLadezustand.value = 'fehler';
-      groupsFehler.value = result.message ?? MESSAGES.gruppenliste_fehlgeschlagen;
-      return;
-    }
-    groups.value = result.groups;
-    groupsLadezustand.value = result.groups.length === 0 ? 'leer' : 'bereit';
-  } catch (error) {
-    groupsLadezustand.value = 'fehler';
-    groupsFehler.value = MESSAGES.unerwarteter_serverfehler;
-    console.error('Failed to load group list:', error);
-  }
-}
-
-// CRITICAL-Fix nach S10-Muster (S12 spec "Die Lehre aus S10 gilt hier direkt"): ohne eigenen
-// Nachlade-Pfad zeigt jede Gruppe 0 Mitglieder, wenn Gruppen direkt nach dem Verbinden geöffnet
-// werden, bevor UsersView je geladen hat.
-async function ladeUserliste() {
-  usersLadezustand.value = 'laedt';
-  usersFehler.value = null;
-  try {
-    const result = await window.api.usersList();
-    if (!result.ok) {
-      usersLadezustand.value = 'fehler';
-      usersFehler.value = result.message ?? MESSAGES.userliste_fehlgeschlagen;
-      return;
-    }
-    users.value = result.users;
-    usersLadezustand.value = result.users.length === 0 ? 'leer' : 'bereit';
-  } catch (error) {
-    usersLadezustand.value = 'fehler';
-    usersFehler.value = MESSAGES.unerwarteter_serverfehler;
-    console.error('Failed to load user list:', error);
-  }
 }
 
 // Wie in ImportView: eine zuvor schon (nicht-leer) geladene Liste gilt sofort als bereit, keine

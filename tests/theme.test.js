@@ -45,3 +45,22 @@ describe('theme.css Tokens', () => {
     expect(css).not.toMatch(/\[data-bs-theme/);
   });
 });
+
+// S13-Review MINOR: die stat-*-Klassen aus DashboardView.vue standen bislang in keinem Test -
+// eine Umbenennung in theme.css hätte das Dashboard lautlos unstyled gelassen. Nur die Selektoren
+// prüfen (nicht Werte - die sind S09a-Geschmackssache, kein verbindlicher Vertrag wie die
+// Farbtokens oben).
+describe('Dashboard stat-*-Klassen (S13, portiert aus Microsoft365-Manager)', () => {
+  const erwarteteSelektoren = [
+    '.dashboard-stat-row', '.stat-card', '.stat-card-kicker', '.stat-value',
+    '.stat-card-metrics', '.stat-card-metrics--stack', '.stat-metric', '.stat-metric--row',
+    '.stat-metric-label', '.stat-metric-value',
+  ];
+
+  for (const selektor of erwarteteSelektoren) {
+    it(`definiert ${selektor}`, () => {
+      const re = new RegExp(`${selektor.replace(/[.-]/g, '\\$&')}\\s*{`);
+      expect(css).toMatch(re);
+    });
+  }
+});

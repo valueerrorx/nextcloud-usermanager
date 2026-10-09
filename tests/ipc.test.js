@@ -513,3 +513,77 @@ describe('groups.delete', () => {
     expect(net.fetch).not.toHaveBeenCalled();
   });
 });
+
+// CRITICAL-Fix (REVIEW-NOTES [S13], wiederholt aus S08/S09a/S10): fünf Handler destrukturierten
+// bisher in der Funktionssignatur - window.api.connect() ohne Argument liess das als TypeError
+// über die IPC-Grenze platzen statt ein Result zu liefern (ARCHITECTURE §3 "Alle invoke-Kanäle
+// werfen nie"). Die Kanalliste kommt aus der Registrierungs-Map selbst (nicht aus einer
+// abgeschriebenen Liste), damit ein künftig neu registrierter Kanal automatisch mitgeprüft wird.
+describe('registerIpcHandlers — jeder Kanal löst auch ohne Argument auf (nie reject)', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined });
+    dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('registriert mindestens einen Kanal (Gegenprobe gegen eine leere Map)', () => {
+    expect([...handlers.keys()].length).toBeGreaterThan(0);
+  });
+
+  // connection.status ist laut ARCHITECTURE §3 die einzige Ausnahme vom { ok, ... }-Result: es
+  // liefert direkt das Status-Objekt (connected, baseUrl, ...) ohne ok-Feld. Für diesen einen
+  // Kanal wird nur "löst auf" geprüft, für alle anderen zusätzlich das ok-Feld.
+  const OHNE_OK_FELD = new Set(['connection.status']);
+
+  for (const channel of [
+    'app.version', 'connection.connect', 'connection.connectSaved', 'connection.status',
+    'connection.forgetSaved', 'users.list', 'actions.run', 'actions.stop', 'groups.list',
+    'groups.create', 'groups.delete', 'files.saveCsv', 'files.openCsv', 'tls.respondCertificate',
+  ]) {
+    // Kanalnamen oben nur zur lesbaren Testbezeichnung je Kanal - geprüft wird unten über die
+    // tatsächliche Registrierungs-Map, nicht über diese Liste (siehe Test darunter für den Teil,
+    // der auch einen VERGESSENEN Eintrag hier findet).
+    it(`${channel} löst ohne Argument auf, statt die invoke-Promise abzulehnen`, async () => {
+      const listener = handlers.get(channel);
+      expect(listener).toBeTypeOf('function');
+      let result;
+      let hatGeworfen = false;
+      try {
+        result = await listener();
+      } catch {
+        hatGeworfen = true;
+      }
+      expect(hatGeworfen).toBe(false);
+      expect(result).toBeTypeOf('object');
+      if (!OHNE_OK_FELD.has(channel)) {
+        expect(result).toHaveProperty('ok');
+      }
+    });
+  }
+
+  // Aufzählung direkt aus der Map (REVIEW-NOTES [S13] "Enumerate the handlers from the
+  // registration map so the test cannot go stale") - läuft zusätzlich zur obigen, lesbar
+  // benannten Liste über jeden Kanal, den registerIpcHandlers tatsächlich registriert hat.
+  it('jeder tatsächlich registrierte Kanal löst ohne Argument auf (Map als Quelle, nicht die Liste oben)', async () => {
+    for (const [channel, listener] of handlers) {
+      let result;
+      let hatGeworfen = false;
+      try {
+        result = await listener();
+      } catch {
+        hatGeworfen = true;
+      }
+      expect(hatGeworfen, `${channel} hat geworfen statt aufzulösen`).toBe(false);
+      expect(result, channel).toBeTypeOf('object');
+      if (!OHNE_OK_FELD.has(channel)) {
+        expect(result, channel).toHaveProperty('ok');
+      }
+    }
+  });
+});

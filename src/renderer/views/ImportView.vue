@@ -2,7 +2,7 @@
 // CSV wählen, Optionen setzen, Vorschau sehen (S10, ARCHITECTURE §3.1/§6). Das Anlegen selbst ist
 // S11. Rechnet nichts selbst: parseImportCsv/buildImportPlan aus shared/, Live-Beispiel aus
 // shared/password.js - keine neue Importlogik hier (S10 spec "Ausdrücklich NICHT").
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import Swal from 'sweetalert2';
 import { MESSAGES } from '../../shared/messages.js';
 import { parseImportCsv } from '../../shared/csvImport.js';
@@ -10,10 +10,13 @@ import { buildImportPlan } from '../../shared/importPlan.js';
 import { validatePrefix, beispielPasswort } from '../../shared/password.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import { anzahlAnzulegen, buildCreateUserItems, dateiName, serverUserIds } from '../../shared/importView.js';
+import { pushJobHistorie } from '../../shared/dashboard.js';
+import { ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
   importDatei, importRows, importPlanRows, importSummary, importPrefix, importOrder,
   importGruppen, importQuota, importFehler, users, usersLadezustand, usersFehler,
-  jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary,
+  groups, groupsLadezustand, groupsFehler,
+  jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
 import JobProgress from '../components/JobProgress.vue';
@@ -36,60 +39,20 @@ const STATUS_LABEL = {
 };
 
 // Vom Server geladene Gruppen - nur diese sind als Zielgruppe wählbar, kein Freitext (DECISIONS,
-// hält OCS 104 "Gruppe existiert nicht" aus dem Import fern).
-const serverGruppen = ref([]);
-const gruppenLadezustand = ref('laedt'); // 'laedt' | 'fehler' | 'bereit'
-const gruppenFehler = ref(null);
-
-async function ladeGruppen() {
-  gruppenLadezustand.value = 'laedt';
-  gruppenFehler.value = null;
-  try {
-    const result = await window.api.groupsList();
-    if (!result.ok) {
-      gruppenLadezustand.value = 'fehler';
-      gruppenFehler.value = result.message ?? MESSAGES.gruppenliste_fehlgeschlagen;
-      return;
-    }
-    serverGruppen.value = result.groups;
-    gruppenLadezustand.value = 'bereit';
-  } catch (error) {
-    gruppenLadezustand.value = 'fehler';
-    gruppenFehler.value = MESSAGES.unerwarteter_serverfehler;
-    console.error('Failed to load group list:', error);
-  }
-}
-
-// Userliste nachladen (CRITICAL-Fix S10-Review): serverUserIds unten braucht state.users, das
-// aber nur UsersView.load() befüllt. Ohne diesen Nachlade-Pfad bleibt die Kollisionsprüfung
-// (Stufe 13) off, wenn Import direkt nach dem Verbinden geöffnet wird - genau das Muster, das
-// ARCHITECTURE §3.1 für GroupsView vorschreibt, gilt hier ebenso.
-async function ladeUserliste() {
-  usersLadezustand.value = 'laedt';
-  usersFehler.value = null;
-  try {
-    const result = await window.api.usersList();
-    if (!result.ok) {
-      usersLadezustand.value = 'fehler';
-      usersFehler.value = result.message ?? MESSAGES.userliste_fehlgeschlagen;
-      return;
-    }
-    users.value = result.users;
-    usersLadezustand.value = result.users.length === 0 ? 'leer' : 'bereit';
-  } catch (error) {
-    usersLadezustand.value = 'fehler';
-    usersFehler.value = MESSAGES.unerwarteter_serverfehler;
-    console.error('Failed to load user list:', error);
-  }
-}
-
-// Serverliste gilt als geladen, sobald sie Einträge hat oder erfolgreich als leer zurückkam -
-// nicht erst bei usersLadezustand === 'bereit', sonst bliebe eine zuvor von UsersView geladene,
-// nicht-leere Liste fälschlich blockiert.
+// hält OCS 104 "Gruppe existiert nicht" aus dem Import fern). Lädt über den gemeinsamen Ladepfad
+// (REVIEW-NOTES [S13] "die Gruppenliste hat jetzt drei Kopien") - dieselbe state.js-Liste wie
+// GroupsView/DashboardView statt eines eigenen lokalen Refs, damit eine schon anderswo geladene
+// Liste hier nicht nochmal angefragt wird.
 const userlisteBereit = computed(() => users.value.length > 0 || usersLadezustand.value === 'leer');
 
 onMounted(() => {
-  ladeGruppen();
+  if (groups.value.length === 0) {
+    ladeGruppen();
+  }
+  // Userliste nachladen (CRITICAL-Fix S10-Review): serverUserIds unten braucht state.users, das
+  // aber nur UsersView.load() befüllt. Ohne diesen Nachlade-Pfad bleibt die Kollisionsprüfung
+  // (Stufe 13) off, wenn Import direkt nach dem Verbinden geöffnet wird - genau das Muster, das
+  // ARCHITECTURE §3.1 für GroupsView vorschreibt, gilt hier ebenso.
   if (users.value.length === 0) {
     ladeUserliste();
   }
@@ -98,8 +61,14 @@ onMounted(() => {
 onUnmounted(() => {
   // Initialpasswörter dürfen nicht die ganze Sitzung im Speicher bleiben (CRITICAL-Fix
   // S10-Review, ARCHITECTURE §6) - mit dem Verlassen der View verschwindet die Vorschau.
+  // importRows (Namen+Geburtsdaten) und importPrefix gehören dazu (REVIEW-NOTES [S13]
+  // "deterministisch rekonstruierbar ist nicht gelöscht"): buildInitialPassword(prefix, ddmmyyyy)
+  // ist deterministisch, also bleiben die Initialpasswörter exakt rekonstruierbar, solange diese
+  // beiden Eingaben noch im Speicher stehen - auch ohne importPlanRows/importSummary.
   importPlanRows.value = [];
   importSummary.value = null;
+  importRows.value = [];
+  importPrefix.value = '';
 });
 
 // ---- Schritt 1: Datei ----
@@ -251,6 +220,12 @@ async function onAnlegen() {
     if (result.ok) {
       jobResults.value = result.results;
       jobSummary.value = result.summary;
+      // Import ist der einzige Jobtyp, der immer ein Batch ist (REVIEW-NOTES MINOR, S13-Review:
+      // "Letzte Jobs" war blind dafür) - nur auf dem tatsächlich ausgeführten Pfad, nie bei der
+      // reinen Vorschau (DECISIONS "Dry-Runs in der Job-Historie"), genau wie ActionBar.vue.
+      jobHistorie.value = pushJobHistorie(jobHistorie.value, {
+        zeitpunkt: Date.now(), aktion: 'Benutzer importieren', summary: result.summary,
+      });
     } else {
       await Swal.fire({ title: 'Fehler', text: result.message ?? MESSAGES.aktion_fehlgeschlagen, icon: 'error' });
     }
@@ -363,13 +338,13 @@ async function onAnlegen() {
       <div class="mb-3">
         <span class="form-label">Zielgruppen (optional)</span>
         <p
-          v-if="gruppenLadezustand === 'fehler'"
+          v-if="groupsLadezustand === 'fehler'"
           class="text-danger"
         >
-          {{ gruppenFehler }}
+          {{ groupsFehler }}
         </p>
         <p
-          v-else-if="gruppenLadezustand === 'laedt'"
+          v-else-if="groupsLadezustand === 'laedt'"
           class="notice"
         >
           Gruppen werden geladen…
@@ -379,7 +354,7 @@ async function onAnlegen() {
           class="gruppen-liste"
         >
           <label
-            v-for="gruppe in serverGruppen"
+            v-for="gruppe in groups"
             :key="gruppe"
             class="form-check gruppen-eintrag"
           >
@@ -392,7 +367,7 @@ async function onAnlegen() {
             <span class="form-check-label">{{ gruppe }}</span>
           </label>
           <p
-            v-if="serverGruppen.length === 0"
+            v-if="groups.length === 0"
             class="notice"
           >
             Keine Gruppen vorhanden.

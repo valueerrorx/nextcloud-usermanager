@@ -8,9 +8,10 @@ import { planActions, bestaetigungPasst, planToItems } from '../../shared/dryRun
 import { gruppenOptionen } from '../../shared/filters.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import { resolveGrund } from '../../shared/jobReport.js';
+import { pushJobHistorie } from '../../shared/dashboard.js';
 import { MESSAGES } from '../../shared/messages.js';
 import {
-  dryRunPlan, jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary,
+  dryRunPlan, jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
 } from '../state.js';
 
 const props = defineProps({
@@ -44,6 +45,14 @@ const ACTION_ICONS = {
   'user.removeFromGroup': 'bi-person-dash',
   'user.update': 'bi-pencil',
 };
+
+// Aus ACTIONS abgeleitet statt ein zweites Mal abgeschrieben (REVIEW-NOTES MINOR, S13-Review:
+// ACTION_LABELS wiederholte die acht Labels aus ACTIONS wortgleich) - liefert das deutsche Label
+// für die Job-Historie-Kachel (S13), damit DashboardView.vue keine Action-ID -> Label-Zuordnung
+// braucht. action in startJob() kommt immer aus ACTIONS (v-model von selectedAction), ein
+// unbekannter Schlüssel ist dadurch unerreichbar - kein `?? action`-Fallback, der sonst das
+// englische Action-ID in die deutsche UI schreiben könnte.
+const ACTION_LABELS = Object.fromEntries(ACTIONS.map((a) => [a.id, a.label]));
 
 const selectedAction = ref('user.enable');
 const groupId = ref('');
@@ -193,6 +202,11 @@ async function startJob(plan, action, params) {
     if (result.ok) {
       jobResults.value = result.results;
       jobSummary.value = result.summary;
+      // Nur tatsächlich ausgeführte Jobs landen in der Historie, nie die Vorschau (DECISIONS
+      // "Dry-Runs in der Job-Historie") - dieser Pfad läuft erst nach der Bestätigung.
+      jobHistorie.value = pushJobHistorie(jobHistorie.value, {
+        zeitpunkt: Date.now(), aktion: ACTION_LABELS[action], summary: result.summary,
+      });
     } else {
       await Swal.fire({ title: 'Fehler', text: result.message ?? MESSAGES.aktion_fehlgeschlagen, icon: 'error' });
     }

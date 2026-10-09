@@ -4,10 +4,11 @@ import { MESSAGES } from '../../shared/messages.js';
 import {
   alleAusgewaehlt, filterUsers, gruppenOptionen, pruneAuswahl, sortUsers,
 } from '../../shared/filters.js';
+import { formatTimestamp } from '../../shared/time.js';
+import { ladeUserliste } from '../loaders.js';
 import {
   auswahl, connection, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, sortFeld,
-  sortRichtung, users, usersFehler, usersFetchedAt, usersLadezustand, usersMode,
-  usersUebersprungen,
+  sortRichtung, users, usersFehler, usersFetchedAt, usersLadezustand, usersUebersprungen,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
 import UserTable from '../components/UserTable.vue';
@@ -91,35 +92,16 @@ function filterZuruecksetzen() {
 // deshalb kein eigenes state.js-Feld.
 const fortschritt = ref(null);
 
-// Eigenes try/catch statt dem Aufrufer zu überlassen (REVIEW-NOTES [S01] - jede Promise wird
-// awaited oder gecatcht), damit sowohl onMounted als auch der "Neu laden"-Button load() ohne
-// .catch() aufrufen können.
+// Lädt über den gemeinsamen Ladepfad (REVIEW-NOTES [S13] "ein Ladepfad in vier Kopien") - diese
+// View behält nur ihre eigene Gating-Logik: Fortschrittsanzeige zurücksetzen, Auswahl bei Fehler
+// leeren. loaders.js hat sein eigenes try/catch, load() kann also ohne .catch() aufgerufen werden.
 async function load() {
-  usersLadezustand.value = 'laedt';
-  usersFehler.value = null;
-  usersUebersprungen.value = 0;
   fortschritt.value = null;
-  try {
-    const result = await window.api.usersList();
-    if (!result.ok) {
-      usersLadezustand.value = 'fehler';
-      usersFehler.value = result.message ?? MESSAGES.userliste_fehlgeschlagen;
-      auswahl.value = new Set();
-      return;
-    }
-    users.value = result.users;
-    usersMode.value = result.mode;
-    usersFetchedAt.value = result.fetchedAt;
-    usersUebersprungen.value = result.uebersprungen ?? 0;
-    usersLadezustand.value = result.users.length === 0 ? 'leer' : 'bereit';
-  } catch (error) {
-    usersLadezustand.value = 'fehler';
-    usersFehler.value = MESSAGES.unerwarteter_serverfehler;
+  const result = await ladeUserliste();
+  if (!result.ok) {
     auswahl.value = new Set();
-    console.error('Failed to load user list:', error);
-  } finally {
-    fortschritt.value = null;
   }
+  fortschritt.value = null;
 }
 
 let disposeProgress = null;
@@ -136,10 +118,6 @@ onMounted(() => {
 onUnmounted(() => {
   disposeProgress?.();
 });
-
-function formatTimestamp(ms) {
-  return ms ? new Date(ms).toLocaleString('de-DE') : '';
-}
 </script>
 
 <template>

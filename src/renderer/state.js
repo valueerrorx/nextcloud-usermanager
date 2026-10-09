@@ -57,6 +57,13 @@ export const jobResults = ref([]); // ItemResult[] aus actions.run
 export const jobSummary = ref(null); // { ok, fehler, nichtAusgefuehrt, teilweise } | null
 export const dryRunPlan = ref(null); // letzter bestätigter planActions()-Output
 
+// Job-Historie der laufenden Sitzung (S13, DECISIONS "Dashboard Batch-Job-Historie"): letzte 5,
+// neueste zuerst, keine Persistenz, keine Dry-Runs. Eintrag: { zeitpunkt, aktion, summary }.
+// aktion ist bereits das deutsche Label (ActionBar.vue kennt es ohnehin), damit DashboardView.vue
+// keine Action-ID -> Label-Zuordnung braucht. Kappung/Reihenfolge laufen über
+// shared/dashboard.js#pushJobHistorie, nicht hier.
+export const jobHistorie = ref([]);
+
 // Gruppenliste (S12, ARCHITECTURE §4) - Mitglieder und memberCount werden clientseitig aus
 // `users` abgeleitet (shared/groups.js), nicht hier und nicht per eigenem Request.
 export const groups = ref([]); // string[] aus groups.list, Server-Reihenfolge
@@ -75,3 +82,35 @@ export const importOrder = ref('givenFirst'); // 'givenFirst' | 'surnameFirst'
 export const importGruppen = ref([]); // ausgewählte Zielgruppen, groupId-Strings
 export const importQuota = ref(null); // QUOTA_PRESETS-id | null, Kontingent für neue User
 export const importFehler = ref(null); // deutscher Dateifehlertext, nur bei ungültiger Datei gesetzt
+
+// Ein erfolgreicher (re)connect kann eine ANDERE Instanz sein (REVIEW-NOTES [S13] CRITICAL: ohne
+// Reset zeigt das Dashboard weiter Zahlen/Zeitstempel der vorherigen Instanz). users/groups/
+// jobHistorie gehören zur alten Verbindung und müssen weg; die Importvorschau trägt zusätzlich
+// Initialpasswörter (ARCHITECTURE §6) und die Auswahl zeigt auf User-Objekte, die es auf der
+// neuen Instanz so nicht gibt. Aufgerufen von ConnectView.vue nach einem erfolgreichen connect/
+// connectSaved - kein Store, nur ein gebündelter Reset derselben Refs wie oben.
+export function resetOnConnect() {
+  users.value = [];
+  usersMode.value = null;
+  usersFetchedAt.value = null;
+  usersLadezustand.value = 'laedt';
+  usersFehler.value = null;
+  usersUebersprungen.value = 0;
+  auswahl.value = new Set();
+
+  groups.value = [];
+  groupsLadezustand.value = 'laedt';
+  groupsFehler.value = null;
+  ausgewaehlteGruppe.value = null;
+
+  jobHistorie.value = [];
+
+  importDatei.value = null;
+  importRows.value = [];
+  importPlanRows.value = [];
+  importSummary.value = null;
+  importPrefix.value = '';
+  importGruppen.value = [];
+  importQuota.value = null;
+  importFehler.value = null;
+}

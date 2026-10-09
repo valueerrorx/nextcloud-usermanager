@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref, watch } from 'vue';
 import Swal from 'sweetalert2';
 import { MESSAGES } from '../../shared/messages.js';
-import { certException, connectError, connection } from '../state.js';
+import { certException, connectError, connection, resetOnConnect } from '../state.js';
 
 const form = reactive({ baseUrl: '', adminUser: '', appPassword: '', remember: false });
 const errorMessage = ref('');
@@ -38,6 +38,9 @@ watch(connectError, (message) => {
 async function applyResult(result) {
   if (result.ok) {
     errorMessage.value = '';
+    // Könnte eine andere Instanz sein (REVIEW-NOTES [S13] CRITICAL) - Benutzerliste, Gruppen,
+    // Job-Historie, Importvorschau und Auswahl der vorherigen Verbindung dürfen nicht stehen bleiben.
+    resetOnConnect();
     Object.assign(connection, result.status);
     certException.value = result.status.certException;
     if (result.messageId === 'kein_keyring_nur_sitzung') {

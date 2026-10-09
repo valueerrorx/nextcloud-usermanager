@@ -76,6 +76,9 @@ src/shared/                       PURE MODULE: kein import von node:*, electron,
   quota.js                        defensiver Quota-Reader + Presets + formatQuotaForApi + formatBytes
   pool.js                         runPool(items, worker, { concurrency, shouldStop })
   dryRun.js                       planActions(): Änderungen / keine Änderung / ausgeschlossen
+  time.js                         formatTimestamp (S13) — eine Stelle statt drei Kopien
+  dashboard.js                    storageTotals, istFastVoll, fastVollListe, userCounts,
+                                  historyCounts, pushJobHistorie (S13)
   importView.js                   serverUserIds, anzahlAnzulegen, dateiName (S10) —
                                   abgeleitete Werte der Importansicht, aus der .vue gezogen
   jobReport.js                    resolveGrund (messageId -> Text), summaryAnzeige,
@@ -90,6 +93,8 @@ src/shared/                       PURE MODULE: kein import von node:*, electron,
   messages.js                     messageId -> deutscher Text (einzige UI-Textquelle)
 
 src/renderer/
+  loaders.js                      ladeUserliste, ladeGruppen (S13) — EIN gemeinsamer Ladepfad
+                                  fuer alle vier Views, vorher vier driftende Kopien
   index.html                      Einstiegspunkt Vite
   main.js                         createApp, importiert theme.css und SweetAlert2
   App.vue                         dunkle Shell, Sidebar, Zertifikats-Banner, aktive View

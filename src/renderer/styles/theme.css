@@ -340,6 +340,89 @@ body {
   }
 }
 
+/* ---- Dashboard Stat Cards (S13, portiert aus Microsoft365-Manager/src/assets/main.css,
+   von S09a ungenutzt entfernt und hier wieder aufgenommen) ---- */
+.dashboard-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  flex: 1;
+  min-width: 220px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.stat-card:hover {
+  border-color: rgba(88, 166, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.15);
+}
+
+.stat-card-kicker {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.stat-card-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.stat-card-metrics--stack {
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.stat-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.stat-metric--row {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.stat-metric-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.stat-metric-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 /* ---- Empty-States ---- */
 .empty-state {
   text-align: center;
