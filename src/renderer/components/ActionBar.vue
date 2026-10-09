@@ -1,15 +1,18 @@
 <script setup>
-// Aktionsauswahl, Dry-Run-Aufruf, Bestätigungen (swal2) - ARCHITECTURE §2/§3.1. Rechnet nicht
-// selbst: Dry-Run kommt aus shared/dryRun.js, Begründungstexte aus shared/jobReport.js,
-// Gruppenliste aus shared/filters.js (ARCHITECTURE §4.1, REVIEW-NOTES [S06]).
-import { computed, ref, watch } from 'vue';
+// Batch bar (S17) and the one execution path for row actions: parameter prompt, Dry-Run, confirmation
+// (swal2), actions.run. Rechnet nicht selbst: Dry-Run aus shared/dryRun.js, Begründungstexte aus
+// shared/jobReport.js, Helfer aus shared/userRows.js (ARCHITECTURE §4.1, REVIEW-NOTES [S06]).
 import Swal from 'sweetalert2';
 import { planActions, bestaetigungPasst, planToItems } from '../../shared/dryRun.js';
 import { gruppenOptionen } from '../../shared/filters.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import { resolveGrund } from '../../shared/jobReport.js';
 import { pushJobHistorie } from '../../shared/dashboard.js';
+import {
+  ACTION_LABELS, BATCH_ACTIONS, batchBarVisible, buildUpdateParams, jobToast, optionenObjekt,
+} from '../../shared/userRows.js';
 import { MESSAGES } from '../../shared/messages.js';
+import { toastError, toastSuccess } from '../toast.js';
 import {
   dryRunPlan, jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
 } from '../state.js';
@@ -20,98 +23,7 @@ const props = defineProps({
   adminUserId: { type: String, default: null },
   gesperrt: { type: Boolean, default: false },
 });
-const emit = defineEmits(['finished']);
-
-// icon ist reine Darstellung (bi-* Klasse aus der Icon-Tabelle in S09a), keine Logik.
-const ACTIONS = [
-  { id: 'user.enable', label: 'Aktivieren', icon: 'bi-person-check' },
-  { id: 'user.disable', label: 'Deaktivieren', icon: 'bi-person-slash' },
-  { id: 'user.delete', label: 'Löschen', icon: 'bi-trash' },
-  { id: 'user.setQuota', label: 'Kontingent setzen', icon: 'bi-hdd' },
-  { id: 'user.setPassword', label: 'Passwort setzen', icon: 'bi-key' },
-  { id: 'user.addToGroup', label: 'Zu Gruppe hinzufügen', icon: 'bi-people' },
-  { id: 'user.removeFromGroup', label: 'Aus Gruppe entfernen', icon: 'bi-person-dash' },
-  { id: 'user.update', label: 'Anzeigename/E-Mail ändern', icon: 'bi-pencil' },
-];
-
-// Gleiche Icons wie ACTIONS, aber als Objekt statt linearem Array.find - ein fehlender Schlüssel
-// liefert undefined direkt, kein optional-chaining-Zweig versteckt eine unbekannte Action-ID.
-const ACTION_ICONS = {
-  'user.enable': 'bi-person-check',
-  'user.disable': 'bi-person-slash',
-  'user.delete': 'bi-trash',
-  'user.setQuota': 'bi-hdd',
-  'user.setPassword': 'bi-key',
-  'user.addToGroup': 'bi-people',
-  'user.removeFromGroup': 'bi-person-dash',
-  'user.update': 'bi-pencil',
-};
-
-// Aus ACTIONS abgeleitet statt ein zweites Mal abgeschrieben (REVIEW-NOTES MINOR, S13-Review:
-// ACTION_LABELS wiederholte die acht Labels aus ACTIONS wortgleich) - liefert das deutsche Label
-// für die Job-Historie-Kachel (S13), damit DashboardView.vue keine Action-ID -> Label-Zuordnung
-// braucht. action in startJob() kommt immer aus ACTIONS (v-model von selectedAction), ein
-// unbekannter Schlüssel ist dadurch unerreichbar - kein `?? action`-Fallback, der sonst das
-// englische Action-ID in die deutsche UI schreiben könnte.
-const ACTION_LABELS = Object.fromEntries(ACTIONS.map((a) => [a.id, a.label]));
-
-const selectedAction = ref('user.enable');
-const groupId = ref('');
-const quotaPresetId = ref(QUOTA_PRESETS[0].id);
-const password = ref('');
-const displayname = ref('');
-const email = ref('');
-
-// Clear on action change so a password never survives into a different action (Review: #6).
-watch(selectedAction, () => {
-  password.value = '';
-});
-
-// Alphabetisch deduplizierte Gruppenliste aus der geladenen Userliste - keine eigene Ableitung
-// hier, dieselbe pure Funktion wie in UsersView.vue (ARCHITECTURE §4.1).
-const gruppenOptionenListe = computed(() => gruppenOptionen(props.users));
-
-// Nur Darstellung: Icon des gerade gewaehlten Eintrags der statischen ACTION_ICONS-Konstante,
-// kein Rechnen auf Businessdaten (REVIEW-NOTES [S06] betrifft Set/sort/filter/reduce/localeCompare
-// auf abgeleiteten Userdaten, nicht das Nachschlagen in einer festen Konstante).
-const selectedActionIcon = computed(() => ACTION_ICONS[selectedAction.value]);
-
-const vorschauDisabled = computed(() => {
-  if (props.auswahl.size === 0 || jobLaeuft.value || props.gesperrt) return true;
-  if (selectedAction.value === 'user.addToGroup' || selectedAction.value === 'user.removeFromGroup') {
-    return groupId.value === '';
-  }
-  if (selectedAction.value === 'user.setPassword') {
-    return password.value.trim() === '';
-  }
-  if (selectedAction.value === 'user.update') {
-    return displayname.value.trim() === '' && email.value.trim() === '';
-  }
-  return false;
-});
-
-function buildParams() {
-  switch (selectedAction.value) {
-    case 'user.addToGroup':
-    case 'user.removeFromGroup':
-      return { groupid: groupId.value };
-    case 'user.setQuota': {
-      const preset = findQuotaPreset(quotaPresetId.value);
-      return { value: formatQuotaForApi(preset) };
-    }
-    case 'user.setPassword':
-      // Trimmed, same value vorschauDisabled already validated against (Review: #9).
-      return { value: password.value.trim() };
-    case 'user.update': {
-      const params = {};
-      if (displayname.value.trim() !== '') params.displayname = displayname.value.trim();
-      if (email.value.trim() !== '') params.email = email.value.trim();
-      return params;
-    }
-    default:
-      return {};
-  }
-}
+const emit = defineEmits(['finished', 'clear']);
 
 // Nur für die swal2-HTML-Ausgabe - dasselbe Muster wie App.vue's Zertifikatsdialog, keine
 // Vue-Komponente innerhalb von swal2 möglich.
@@ -119,6 +31,77 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
+}
+
+// Asks for the action's parameters; resolves null when the dialog is cancelled.
+async function frageParams(action, user) {
+  switch (action) {
+    case 'user.addToGroup':
+    case 'user.removeFromGroup': {
+      const result = await Swal.fire({
+        title: ACTION_LABELS[action],
+        input: 'select',
+        inputOptions: optionenObjekt(gruppenOptionen(props.users).map((g) => ({ value: g, label: g }))),
+        inputPlaceholder: 'Gruppe wählen',
+        inputValidator: (wert) => (wert ? undefined : 'Bitte eine Gruppe wählen'),
+        showCancelButton: true,
+        confirmButtonText: 'Vorschau',
+        cancelButtonText: 'Abbrechen',
+      });
+      return result.isConfirmed ? { groupid: result.value } : null;
+    }
+    case 'user.setQuota': {
+      const result = await Swal.fire({
+        title: ACTION_LABELS[action],
+        input: 'select',
+        inputOptions: optionenObjekt(QUOTA_PRESETS.map((p) => ({ value: p.id, label: p.label }))),
+        inputValue: QUOTA_PRESETS[0].id,
+        showCancelButton: true,
+        confirmButtonText: 'Vorschau',
+        cancelButtonText: 'Abbrechen',
+      });
+      return result.isConfirmed ? { value: formatQuotaForApi(findQuotaPreset(result.value)) } : null;
+    }
+    case 'user.setPassword': {
+      const result = await Swal.fire({
+        title: ACTION_LABELS[action],
+        input: 'password',
+        inputPlaceholder: 'Neues Passwort',
+        inputAttributes: { autocomplete: 'new-password' },
+        inputValidator: (wert) => (wert.trim() ? undefined : 'Bitte ein Passwort eingeben'),
+        showCancelButton: true,
+        confirmButtonText: 'Vorschau',
+        cancelButtonText: 'Abbrechen',
+      });
+      return result.isConfirmed ? { value: result.value.trim() } : null;
+    }
+    case 'user.update': {
+      const result = await Swal.fire({
+        title: ACTION_LABELS[action],
+        html: `<p>Leere Felder bleiben unverändert.</p>
+          <input id="edit-displayname" class="swal2-input" placeholder="Anzeigename" value="${escapeHtml(user?.displayname)}">
+          <input id="edit-email" class="swal2-input" placeholder="E-Mail" value="${escapeHtml(user?.email)}">`,
+        focusConfirm: false,
+        preConfirm: () => {
+          const felder = buildUpdateParams({
+            displayname: document.getElementById('edit-displayname').value,
+            email: document.getElementById('edit-email').value,
+          });
+          if (Object.keys(felder).length === 0) {
+            Swal.showValidationMessage('Bitte Anzeigename oder E-Mail angeben');
+            return false;
+          }
+          return felder;
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Vorschau',
+        cancelButtonText: 'Abbrechen',
+      });
+      return result.isConfirmed ? result.value : null;
+    }
+    default:
+      return {};
+  }
 }
 
 function planZeile(plan) {
@@ -208,6 +191,8 @@ async function startJob(plan, action, params) {
       jobHistorie.value = pushJobHistorie(jobHistorie.value, {
         zeitpunkt: Date.now(), aktion: ACTION_LABELS[action], summary: result.summary,
       });
+      const feedback = jobToast(ACTION_LABELS[action], result.summary);
+      (feedback.kind === 'error' ? toastError : toastSuccess)(feedback.text);
     } else {
       await Swal.fire({ title: 'Fehler', text: result.message ?? MESSAGES.aktion_fehlgeschlagen, icon: 'error' });
     }
@@ -216,19 +201,17 @@ async function startJob(plan, action, params) {
     await Swal.fire({ title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error' });
   } finally {
     jobLaeuft.value = false;
-    // Never survives into the next selection (Review: #6).
-    password.value = '';
     // Die Daten sind jetzt veraltet (B4) - der Elternteil lädt die Userliste neu.
     emit('finished');
   }
 }
 
-async function onVorschau() {
-  const paramsObj = buildParams();
+// Dry-Run for exactly the given userids, then confirmation and execution (single and batch alike).
+async function onVorschau(action, paramsObj, userids) {
   const plan = planActions({
     users: props.users,
-    auswahl: [...props.auswahl],
-    action: selectedAction.value,
+    auswahl: userids,
+    action,
     params: paramsObj,
     adminUserId: props.adminUserId,
   });
@@ -242,122 +225,72 @@ async function onVorschau() {
     return;
   }
 
-  const bestaetigt = selectedAction.value === 'user.delete' ? await confirmDelete(plan) : await confirmNormal(plan);
+  const bestaetigt = action === 'user.delete' ? await confirmDelete(plan) : await confirmNormal(plan);
   if (!bestaetigt) return;
 
   dryRunPlan.value = plan;
-  await startJob(plan, selectedAction.value, paramsObj);
+  await startJob(plan, action, paramsObj);
 }
+
+function blockiert() {
+  return jobLaeuft.value || props.gesperrt;
+}
+
+// Every dialog and the run itself are wrapped so a failure ends in a toast, never a stuck UI.
+async function fuehreAus(action, user, userids) {
+  if (blockiert()) return;
+  try {
+    const paramsObj = await frageParams(action, user);
+    if (paramsObj === null) return;
+    await onVorschau(action, paramsObj, userids);
+  } catch (error) {
+    console.error('Action failed:', error);
+    toastError(MESSAGES.unerwarteter_serverfehler);
+  }
+}
+
+// Row button: the same path with a selection of exactly this user.
+async function runSingle(userid, action) {
+  await fuehreAus(action, props.users.find((u) => u.userid === userid), [userid]);
+}
+
+function runBatch(action) {
+  return fuehreAus(action, null, [...props.auswahl]);
+}
+
+defineExpose({ runSingle });
 </script>
 
 <template>
   <div
-    v-if="auswahl.size > 0"
-    class="action-bar content-card"
+    v-if="batchBarVisible(auswahl.size)"
+    class="content-card mb-2"
   >
-    <select
-      v-model="selectedAction"
-      class="form-select"
-    >
-      <option
-        v-for="action in ACTIONS"
-        :key="action.id"
-        :value="action.id"
+    <div class="content-card-body py-2 px-3 d-flex flex-wrap align-items-center gap-2">
+      <span><strong>{{ auswahl.size }}</strong> ausgewählt</span>
+      <button
+        v-for="aktion in BATCH_ACTIONS"
+        :key="aktion.id"
+        type="button"
+        class="btn btn-sm"
+        :class="`btn-outline-${aktion.variant}`"
+        :disabled="jobLaeuft || gesperrt"
+        @click="runBatch(aktion.id)"
       >
-        {{ action.label }}
-      </option>
-    </select>
-
-    <select
-      v-if="selectedAction === 'user.addToGroup' || selectedAction === 'user.removeFromGroup'"
-      v-model="groupId"
-      class="form-select"
-    >
-      <option value="">
-        Gruppe wählen
-      </option>
-      <option
-        v-for="gruppe in gruppenOptionenListe"
-        :key="gruppe"
-        :value="gruppe"
+        <i
+          class="bi"
+          :class="aktion.icon"
+          aria-hidden="true"
+        />
+        {{ aktion.label }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-link btn-sm text-secondary ms-auto"
+        @click="emit('clear')"
       >
-        {{ gruppe }}
-      </option>
-    </select>
-
-    <select
-      v-if="selectedAction === 'user.setQuota'"
-      v-model="quotaPresetId"
-      class="form-select"
-    >
-      <option
-        v-for="preset in QUOTA_PRESETS"
-        :key="preset.id"
-        :value="preset.id"
-      >
-        {{ preset.label }}
-      </option>
-    </select>
-
-    <input
-      v-if="selectedAction === 'user.setPassword'"
-      v-model="password"
-      type="password"
-      class="form-control"
-      placeholder="Neues Passwort"
-    >
-
-    <template v-if="selectedAction === 'user.update'">
-      <input
-        v-model="displayname"
-        type="text"
-        class="form-control"
-        placeholder="Neuer Anzeigename (leer = unverändert)"
-      >
-      <input
-        v-model="email"
-        type="text"
-        class="form-control"
-        placeholder="Neue E-Mail (leer = unverändert)"
-      >
-    </template>
-
-    <span class="auswahl-anzahl">{{ auswahl.size }} ausgewählt</span>
-
-    <button
-      type="button"
-      class="btn btn-primary"
-      :disabled="vorschauDisabled"
-      @click="onVorschau"
-    >
-      <i
-        v-if="selectedActionIcon"
-        class="bi"
-        :class="selectedActionIcon"
-        aria-hidden="true"
-      />
-      Vorschau
-    </button>
+        Auswahl aufheben
+      </button>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.action-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-  padding: 10px;
-}
-
-.action-bar select,
-.action-bar input {
-  width: auto;
-}
-
-.auswahl-anzahl {
-  color: var(--text-secondary);
-  margin-left: auto;
-}
-</style>

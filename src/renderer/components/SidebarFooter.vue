@@ -2,13 +2,15 @@
 import { computed } from 'vue';
 import { hostLabel, lastLoadLabel, statusDot } from '../../shared/connectionUi.js';
 import { logout } from '../connectFlow.js';
-import { connecting, connection, usersFetchedAt } from '../state.js';
+import { logoutState } from '../../shared/userRows.js';
+import { connecting, connection, jobLaeuft, usersFetchedAt } from '../state.js';
 
 defineProps({ version: { type: String, default: '' } });
 const emit = defineEmits(['about']);
 
 const dot = computed(() => statusDot({ connected: connection.connected, connecting: connecting.value }));
 const host = computed(() => hostLabel(connection.connected ? connection.baseUrl : null));
+const logoutZustand = computed(() => logoutState(jobLaeuft.value));
 const last = computed(() => lastLoadLabel(usersFetchedAt.value));
 </script>
 
@@ -31,6 +33,9 @@ const last = computed(() => lastLoadLabel(usersFetchedAt.value));
       v-if="connection.connected"
       type="button"
       class="sidebar-logout-btn"
+      :disabled="logoutZustand.disabled"
+      :title="logoutZustand.title"
+      :aria-label="logoutZustand.title"
       @click="logout"
     >
       <i

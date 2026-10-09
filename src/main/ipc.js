@@ -136,6 +136,9 @@ async function connectSaved(onLoaded) {
     const tlsResult = applyTlsOutcome(result, saved.baseUrl);
     if (tlsResult !== result) return tlsResult; // declined/timed-out certificate wins over the raw classification
     if (result.kind === 'auth') {
+      // A rejected saved password is dropped so the next start makes no further failed attempt.
+      const forgotten = await credentials.forget();
+      if (!forgotten.ok) console.error('connection.connectSaved: rejected credential not removed:', forgotten.messageId);
       return { ...result, messageId: 'gespeichertes_passwort_abgelehnt', message: MESSAGES.gespeichertes_passwort_abgelehnt };
     }
     return result;
@@ -167,7 +170,7 @@ async function handleLogout() {
 async function handleOpenExternal(args) {
   try {
     const { url } = args;
-    if (!isAllowedExternalUrl(url)) {
+    if (!isAllowedExternalUrl(url, session.baseUrl)) {
       return { ok: false, messageId: 'link_nicht_erlaubt', message: MESSAGES.link_nicht_erlaubt };
     }
     await shell.openExternal(url);
@@ -180,13 +183,18 @@ async function handleOpenExternal(args) {
 
 // Never decrypts (credentials.peek) - the password must never be touched on a status poll.
 async function handleStatus() {
-  const meta = await credentials.peek();
-  return {
-    ...buildStatus(),
-    hasSaved: meta !== null,
-    savedBaseUrl: meta?.baseUrl ?? null,
-    savedAdminUser: meta?.adminUser ?? null,
-  };
+  try {
+    const meta = await credentials.peek();
+    return {
+      ...buildStatus(),
+      hasSaved: meta !== null,
+      savedBaseUrl: meta?.baseUrl ?? null,
+      savedAdminUser: meta?.adminUser ?? null,
+    };
+  } catch (error) {
+    console.error('connection.status failed:', describeError(error));
+    return { ...buildStatus(), hasSaved: false, savedBaseUrl: null, savedAdminUser: null };
+  }
 }
 
 // users.list has no connection -> nicht_verbunden, without ever touching ocs/userList.js (S05 A7).

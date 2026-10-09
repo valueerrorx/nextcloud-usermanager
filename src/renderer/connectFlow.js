@@ -4,7 +4,7 @@ import Swal from 'sweetalert2';
 import { MESSAGES } from '../shared/messages.js';
 import { hostLabel } from '../shared/connectionUi.js';
 import {
-  activeView, certException, connectError, connecting, connection, resetOnConnect, startupGeprueft,
+  activeView, certException, connectError, connecting, connection, jobLaeuft, resetOnConnect, startupGeprueft,
 } from './state.js';
 import { toastError, toastSuccess } from './toast.js';
 
@@ -28,11 +28,15 @@ async function applyConnectResult(result) {
     return { ok: false, message: result?.message ?? MESSAGES.unerwarteter_serverfehler };
   }
   resetOnConnect();
-  applyStatus(result.status);
   if (result.messageId) {
-    // e.g. no keyring: the credential was not persisted - never silent (REVIEW-NOTES 7).
-    await Swal.fire({ icon: 'warning', title: 'Hinweis', text: result.message });
+    // e.g. no keyring: shown before connected flips, so no view change can swallow it (REVIEW-NOTES 7).
+    try {
+      await Swal.fire({ icon: 'warning', title: 'Hinweis', text: result.message });
+    } catch (error) {
+      console.error('Failed to show connect notice:', error);
+    }
   }
+  applyStatus(result.status);
   toastSuccess(`Verbunden mit ${hostLabel(result.status.baseUrl)}`);
   await refreshStatus(); // picks up hasSaved after a remember:true connect
   return { ok: true };
@@ -81,6 +85,7 @@ export async function startup() {
 }
 
 export async function logout() {
+  if (jobLaeuft.value) return; // blocked while a job runs (the sidebar button is disabled too)
   let result;
   try {
     result = await window.api.logout();

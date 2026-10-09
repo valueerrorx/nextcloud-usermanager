@@ -19,6 +19,8 @@ import UserTable from '../components/UserTable.vue';
 import ActionBar from '../components/ActionBar.vue';
 import JobProgress from '../components/JobProgress.vue';
 
+const actionBar = ref(null);
+
 const QUOTA_STUFEN = [
   { wert: 'unter50', label: '< 50 %' },
   { wert: 'f50bis90', label: '50 - 90 %' },
@@ -106,6 +108,19 @@ async function onAuswahlAusCsv() {
   }
 }
 
+// Row buttons share the batch path: a dry run over exactly this one user.
+function onRowAction({ userid, action }) {
+  actionBar.value?.runSingle(userid, action);
+}
+
+function auswahlAufheben() {
+  auswahl.value = new Set();
+}
+
+function sucheLeeren() {
+  filterSuche.value = '';
+}
+
 const formOffen = ref(false);
 const neuUserid = ref('');
 const neuAnzeigename = ref('');
@@ -191,61 +206,48 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page-header">
-    <h1 class="page-title">
-      <i
-        class="bi bi-people-fill"
-        aria-hidden="true"
-      />
-      Benutzer
-    </h1>
-  </div>
-
-  <div class="toolbar">
-    <button
-      type="button"
-      class="btn btn-outline-secondary"
-      title="Userliste neu laden"
-      :disabled="usersLadezustand === 'laedt' || anlegenLaeuft"
-      @click="load"
-    >
-      <i
-        class="bi bi-arrow-clockwise"
-        :class="{ spin: usersLadezustand === 'laedt' }"
-        aria-hidden="true"
-      />
-      Neu laden
-    </button>
-    <span
-      v-if="usersFetchedAt"
-      class="timestamp"
-    >
-      Stand: {{ formatTimestamp(usersFetchedAt) }}
-    </span>
-    <button
-      type="button"
-      class="btn btn-outline-secondary"
-      :disabled="usersLadezustand !== 'bereit' || anlegenLaeuft"
-      @click="onAuswahlAusCsv"
-    >
-      <i
-        class="bi bi-upload"
-        aria-hidden="true"
-      />
-      Auswahl aus CSV
-    </button>
-    <button
-      type="button"
-      class="btn btn-outline-secondary"
-      :aria-expanded="formOffen"
-      @click="formOffen = !formOffen"
-    >
-      <i
-        class="bi bi-person-plus"
-        aria-hidden="true"
-      />
-      Benutzer anlegen
-    </button>
+  <div class="page-header d-flex flex-wrap align-items-start justify-content-between gap-2">
+    <div>
+      <h1 class="page-title">
+        <i
+          class="bi bi-people-fill"
+          aria-hidden="true"
+        />
+        Benutzer
+      </h1>
+      <p class="page-subtitle">
+        {{ users.length }} Benutzer<template v-if="usersFetchedAt">
+          , Stand: {{ formatTimestamp(usersFetchedAt) }}
+        </template>
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm"
+        title="Userliste neu laden"
+        :disabled="anlegenLaeuft || usersLadezustand === 'laedt'"
+        @click="load"
+      >
+        <i
+          class="bi bi-arrow-clockwise"
+          aria-hidden="true"
+        />
+        Neu laden
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm"
+        :aria-expanded="formOffen"
+        @click="formOffen = !formOffen"
+      >
+        <i
+          class="bi bi-person-plus"
+          aria-hidden="true"
+        />
+        Benutzer anlegen
+      </button>
+    </div>
   </div>
 
   <p
@@ -388,87 +390,134 @@ onUnmounted(() => {
 
   <div
     v-if="usersLadezustand === 'bereit'"
-    class="filterleiste"
+    class="content-card mb-3"
   >
-    <div class="suche input-group">
-      <span class="input-group-text">
-        <i
-          class="bi bi-search"
-          aria-hidden="true"
-        />
-      </span>
-      <input
-        v-model="filterSuche"
-        type="text"
-        placeholder="Suche nach Benutzername, Anzeigename oder E-Mail"
-        class="form-control"
-      >
+    <div class="content-card-body py-2">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-4">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">
+              <i
+                class="bi bi-search"
+                aria-hidden="true"
+              />
+            </span>
+            <input
+              v-model="filterSuche"
+              type="text"
+              placeholder="Name, Anzeigename oder E-Mail"
+              aria-label="Suche"
+              class="form-control"
+            >
+            <button
+              v-if="filterSuche"
+              type="button"
+              class="btn btn-outline-secondary"
+              title="Suche leeren"
+              aria-label="Suche leeren"
+              @click="sucheLeeren"
+            >
+              <i
+                class="bi bi-x-lg"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </div>
+        <div class="col-auto">
+          <select
+            v-model="filterStatus"
+            class="form-select form-select-sm filter-select"
+            aria-label="Status"
+          >
+            <option value="alle">
+              Alle Status
+            </option>
+            <option value="aktiv">
+              Aktiv
+            </option>
+            <option value="deaktiviert">
+              Deaktiviert
+            </option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <select
+            v-model="filterGruppe"
+            class="form-select form-select-sm filter-select"
+            aria-label="Gruppe"
+          >
+            <option :value="null">
+              Alle Gruppen
+            </option>
+            <option
+              v-for="gruppe in gruppenOptionenListe"
+              :key="gruppe"
+              :value="gruppe"
+            >
+              {{ gruppe }}
+            </option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <select
+            v-model="filterQuotaStufe"
+            class="form-select form-select-sm filter-select"
+            aria-label="Kontingentstufe"
+          >
+            <option :value="null">
+              Alle Kontingente
+            </option>
+            <option
+              v-for="stufe in QUOTA_STUFEN"
+              :key="stufe.wert"
+              :value="stufe.wert"
+            >
+              {{ stufe.label }}
+            </option>
+          </select>
+        </div>
+        <div class="col-auto ms-auto d-flex align-items-center gap-2">
+          <span class="treffer">{{ gefilterteUndSortierte.length }} von {{ users.length }}</span>
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm"
+            title="Filter zurücksetzen"
+            @click="filterZuruecksetzen"
+          >
+            <i
+              class="bi bi-x-circle"
+              aria-hidden="true"
+            />
+            Filter zurücksetzen
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm"
+            :disabled="usersLadezustand !== 'bereit' || anlegenLaeuft"
+            @click="onAuswahlAusCsv"
+          >
+            <i
+              class="bi bi-upload"
+              aria-hidden="true"
+            />
+            Auswahl aus CSV
+          </button>
+        </div>
+      </div>
     </div>
-    <select
-      v-model="filterGruppe"
-      class="form-select"
-    >
-      <option :value="null">
-        Alle Gruppen
-      </option>
-      <option
-        v-for="gruppe in gruppenOptionenListe"
-        :key="gruppe"
-        :value="gruppe"
-      >
-        {{ gruppe }}
-      </option>
-    </select>
-    <select
-      v-model="filterStatus"
-      class="form-select"
-    >
-      <option value="alle">
-        Alle
-      </option>
-      <option value="aktiv">
-        Aktiv
-      </option>
-      <option value="deaktiviert">
-        Deaktiviert
-      </option>
-    </select>
-    <select
-      v-model="filterQuotaStufe"
-      class="form-select"
-    >
-      <option :value="null">
-        Alle Kontingentstufen
-      </option>
-      <option
-        v-for="stufe in QUOTA_STUFEN"
-        :key="stufe.wert"
-        :value="stufe.wert"
-      >
-        {{ stufe.label }}
-      </option>
-    </select>
-    <button
-      type="button"
-      class="btn btn-outline-secondary"
-      title="Filter zurücksetzen"
-      @click="filterZuruecksetzen"
-    >
-      <i
-        class="bi bi-funnel"
-        aria-hidden="true"
-      />
-      Filter zurücksetzen
-    </button>
   </div>
 
-  <p
+  <ActionBar
     v-if="usersLadezustand === 'bereit'"
-    class="zusammenfassung"
-  >
-    {{ gefilterteUndSortierte.length }} von {{ users.length }} Benutzern,
-    {{ auswahl.size }} ausgewählt
-  </p>
+    ref="actionBar"
+    :users="users"
+    :auswahl="auswahl"
+    :admin-user-id="connection.adminUserId"
+    :gesperrt="anlegenLaeuft"
+    @finished="load"
+    @clear="auswahlAufheben"
+  />
 
   <div class="content-card">
     <div class="content-card-body">
@@ -484,9 +533,12 @@ onUnmounted(() => {
           :sort-richtung="sortRichtung"
           :auswahl="auswahl"
           :ausgewaehlte-anzahl="auswahl.size"
+          :admin-user-id="connection.adminUserId"
+          :gesperrt="anlegenLaeuft || jobLaeuft"
           @sort="onSort"
           @toggle="onToggle"
           @toggle-alle="onToggleAlle"
+          @row-action="onRowAction"
         />
         <p
           v-else
@@ -498,46 +550,23 @@ onUnmounted(() => {
     </div>
   </div>
 
-  <ActionBar
-    v-if="usersLadezustand === 'bereit'"
-    :users="users"
-    :auswahl="auswahl"
-    :admin-user-id="connection.adminUserId"
-    :gesperrt="anlegenLaeuft"
-    @finished="load"
-  />
   <JobProgress />
 </template>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.timestamp {
-  color: var(--text-secondary);
-  font-size: 0.9em;
-}
-
 .notice {
   color: var(--text-secondary);
   margin: 0 0 12px;
 }
 
-.filterleiste {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+.filter-select {
+  min-width: 130px;
 }
 
-.filterleiste .suche {
-  flex: 1;
-  min-width: 220px;
+.treffer {
+  color: var(--text-secondary);
+  font-size: 0.83rem;
+  white-space: nowrap;
 }
 
 .form-fehler {
@@ -551,8 +580,4 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-.zusammenfassung {
-  color: var(--text-secondary);
-  margin: 0 0 12px;
-}
 </style>

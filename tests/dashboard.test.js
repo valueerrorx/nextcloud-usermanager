@@ -1,9 +1,9 @@
 // S13: die vier Speicherwerte am Pflichtfixture, istFastVoll-Grenzwerte, fastVollListe
 // Sortierung/Kappung, userCounts, historyCounts mit teilweise, pushJobHistorie, kein Request.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseQuota } from '../src/shared/quota.js';
+import { formatBytes, parseQuota } from '../src/shared/quota.js';
 import {
-  fastVollListe, historyCounts, istFastVoll, pushJobHistorie, storageTotals, userCounts,
+  accentStyle, dashboardCards, fastVollListe, historyCounts, istFastVoll, pushJobHistorie, storageTotals, userCounts,
 } from '../src/shared/dashboard.js';
 
 function user(overrides = {}) {
@@ -219,5 +219,41 @@ describe('dashboard.js — rein lokal, kein Request', () => {
     pushJobHistorie([], { zeitpunkt: 1, aktion: 'x', summary: null });
 
     expect(throwingFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('dashboardCards / accentStyle (S17)', () => {
+  const mk = (kind, limitBytes, usedBytes, usagePercent) => ({ enabled: true, quota: { kind, limitBytes, usedBytes, usagePercent } });
+  const users = [
+    mk('limited', 1000, 950, 95),
+    mk('unlimited', null, 500, null),
+    { enabled: false, quota: { kind: 'unknown', limitBytes: null, usedBytes: null, usagePercent: null } },
+  ];
+
+  it('liefert vier Karten mit Akzentfarben der Vorlage', () => {
+    const cards = dashboardCards({ users, groupCount: 7 });
+    expect(cards.map((c) => c.key)).toEqual(['benutzer', 'gruppen', 'speicher', 'fastVoll']);
+    expect(cards.map((c) => c.icon)).toEqual(['bi-people-fill', 'bi-collection-fill', 'bi-hdd-fill', 'bi-exclamation-triangle-fill']);
+    expect(cards.map((c) => c.iconStyle.color)).toEqual(['#58a6ff', '#a371f7', '#56d4dd', '#d29922']);
+  });
+
+  it('Werte: Benutzer, Gruppen, Fast voll; genutzt zählt unbegrenzte mit', () => {
+    const [benutzer, gruppen, speicher, fastVoll] = dashboardCards({ users, groupCount: 7 });
+    expect(benutzer.wert).toBe('3');
+    expect(benutzer.metrics).toEqual([{ label: 'Aktiv', wert: '2' }, { label: 'Deaktiviert', wert: '1' }]);
+    expect(gruppen.wert).toBe('7');
+    expect(speicher.wert).toBe(formatBytes(1450));
+    expect(speicher.metrics.find((m) => m.label === 'Unbegrenzte Konten').wert).toBe('1');
+    expect(fastVoll.wert).toBe('1');
+  });
+
+  it('Fast voll zählt auch die über max abgeschnittenen Einträge, 90 % selbst nicht', () => {
+    const viele = Array.from({ length: 25 }, () => mk('limited', 100, 95, 95));
+    expect(dashboardCards({ users: viele, groupCount: 0 })[3].wert).toBe('25');
+    expect(dashboardCards({ users: [mk('limited', 100, 90, 90)], groupCount: 0 })[3].wert).toBe('0');
+  });
+
+  it('accentStyle: Akzent mit .12 Alpha als Hintergrund', () => {
+    expect(accentStyle('#58a6ff')).toEqual({ background: 'rgba(88, 166, 255, 0.12)', color: '#58a6ff' });
   });
 });

@@ -1,3 +1,5 @@
+import { formatBytes } from './quota.js';
+
 // Abgeleitete Werte fürs Dashboard (ARCHITECTURE §4.1, DECISIONS "Berechnungen gehören nie in
 // Vue-Komponenten"). Pure, kein I/O - DashboardView.vue ruft nur auf und formatiert mit
 // shared/quota.js#formatBytes/formatPercent, rechnet selbst nichts.
@@ -66,4 +68,43 @@ export function historyCounts(summary) {
 // tatsächlich ausgeführten Jobs, nie bei der reinen Vorschau).
 export function pushJobHistorie(historie, eintrag, { max = 5 } = {}) {
   return [eintrag, ...historie].slice(0, max);
+}
+
+// Accent colours of the stat cards.
+export const CARD_ACCENTS = {
+  benutzer: '#58a6ff',
+  gruppen: '#a371f7',
+  speicher: '#56d4dd',
+  fastVoll: '#d29922',
+};
+
+// Icon tile style: accent text on an accent background with .12 alpha.
+export function accentStyle(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { background: `rgba(${r}, ${g}, ${b}, 0.12)`, color: hex };
+}
+
+// The four stat cards. Values are preformatted strings; mono marks monospace metrics.
+export function dashboardCards({ users, groupCount }) {
+  const zaehler = userCounts(users);
+  const speicher = storageTotals(users);
+  const fastVoll = fastVollListe(users);
+  const karte = (key, icon, kicker, wert, label, metrics) => ({
+    key, icon, kicker, wert, label, metrics, iconStyle: accentStyle(CARD_ACCENTS[key]),
+  });
+  return [
+    karte('benutzer', 'bi-people-fill', 'Benutzer', String(zaehler.gesamt), 'Konten gesamt', [
+      { label: 'Aktiv', wert: String(zaehler.aktiv) },
+      { label: 'Deaktiviert', wert: String(zaehler.deaktiviert) },
+    ]),
+    karte('gruppen', 'bi-collection-fill', 'Gruppen', String(groupCount), 'Gruppen gesamt', []),
+    karte('speicher', 'bi-hdd-fill', 'Speicher', formatBytes(speicher.genutztBytes), 'Genutzt (gesamt)', [
+      { label: 'Summe begrenzter Kontingente', wert: formatBytes(speicher.summeBegrenztBytes), mono: true },
+      { label: 'Unbegrenzte Konten', wert: String(speicher.anzahlUnbegrenzt) },
+      { label: 'Unbekanntes Kontingent', wert: String(speicher.anzahlUnbekannt) },
+    ]),
+    karte('fastVoll', 'bi-exclamation-triangle-fill', 'Fast voll', String(fastVoll.eintraege.length + fastVoll.weitere), 'Benutzer über 90 %', []),
+  ];
 }

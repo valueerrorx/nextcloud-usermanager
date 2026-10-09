@@ -133,6 +133,51 @@ describe('registerIpcHandlers — connection.* und tls.respondCertificate', () =
     expect(session.connected).toBe(false);
   });
 
+  it('connectSaved: abgelehntes gespeichertes Passwort löscht den gespeicherten Zugang', async () => {
+    const { unlink } = await import('node:fs/promises');
+    readFile.mockResolvedValue(JSON.stringify({ baseUrl: 'https://host', adminUser: 'admin', secret: 'ZW5jOmdlaGVpbQ==' }));
+    net.fetch.mockResolvedValue(fakeResponse({ status: 401 }));
+    await handlers.get('connection.connectSaved')();
+    expect(unlink).toHaveBeenCalledTimes(1);
+  });
+
+  it('connectSaved: scheitert das Löschen des abgelehnten Zugangs, wird es ohne Geheimnis geloggt', async () => {
+    const { unlink } = await import('node:fs/promises');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    unlink.mockRejectedValueOnce(Object.assign(new Error('EPERM'), { code: 'EPERM' }));
+    readFile.mockResolvedValue(JSON.stringify({ baseUrl: 'https://host', adminUser: 'admin', secret: 'ZW5jOmdlaGVpbQ==' }));
+    net.fetch.mockResolvedValue(fakeResponse({ status: 401 }));
+    const result = await handlers.get('connection.connectSaved')();
+    expect(result.messageId).toBe('gespeichertes_passwort_abgelehnt');
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('not removed'), 'zugang_loeschen_fehlgeschlagen');
+    spy.mockRestore();
+  });
+
+  it('connectSaved: Netzwerkfehler löscht den gespeicherten Zugang nicht', async () => {
+    const { unlink } = await import('node:fs/promises');
+    readFile.mockResolvedValue(JSON.stringify({ baseUrl: 'https://host', adminUser: 'admin', secret: 'ZW5jOmdlaGVpbQ==' }));
+    net.fetch.mockRejectedValue(new Error('net::ERR_CONNECTION_REFUSED'));
+    const result = await handlers.get('connection.connectSaved')();
+    expect(result.ok).toBe(false);
+    expect(unlink).not.toHaveBeenCalled();
+  });
+
+  it('connection.status: wirft credentials.peek, liefert trotzdem einen Status ohne gespeicherten Zugang', async () => {
+    readFile.mockRejectedValue(Object.assign(new Error('EIO'), { code: 'EIO' }));
+    const status = await handlers.get('connection.status')();
+    expect(status).toMatchObject({ connected: false, hasSaved: false, savedBaseUrl: null, savedAdminUser: null });
+  });
+
+  it('app.openExternal erlaubt den Host des verbundenen Servers, aber nicht ohne Verbindung', async () => {
+    const url = 'https://cloud.example.org/';
+    expect((await handlers.get('app.openExternal')(null, { url })).ok).toBe(false);
+    expect(shell.openExternal).not.toHaveBeenCalled();
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://cloud.example.org', adminUser: 'admin', appPassword: 'x' });
+    expect(await handlers.get('app.openExternal')(null, { url })).toEqual({ ok: true });
+    expect(shell.openExternal).toHaveBeenCalledWith(url);
+    expect((await handlers.get('app.openExternal')(null, { url: 'https://evil.example/' })).ok).toBe(false);
+  });
+
   it('connectSaved: Erfolg füllt die Session mit secretStorage keyring', async () => {
     readFile.mockResolvedValue(JSON.stringify({ baseUrl: 'https://host', adminUser: 'admin', secret: 'ZW5jOmdlaGVpbQ==' }));
     const result = await handlers.get('connection.connectSaved')();

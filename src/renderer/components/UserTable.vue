@@ -3,6 +3,7 @@
 // Filter- oder Sortierlogik (ARCHITECTURE §4.1 - die liegt in shared/filters.js und wird vom
 // Elternteil UsersView.vue aufgerufen).
 import { alleAusgewaehlt } from '../../shared/filters.js';
+import { rowActions, userInitials } from '../../shared/userRows.js';
 import QuotaCell from './QuotaCell.vue';
 
 const props = defineProps({
@@ -11,8 +12,10 @@ const props = defineProps({
   sortRichtung: { type: String, required: true },
   auswahl: { type: Set, required: true },
   ausgewaehlteAnzahl: { type: Number, required: true },
+  adminUserId: { type: String, default: null },
+  gesperrt: { type: Boolean, default: false },
 });
-defineEmits(['sort', 'toggle', 'toggle-alle']);
+defineEmits(['sort', 'toggle', 'toggle-alle', 'row-action']);
 
 // Einziger Ort für das Pfeil-Symbol der aktiven Sortierspalte, statt dreifach kopierter Ternary.
 function sortPfeil(feld) {
@@ -79,6 +82,7 @@ function sortPfeil(feld) {
               aria-hidden="true"
             />
           </th>
+          <th>Aktionen</th>
         </tr>
       </thead>
       <tbody>
@@ -96,7 +100,15 @@ function sortPfeil(feld) {
               @change="$emit('toggle', user.userid)"
             >
           </td>
-          <td>{{ user.userid }}</td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span
+                class="user-avatar"
+                aria-hidden="true"
+              >{{ userInitials(user) }}</span>
+              {{ user.userid }}
+            </div>
+          </td>
           <td>{{ user.displayname }}</td>
           <td>{{ user.email ?? '—' }}</td>
           <td>
@@ -114,6 +126,27 @@ function sortPfeil(feld) {
             </span>
           </td>
           <td><QuotaCell :quota="user.quota" /></td>
+          <td>
+            <div class="d-flex gap-1 flex-nowrap">
+              <button
+                v-for="aktion in rowActions(user, { adminUserId, gesperrt })"
+                :key="aktion.action"
+                type="button"
+                class="btn-action"
+                :class="{ danger: aktion.danger }"
+                :title="aktion.title"
+                :aria-label="`${aktion.label}: ${user.userid}`"
+                :disabled="aktion.disabled"
+                @click="$emit('row-action', { userid: user.userid, action: aktion.action })"
+              >
+                <i
+                  class="bi"
+                  :class="aktion.icon"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </td>
         </tr>
       </tbody>
     </table>

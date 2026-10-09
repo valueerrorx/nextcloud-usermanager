@@ -9,12 +9,14 @@
 // wenn sie noch leer sind, und blockiert bis dahin mit StateBlock statt mit Null-Kacheln.
 import { computed, onMounted } from 'vue';
 import { MESSAGES } from '../../shared/messages.js';
-import { formatBytes, formatPercent } from '../../shared/quota.js';
+import { formatPercent } from '../../shared/quota.js';
 import { formatTimestamp } from '../../shared/time.js';
-import { fastVollListe, historyCounts, storageTotals, userCounts } from '../../shared/dashboard.js';
+import { dashboardCards, fastVollListe, historyCounts } from '../../shared/dashboard.js';
+import { nextcloudLink } from '../../shared/externalUrl.js';
+import { toastError } from '../toast.js';
 import { ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
-  activeView, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, groups, groupsFehler,
+  activeView, connection, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, groups, groupsFehler,
   groupsLadezustand, jobHistorie, users, usersFehler, usersFetchedAt, usersLadezustand,
   usersUebersprungen,
 } from '../state.js';
@@ -39,14 +41,28 @@ const kombinierterZustand = computed(() => {
 });
 const kombinierteFehlermeldung = computed(() => usersFehler.value ?? groupsFehler.value ?? '');
 
-const benutzerKennzahlen = computed(() => userCounts(users.value));
-const speicherKennzahlen = computed(() => storageTotals(users.value));
+const karten = computed(() => dashboardCards({ users: users.value, groupCount: groups.value.length }));
+const serverLink = computed(() => nextcloudLink(connection.baseUrl));
 const fastVoll = computed(() => fastVollListe(users.value));
 
 // Optional (Step-Spec: "wenn es ohne Berechnung in der .vue nicht geht, weglassen") - hier geht
 // es ohne Berechnung: einfache Zuweisungen auf bestehende state.js-Felder. Die drei anderen Filter
 // werden zuerst zurückgesetzt (REVIEW-NOTES MINOR, S13-Review) - sonst kann ein stehender Filter
 // (z. B. "nur deaktiviert") den gerade angeklickten User in der Usertabelle unsichtbar machen.
+function zuAnsicht(ansicht) {
+  activeView.value = ansicht;
+}
+
+async function nextcloudOeffnen() {
+  try {
+    const result = await window.api.openExternal({ url: serverLink.value });
+    if (!result.ok) toastError(result.message ?? MESSAGES.link_nicht_erlaubt);
+  } catch (error) {
+    console.error('openExternal failed:', error);
+    toastError(MESSAGES.unerwarteter_serverfehler);
+  }
+}
+
 function zuBenutzerWechseln(userid) {
   filterGruppe.value = null;
   filterStatus.value = 'alle';
@@ -73,23 +89,6 @@ function zuBenutzerWechseln(userid) {
     </p>
   </div>
 
-  <div class="toolbar">
-    <button
-      type="button"
-      class="btn btn-outline-secondary"
-      title="Dashboard neu laden"
-      :disabled="kombinierterZustand === 'laedt'"
-      @click="ladeAlles"
-    >
-      <i
-        class="bi bi-arrow-clockwise"
-        :class="{ spin: kombinierterZustand === 'laedt' }"
-        aria-hidden="true"
-      />
-      Neu laden
-    </button>
-  </div>
-
   <p
     v-if="usersUebersprungen > 0"
     class="notice"
@@ -102,109 +101,191 @@ function zuBenutzerWechseln(userid) {
     :fehlermeldung="kombinierteFehlermeldung"
     @retry="ladeAlles"
   >
-    <div class="dashboard-stat-row">
-      <div class="stat-card">
-        <div class="stat-card-kicker">
-          Benutzer
-        </div>
-        <div class="stat-value">
-          {{ benutzerKennzahlen.gesamt }}
-        </div>
-        <div class="stat-card-metrics">
-          <div class="stat-metric">
-            <span class="stat-metric-label">Aktiv</span>
-            <span class="stat-metric-value">{{ benutzerKennzahlen.aktiv }}</span>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-3 mb-4">
+      <div
+        v-for="karte in karten"
+        :key="karte.key"
+        class="col"
+      >
+        <div class="stat-card stat-card-rich">
+          <div
+            class="stat-icon"
+            :style="karte.iconStyle"
+          >
+            <i
+              class="bi"
+              :class="karte.icon"
+              aria-hidden="true"
+            />
           </div>
-          <div class="stat-metric">
-            <span class="stat-metric-label">Deaktiviert</span>
-            <span class="stat-metric-value">{{ benutzerKennzahlen.deaktiviert }}</span>
+          <div class="stat-card-kicker">
+            {{ karte.kicker }}
           </div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-kicker">
-          Gruppen
-        </div>
-        <div class="stat-value">
-          {{ groups.length }}
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-card-kicker">
-          Speicher
-        </div>
-        <div class="stat-card-metrics stat-card-metrics--stack">
-          <div class="stat-metric stat-metric--row">
-            <span class="stat-metric-label">Genutzt (gesamt)</span>
-            <span class="stat-metric-value mono">{{ formatBytes(speicherKennzahlen.genutztBytes) }}</span>
+          <div class="stat-value stat-value-lg">
+            {{ karte.wert }}
           </div>
-          <div class="stat-metric stat-metric--row">
-            <span class="stat-metric-label">Summe begrenzter Kontingente</span>
-            <span class="stat-metric-value mono">{{ formatBytes(speicherKennzahlen.summeBegrenztBytes) }}</span>
+          <div class="stat-label">
+            {{ karte.label }}
           </div>
-          <div class="stat-metric stat-metric--row">
-            <span class="stat-metric-label">Unbegrenzte Konten</span>
-            <span class="stat-metric-value">{{ speicherKennzahlen.anzahlUnbegrenzt }}</span>
-          </div>
-          <div class="stat-metric stat-metric--row">
-            <span class="stat-metric-label">Unbekanntes Kontingent</span>
-            <span class="stat-metric-value">{{ speicherKennzahlen.anzahlUnbekannt }}</span>
+          <div
+            v-if="karte.metrics.length > 0"
+            class="stat-card-metrics stat-card-metrics--stack mt-3"
+          >
+            <div
+              v-for="metrik in karte.metrics"
+              :key="metrik.label"
+              class="stat-metric stat-metric--row"
+            >
+              <span class="stat-metric-label">{{ metrik.label }}</span>
+              <span
+                class="stat-metric-value"
+                :class="{ mono: metrik.mono }"
+              >{{ metrik.wert }}</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="content-card">
-      <div class="content-card-header">
-        <span>Fast voll (&gt; 90 %)</span>
-      </div>
-      <div class="content-card-body">
-        <div
-          v-if="fastVoll.eintraege.length === 0"
-          class="empty-state"
-        >
-          <i
-            class="bi bi-check-circle"
-            aria-hidden="true"
-          />
-          Kein Benutzer über 90 % Kontingent
-        </div>
-        <template v-else>
-          <div class="table-usermanager-wrap">
-            <table class="table-usermanager">
-              <thead>
-                <tr>
-                  <th>Benutzer</th>
-                  <th>Belegung</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="eintrag in fastVoll.eintraege"
-                  :key="eintrag.userid"
-                  class="fast-voll-zeile"
-                  tabindex="0"
-                  role="button"
-                  :aria-label="`Zu Benutzer ${eintrag.displayname} wechseln`"
-                  @click="zuBenutzerWechseln(eintrag.userid)"
-                  @keydown.enter="zuBenutzerWechseln(eintrag.userid)"
-                  @keydown.space.prevent="zuBenutzerWechseln(eintrag.userid)"
-                >
-                  <td>{{ eintrag.displayname }} ({{ eintrag.userid }})</td>
-                  <td>{{ formatPercent(eintrag.quota.usagePercent) }}</td>
-                </tr>
-              </tbody>
-            </table>
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-xl-4">
+        <div class="content-card h-100">
+          <div class="content-card-header">
+            <span>Schnellzugriff</span>
           </div>
-          <p
-            v-if="fastVoll.weitere > 0"
-            class="notice"
-          >
-            und {{ fastVoll.weitere }} weitere
-          </p>
-        </template>
+          <div class="content-card-body">
+            <button
+              type="button"
+              class="quick-link"
+              :disabled="kombinierterZustand === 'laedt'"
+              @click="ladeAlles"
+            >
+              <span class="quick-link-icon">
+                <i
+                  class="bi bi-arrow-repeat"
+                  :class="{ spin: kombinierterZustand === 'laedt' }"
+                  aria-hidden="true"
+                />
+              </span>
+              Daten aktualisieren
+            </button>
+            <button
+              type="button"
+              class="quick-link"
+              @click="zuAnsicht('users')"
+            >
+              <span class="quick-link-icon"><i
+                class="bi bi-people-fill"
+                aria-hidden="true"
+              /></span>
+              Zu Benutzern
+              <i
+                class="bi bi-chevron-right quick-link-end"
+                aria-hidden="true"
+              />
+            </button>
+            <button
+              type="button"
+              class="quick-link"
+              @click="zuAnsicht('groups')"
+            >
+              <span class="quick-link-icon"><i
+                class="bi bi-collection-fill"
+                aria-hidden="true"
+              /></span>
+              Zu Gruppen
+              <i
+                class="bi bi-chevron-right quick-link-end"
+                aria-hidden="true"
+              />
+            </button>
+            <button
+              type="button"
+              class="quick-link"
+              @click="zuAnsicht('import')"
+            >
+              <span class="quick-link-icon"><i
+                class="bi bi-upload"
+                aria-hidden="true"
+              /></span>
+              CSV-Import
+              <i
+                class="bi bi-chevron-right quick-link-end"
+                aria-hidden="true"
+              />
+            </button>
+            <button
+              type="button"
+              class="quick-link"
+              :disabled="!serverLink"
+              :title="serverLink ? 'Nextcloud im Browser öffnen' : 'Nur für https-Server verfügbar'"
+              @click="nextcloudOeffnen"
+            >
+              <span class="quick-link-icon"><i
+                class="bi bi-cloud"
+                aria-hidden="true"
+              /></span>
+              Nextcloud öffnen
+              <i
+                class="bi bi-box-arrow-up-right quick-link-end"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-xl-8">
+        <div class="content-card h-100">
+          <div class="content-card-header">
+            <span>Fast voll (&gt; 90 %)</span>
+          </div>
+          <div class="content-card-body">
+            <div
+              v-if="fastVoll.eintraege.length === 0"
+              class="empty-state"
+            >
+              <i
+                class="bi bi-check-circle"
+                aria-hidden="true"
+              />
+              Kein Benutzer über 90 % Kontingent
+            </div>
+            <template v-else>
+              <div class="table-usermanager-wrap">
+                <table class="table-usermanager">
+                  <thead>
+                    <tr>
+                      <th>Benutzer</th>
+                      <th>Belegung</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="eintrag in fastVoll.eintraege"
+                      :key="eintrag.userid"
+                      class="fast-voll-zeile"
+                      tabindex="0"
+                      role="button"
+                      :aria-label="`Zu Benutzer ${eintrag.displayname} wechseln`"
+                      @click="zuBenutzerWechseln(eintrag.userid)"
+                      @keydown.enter="zuBenutzerWechseln(eintrag.userid)"
+                      @keydown.space.prevent="zuBenutzerWechseln(eintrag.userid)"
+                    >
+                      <td>{{ eintrag.displayname }} ({{ eintrag.userid }})</td>
+                      <td>{{ formatPercent(eintrag.quota.usagePercent) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p
+                v-if="fastVoll.weitere > 0"
+                class="notice"
+              >
+                und {{ fastVoll.weitere }} weitere
+              </p>
+            </template>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -257,13 +338,6 @@ function zuBenutzerWechseln(userid) {
 </template>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
 .notice {
   color: var(--text-secondary);
   margin: 0.5rem 0 0;

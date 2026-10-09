@@ -229,6 +229,12 @@ ist — das deckt `tests/pool.test.js` ab).
 47. **Tun:** Kontingent setzen über die Presets 1/2/5/10/20 GB und "unbegrenzt".
     **Erwartung:** nur Presets wählbar, kein Freitextfeld; Nextcloud zeigt die erwarteten Werte,
     "unbegrenzt" als unbegrenzt.
+47a. **Tun:** bei genau **einem** User (ohne Auswahl, Batch-Leiste unsichtbar) in der Zeile `bi-hdd`
+    (Kontingent setzen), `bi-people` (zur Gruppe) und `bi-person-dash` (aus Gruppe) nutzen.
+    **Erwartung:** Auswahl-Dialog, Vorschau, Bestätigung, dann Ausführung wie im Batch; Abbrechen
+    im Dialog startet keinen Job; beim eigenen Konto sind diese Buttons aktiv (nur Löschen/Deaktivieren gesperrt).
+    Im Bearbeiten-Dialog steht "Leere Felder bleiben unverändert"; Filterzeile hat "Filter zurücksetzen"
+    und die Seitenkopfzeile "Neu laden" (auch bei leerer Instanz).
 48. **Tun:** Einzel-User löschen. **Erwartung:** swal2-Bestätigung, die die `userid` nennt,
     plus Eingabe der Zahl `1`; Button erst bei exakter Eingabe aktiv. Nach Bestätigung gelöscht.
 49. **Tun:** im Löschdialog `1 ` mit Leerzeichen und `01` eingeben.
@@ -561,3 +567,38 @@ ist — das deckt `tests/pool.test.js` ab).
      tatsächlich anzulegenden Zeilen, ist nur dann aktiv; der Klick zeigt in diesem Schritt nur
      einen Platzhalter-Hinweis, es wird **kein** User angelegt (`POST /cloud/users` darf im
      Netzwerk-Tab nicht auftauchen).
+
+## S17 - Benutzerliste und Dashboard
+
+201. **Tun:** Benutzer-Ansicht bei normaler Fensterbreite öffnen. **Erwartung:** Suche (mit
+     x-Button), Status, Gruppe und Kontingent stehen in einer Zeile; rechts Trefferzahl,
+     "Auswahl aus CSV" und "Neu laden". Keine vertikale Stapelung.
+202. **Tun:** jede Zeile betrachten. **Erwartung:** Avatar mit Initialen im Namen, letzte Spalte
+     mit vier Icon-Buttons (Bearbeiten, Passwort, Aktivieren/Deaktivieren, Löschen), jeder mit
+     Tooltip.
+203. **Tun:** in der eigenen Admin-Zeile Löschen und Deaktivieren betrachten. **Erwartung:**
+     beide deaktiviert, Tooltip erklärt den Selbstschutz.
+204. **Tun:** Bearbeiten, Passwort, Deaktivieren und Löschen bei einem Testuser nacheinander
+     klicken. **Erwartung:** jeweils Parameterdialog (wo nötig), dann Vorschau mit "1"; beim
+     Löschen muss die Zahl `1` getippt werden; danach Toast (z. B. "Löschen: 1 OK").
+205. **Tun:** einen User auswählen. **Erwartung:** keine Batch-Leiste. Einen zweiten
+     auswählen. **Erwartung:** Leiste über der Tabelle mit "**2** ausgewählt", sechs Buttons
+     und rechts "Auswahl aufheben".
+206. **Tun:** in der Batch-Leiste "Löschen" klicken. **Erwartung:** Vorschau, Bestätigung nur
+     durch Eintippen der Dry-Run-Zahl, Fortschritt, Ergebnis-CSV, Toast mit "n OK, m
+     fehlgeschlagen".
+207. **Tun:** während eines laufenden Jobs die Sidebar ansehen. **Erwartung:** "Abmelden" ist
+     deaktiviert (Tooltip erklärt warum), Zeilen-Buttons sind gesperrt.
+208. **Tun:** Dashboard öffnen. **Erwartung:** vier Kacheln mit farbigem Icon (Benutzer blau,
+     Gruppen violett, Speicher türkis, Fast voll gelb) mit Kicker, großem Wert, Label und
+     Kennzahlen; darunter "Schnellzugriff" und "Fast voll"-Liste, dann "Letzte Jobs".
+209. **Tun:** im Schnellzugriff "Daten aktualisieren", "Zu Benutzern", "Zu Gruppen",
+     "CSV-Import" klicken. **Erwartung:** Icon dreht sich beim Laden; die Links wechseln die
+     Ansicht.
+210. **Tun:** "Nextcloud öffnen" klicken. **Erwartung:** die Server-URL öffnet sich im
+     Standardbrowser; bei einem http-Server ist der Button deaktiviert.
+211. **Tun:** mit gespeichertem, aber serverseitig widerrufenem App-Passwort die App neu
+     starten, danach noch einmal. **Erwartung:** einmal Fehlermeldung im Popup; beim zweiten
+     Start kein automatischer Verbindungsversuch mehr (Zugang wurde gelöscht).
+212. **Tun:** ohne Keyring mit "Merken" verbinden. **Erwartung:** der Hinweis "nur Sitzung"
+     erscheint vor dem Wechsel ins Dashboard und lässt sich bestätigen.
