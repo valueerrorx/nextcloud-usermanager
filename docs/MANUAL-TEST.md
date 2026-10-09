@@ -232,12 +232,26 @@ ist — das deckt `tests/pool.test.js` ab).
     **Erwartung:** Ablehnung mit deutscher Meldung, kein Request.
 54. **Tun:** Mitglieder einer Gruppe anzeigen. **Erwartung:** Liste stimmt mit Nextcloud überein;
     leere Gruppe zeigt "Keine Einträge".
+54a. **Tun:** in der Mitgliederansicht einen User über das Dropdown hinzufügen, danach über den
+    Entfernen-Button wieder herausnehmen. **Erwartung:** beide Aktionen laufen über dieselbe
+    Vorschau-/Ausführungslogik wie bei den Einzel-User-Aktionen (kein separater Bestätigungsweg);
+    nach jeder Änderung aktualisieren sich **sowohl** die Mitgliederliste **als auch** die
+    Mitgliederzahl in der Gruppentabelle automatisch, ohne dass "Neu laden" nötig ist.
+    Der entfernte bzw. hinzugefügte User bleibt als User unverändert in Nextcloud bestehen.
 55. **Tun:** Gruppe löschen. **Erwartung:** Bestätigung nennt Gruppenname **und** Mitgliederzahl;
     nach Löschen existieren die Mitglieder weiter als User.
-56. **Tun:** Gruppe `admin` löschen wollen. **Erwartung:** blockiert mit Begründung.
+56. **Tun:** Gruppe `admin` löschen wollen. **Erwartung:** blockiert mit Begründung, der
+    Löschbutton ist für `admin` von vornherein deaktiviert mit erklärendem Tooltip.
 57. **Tun:** Mitgliederzahl in der Gruppenliste gegen Nextcloud prüfen.
     **Erwartung:** Zahl stimmt, ohne dass pro Gruppe ein eigener Request nötig war
     (Ansicht lädt ohne spürbare Verzögerung bei vielen Gruppen).
+57a. **Tun:** direkt nach dem Verbinden (ohne vorher die Benutzeransicht geöffnet zu haben) auf
+    "Gruppen" wechseln, bei einer Instanz mit einer Gruppe mit vielen Mitgliedern (z. B. 30
+    Schülern). **Erwartung:** Solange die Userliste intern nachgeladen wird, zeigt die
+    Gruppenansicht einen Ladezustand (`StateBlock`) **statt** einer Tabelle mit Mitgliederzahlen;
+    insbesondere erscheint **nirgends** `0` als Mitgliederzahl für diese Gruppe. Erst nach
+    abgeschlossenem Laden erscheinen Gruppentabelle und die korrekten Mitgliederzahlen, der
+    Löschbutton bleibt bis dahin ebenfalls ohne Wirkung/ausgeblendet.
 
 ## H. Batch-Verarbeitung
 

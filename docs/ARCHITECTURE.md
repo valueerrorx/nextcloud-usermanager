@@ -184,8 +184,8 @@ auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 | `users.list` | invoke | – | `{ ok, users: UserView[], mode, fetchedAt }` | 401, 429, Netz, `details_und_fallback_fehlgeschlagen` |
 | `users.onLoadProgress` | main->renderer | – | `{ done, total }` | – (nur im N+1-Fallback) |
 | `groups.list` | invoke | – | `{ ok, groups: GroupView[] }` | 401, 429, Netz |
-| `groups.create` | invoke | `{ groupId }` | `{ ok }` | 101/102/103 je Endpunkt-Map |
-| `groups.delete` | invoke | `{ groupId }` | `{ ok }` | 101/102, `admin_gruppe_geschuetzt` |
+| `groups.create` | invoke | `{ groupid }` | `{ ok }` | 101/103 -> `gruppe_anlegen_fehlgeschlagen`, 102 -> `gruppe_existiert`, `gruppenname_leer` |
+| `groups.delete` | invoke | `{ groupid }` | `{ ok }` | 101 -> `gruppe_existiert_nicht`, 102 -> `gruppe_loeschen_fehlgeschlagen`, `gruppe_admin_geschuetzt` |
 | `actions.run` | invoke | `{ jobId, action, items, params }` | `{ ok, results: ItemResult[], summary }` | nie global fehlerhaft; Fehler stehen je Item |
 | `actions.stop` | invoke | `{ jobId }` | `{ ok, zustand: 'gestoppt' \| 'bereits_beendet' \| 'unbekannt' }` | nie Fehler, siehe §5 |
 | `actions.onProgress` | main->renderer | – | `{ jobId, done, total, result }` | – |

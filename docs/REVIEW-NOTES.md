@@ -91,6 +91,9 @@ Die Startpunkte 1-10 sind nicht aus Reviews, sondern aus dem Research belegt
 - [S11] **Eine messageId, die nirgends referenziert wird, ist ein fehlendes Feature.** `passwort_export_warnung` stand in `messages.js` und kam im Code nicht vor. Ein `grep` über `src/` nach jeder neu definierten messageId deckt genau diese Lücke auf — und als Verdrahtungsprüfung ist ein Quelltext-Grep hier legitim, im Unterschied zu einer Sicherheitszusage.
 - [S11] **Wird ein Agent-Durchlauf abgebrochen, ist der Zustand plausibel aber unvollständig.** Der Lauf starb beim Einfügen von `<JobProgress>` ins Template; alles sah verdrahtet aus, 714 Tests blieben grün, und genau der Passwort-Pfad fehlte. **Nach einem Abbruch nicht den Testlauf als Vollständigkeitsnachweis nehmen, sondern die Abnahmekriterien einzeln gegen den Code prüfen.**
 
+- [S12] **Dieselbe Technik ist je nach Kontext richtig oder falsch — und beides muss getestet sein.** Usernames werden case-insensitiv verglichen (S02, weil Nextcloud dort inkonsistent ist), Gruppennamen **exakt** (eigenständige IDs: `Lehrer` und `lehrer` können beide existieren). Die Exaktheit war implementiert, aber **ungeprüft**: ein case-insensitiver Vergleich überlebte alle 11 Tests. Wäre er je eingebaut worden, hätte der Löschdialog eine falsche Mitgliederzahl bestätigt.
+- [S12] **Lead: Doku-Drift bei Parameternamen aktiv nachziehen.** ARCHITECTURE nannte `{ groupId }`, der Code benutzt durchgehend `{ groupid }`; die Fehler-IDs in der IPC-Tabelle waren veraltet. Der Coder hat es gemeldet statt still abzuweichen — die Korrektur ist Lead-Aufgabe.
+
 ## Arbeitsweise ab S03 (Tech-Lead, 2026-10-07)
 Schlanker Modus, auf Wunsch des Nutzers. Begründung: die Tests kosten nichts (Suite ~450 ms),
 aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
