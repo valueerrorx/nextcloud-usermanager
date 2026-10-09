@@ -4,7 +4,7 @@
 // directly for tests without going through parseImportCsv at all, so this is the only place
 // ddmmyyyy is guaranteed to be derived.
 import { parseBirthdate } from './birthdate.js';
-import { buildInitialPassword } from './password.js';
+import { buildInitialPassword, checkMinLength } from './password.js';
 import {
   MAX_USERID,
   normalizeComponent,
@@ -157,6 +157,9 @@ function finalizeKandidat(row, ctx, { kandidat, ddmmyyyy, gekuerzt, status, iden
   const validation = validateUserid(kandidat, { quelle: 'generator' });
   if (!validation.ok) {
     return { preview: fehlerZeile(row, validation.messageId, { ddmmyyyy, username: kandidat, gekuerzt }), identitaet: null };
+  }
+  if (!checkMinLength(buildInitialPassword(ctx.prefix, ddmmyyyy))) {
+    return { preview: fehlerZeile(row, 'passwort_zu_kurz', { ddmmyyyy, username: kandidat, gekuerzt }), identitaet: null };
   }
   return {
     preview: erfolgsZeile(row, { ddmmyyyy, username: kandidat, status, gekuerzt, prefix: ctx.prefix }),

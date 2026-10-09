@@ -18,6 +18,7 @@ const props = defineProps({
   users: { type: Array, required: true },
   auswahl: { type: Set, required: true },
   adminUserId: { type: String, default: null },
+  gesperrt: { type: Boolean, default: false },
 });
 const emit = defineEmits(['finished']);
 
@@ -76,7 +77,7 @@ const gruppenOptionenListe = computed(() => gruppenOptionen(props.users));
 const selectedActionIcon = computed(() => ACTION_ICONS[selectedAction.value]);
 
 const vorschauDisabled = computed(() => {
-  if (props.auswahl.size === 0 || jobLaeuft.value) return true;
+  if (props.auswahl.size === 0 || jobLaeuft.value || props.gesperrt) return true;
   if (selectedAction.value === 'user.addToGroup' || selectedAction.value === 'user.removeFromGroup') {
     return groupId.value === '';
   }

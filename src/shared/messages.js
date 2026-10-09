@@ -88,4 +88,8 @@ export const MESSAGES = Object.freeze({
   gruppe_loeschen_fehlgeschlagen: 'Die Gruppe konnte nicht gelöscht werden.',
   gruppe_admin_geschuetzt: 'Die Gruppe "admin" ist geschützt und kann nicht gelöscht werden.',
   gruppenname_leer: 'Bitte einen Gruppennamen eingeben.',
+  // S14: Einzel-User anlegen.
+  benutzer_angelegt: 'Der Benutzer wurde angelegt.',
+  benutzer_anlegen_fehlgeschlagen: 'Der Benutzer konnte nicht angelegt werden.',
+  passwort_zu_kurz: 'Das Initialpasswort ist kürzer als 10 Zeichen.',
 });

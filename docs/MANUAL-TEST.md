@@ -193,16 +193,20 @@ ist — das deckt `tests/pool.test.js` ab).
 
 ## F. Einzel-User-Aktionen
 
-40. **Tun:** neuen User manuell anlegen mit gültiger userid, Anzeigename, Kontingent, Gruppe.
-    **Erwartung:** Anlage erfolgreich, User erscheint nach Aktualisieren in der Liste und in Nextcloud.
-41. **Tun:** userid mit Sonderzeichen (`müller!`), nur Punkten (`...`), leer, mit
-    reserviertem Namen (`.htaccess`) und mit 65 Zeichen versuchen.
-    **Erwartung:** jeweils eigene deutsche Validierungsmeldung, kein Request an den Server.
+40. **Tun:** Ansicht Benutzer, Button "Benutzer anlegen" (`bi-person-plus`) öffnet die Karte. Neuen User
+    anlegen mit gültigem Benutzernamen, Anzeigename, Passwort, Kontingent und einer Gruppe.
+    **Erwartung:** Meldung "Benutzer ... wurde angelegt", Formular und Passwortfeld sind leer, der
+    User erscheint **ohne** manuelles "Neu laden" in der Tabelle und in Nextcloud (Gruppe/Kontingent
+    stimmen). Ein E-Mail-Feld gibt es bewusst nicht (user.create sendet keine E-Mail).
+41. **Tun:** im Feld Benutzername `müller!`, `...`, leer, `.htaccess` und 65 Zeichen eingeben;
+    danach `max_mueller`. **Erwartung:** beim Tippen erscheint unter dem Feld jeweils die passende
+    deutsche Meldung (bei leerem Feld ist "Anlegen" deaktiviert), kein Request an den Server;
+    `max_mueller` ist **gültig** und die Meldung verschwindet.
     Es ist **derselbe** Validator wie im Import-Generator (Zeichensatz, reservierte Namen,
     Maximallänge, nicht nur Punkte) — die Meldungstexte stimmen mit denen der Importvorschau
     überein.
-42. **Tun:** bereits existierende userid anlegen. **Erwartung:** Meldung "Benutzer existiert bereits"
-    (OCS 102), kein generischer Fehler.
+42. **Tun:** einen bereits existierenden Benutzernamen anlegen. **Erwartung:** rote Meldung am
+    Formular "Benutzer existiert bereits." (OCS 102), kein Popup, Formularinhalt bleibt, Passwortfeld ist geleert.
 43. **Tun:** Passwort unterhalb der Nextcloud-Policy setzen.
     **Erwartung:** lesbare deutsche Meldung zur Passwortrichtlinie (OCS 107).
 43a. **Tun:** für einen **bestehenden** User "Passwort setzen" mit einem policy-konformen
@@ -329,9 +333,12 @@ ist — das deckt `tests/pool.test.js` ab).
     (`server_blockt_vorerst`), und der **Job läuft bis zum Ende weiter**. Die restlichen User
     werden weiterhin abgearbeitet, der Bericht enthält das Item als `fehler`, nicht als
     "nicht ausgeführt".
-71. **Tun:** Batch-Auswahl per CSV-Userliste (`userliste-mit-header.csv` und ohne Header),
-    darin ein nicht existierender Username. **Erwartung:** unbekannter Name erscheint in der
-    Vorschau als "nicht gefunden" und wird von der Ausführung ausgeschlossen.
+71. **Tun:** Ansicht Benutzer (Liste geladen), "Auswahl aus CSV" (`bi-upload`), nacheinander
+    `userliste-mit-header.csv` und `userliste-ohne-header.csv` wählen; dann eine eigene Datei mit
+    zwei existierenden und zwei nicht existierenden Namen (einer davon nur anders geschrieben,
+    z. B. `aaron.w` statt `Aaron.w`). **Erwartung:** Rückmeldung "4 Benutzernamen gelesen, davon 2
+    in der Liste gefunden. Nicht gefunden: ..." mit beiden Namen (Groß-/Kleinschreibung exakt);
+    nur die 2 gefundenen sind in der Tabelle ausgewählt; die Vorschau einer Aktion zählt 2.
 71a. **Tun:** nach einem abgeschlossenen Batch-Job (egal ob normal beendet oder abgebrochen)
     die Usertabelle beobachten, **ohne** manuell "Neu laden" zu klicken.
     **Erwartung:** die Liste lädt sich automatisch neu (der "Stand:"-Zeitstempel aktualisiert

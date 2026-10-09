@@ -5,9 +5,13 @@ import {
   alleAusgewaehlt, filterUsers, gruppenOptionen, pruneAuswahl, sortUsers,
 } from '../../shared/filters.js';
 import { formatTimestamp } from '../../shared/time.js';
-import { ladeUserliste } from '../loaders.js';
+import { parseUserList } from '../../shared/csvImport.js';
+import { QUOTA_PRESETS } from '../../shared/quota.js';
+import { auswahlNachCsv, ordneUserliste, userlisteRueckmeldung } from '../../shared/userListe.js';
+import { buildSingleCreate, einzelErgebnis, kannAnlegen, useridHinweis } from '../../shared/userCreate.js';
+import { ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
-  auswahl, connection, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, sortFeld,
+  auswahl, connection, groups, jobLaeuft, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, sortFeld,
   sortRichtung, users, usersFehler, usersFetchedAt, usersLadezustand, usersUebersprungen,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
@@ -23,12 +27,10 @@ const QUOTA_STUFEN = [
   { wert: 'unbekannt', label: 'unbekannt' },
 ];
 
-// Alphabetisch (deutsch) aus der geladenen Userliste abgeleitet, keine eigene Gruppenquelle (S06).
-// Nur Aufruf der puren Funktion aus filters.js - kein Rechnen in der Komponente (ARCHITECTURE §4.1).
+// Gruppenoptionen aus der geladenen Userliste (S06).
 const gruppenOptionenListe = computed(() => gruppenOptionen(users.value));
 
-// Einzige Stelle, die filterUsers/sortUsers aufruft - keine Filter- oder Sortierlogik in der
-// Komponente (ARCHITECTURE §4.1).
+// Einzige Stelle, die filterUsers/sortUsers aufruft (ARCHITECTURE §4.1).
 const gefilterteUndSortierte = computed(() => sortUsers(
   filterUsers(users.value, {
     suche: filterSuche.value,
@@ -39,10 +41,7 @@ const gefilterteUndSortierte = computed(() => sortUsers(
   { feld: sortFeld.value, richtung: sortRichtung.value },
 ));
 
-// Ändert sich das Filterergebnis, bleiben nur noch sichtbare User in der Auswahl (ARCHITECTURE
-// §4.1) - keine unsichtbaren User werden mitgeschleppt. immediate: true, damit die Invariante
-// auch dann gilt, wenn ein fehlgeschlagenes Neuladen die Liste identisch lässt (sonst würde der
-// watch nicht feuern und eine inzwischen ungültige Auswahl stehen bleiben).
+// Auswahl auf sichtbare User beschneiden; immediate, damit sie auch nach fehlgeschlagenem Reload gilt.
 watch(gefilterteUndSortierte, (liste) => {
   auswahl.value = new Set(pruneAuswahl(auswahl.value, liste));
 }, { immediate: true });
@@ -66,10 +65,7 @@ function onToggle(userid) {
   auswahl.value = neu;
 }
 
-// "Alles auswählen" trifft genau das aktuelle Filterergebnis, nicht die ganze Liste (DECISIONS).
-// alleAusgewaehlt ist dieselbe Funktion wie in UserTable.vue (CRITICAL-Fix S06-Review) - eine
-// Wahrheit für den Checkbox-Zustand. Abwählen entfernt nur die sichtbaren userids aus der
-// Auswahl statt sie komplett zu leeren.
+// Trifft nur das aktuelle Filterergebnis; Abwählen entfernt nur sichtbare userids.
 function onToggleAlle() {
   const sichtbar = gefilterteUndSortierte.value;
   const neu = new Set(auswahl.value);
@@ -88,13 +84,86 @@ function filterZuruecksetzen() {
   filterQuotaStufe.value = null;
 }
 
-// { geladen, gesamt } während des N+1-Fallbacks, sonst null - nur in dieser View interessant,
-// deshalb kein eigenes state.js-Feld.
+const csvRueckmeldung = ref('');
+
+// Nach erfolgreichem Lesen ersetzt die CSV die Auswahl immer, auch wenn nichts passt.
+async function onAuswahlAusCsv() {
+  if (usersLadezustand.value !== 'bereit') return;
+  try {
+    const result = await window.api.filesOpenCsv({ zweck: 'userliste' });
+    if (usersLadezustand.value !== 'bereit') return;
+    if (!result.ok) {
+      if (result.messageId !== 'abgebrochen') csvRueckmeldung.value = result.message ?? MESSAGES.datei_lesen_fehlgeschlagen;
+      return;
+    }
+    const ordnung = ordneUserliste(parseUserList(result.text).usernames, users.value);
+    csvRueckmeldung.value = userlisteRueckmeldung(ordnung);
+    filterZuruecksetzen();
+    auswahl.value = new Set(auswahlNachCsv(ordnung));
+  } catch (error) {
+    csvRueckmeldung.value = MESSAGES.unerwarteter_serverfehler;
+    console.error('files.openCsv failed:', error);
+  }
+}
+
+const formOffen = ref(false);
+const neuUserid = ref('');
+const neuAnzeigename = ref('');
+const neuPasswort = ref('');
+const neuQuota = ref(null);
+const neuGruppen = ref([]);
+const anlegenMeldung = ref(null); // { erfolg, text } | null
+const anlegenLaeuft = ref(false);
+
+const useridFehlertext = computed(() => useridHinweis(neuUserid.value));
+const anlegenMoeglich = computed(() => kannAnlegen({
+  userid: neuUserid.value, password: neuPasswort.value, laeuft: anlegenLaeuft.value || jobLaeuft.value,
+}));
+
+function formularLeeren() {
+  neuUserid.value = '';
+  neuAnzeigename.value = '';
+  neuPasswort.value = '';
+  neuQuota.value = null;
+  neuGruppen.value = [];
+}
+
+async function onAnlegen() {
+  const { items, params } = buildSingleCreate({
+    userid: neuUserid.value,
+    password: neuPasswort.value,
+    displayName: neuAnzeigename.value,
+    groups: neuGruppen.value,
+    quotaId: neuQuota.value,
+  });
+  anlegenLaeuft.value = true;
+  anlegenMeldung.value = null;
+  try {
+    const result = await window.api.actionsRun({
+      jobId: `create-${Date.now()}`, action: 'user.create', items, params,
+    });
+    if (!result.ok) {
+      anlegenMeldung.value = { erfolg: false, text: result.message ?? MESSAGES.aktion_fehlgeschlagen };
+      return;
+    }
+    anlegenMeldung.value = einzelErgebnis(result.results[0]);
+    if (anlegenMeldung.value.erfolg) {
+      formularLeeren();
+      await ladeUserliste();
+    }
+  } catch (error) {
+    console.error('user.create failed:', error);
+    anlegenMeldung.value = { erfolg: false, text: MESSAGES.unerwarteter_serverfehler };
+  } finally {
+    neuPasswort.value = '';
+    anlegenLaeuft.value = false;
+  }
+}
+
+// { geladen, gesamt } während des N+1-Fallbacks, sonst null.
 const fortschritt = ref(null);
 
-// Lädt über den gemeinsamen Ladepfad (REVIEW-NOTES [S13] "ein Ladepfad in vier Kopien") - diese
-// View behält nur ihre eigene Gating-Logik: Fortschrittsanzeige zurücksetzen, Auswahl bei Fehler
-// leeren. loaders.js hat sein eigenes try/catch, load() kann also ohne .catch() aufgerufen werden.
+// Gemeinsamer Ladepfad aus loaders.js (eigenes try/catch); bei Fehler wird die Auswahl geleert.
 async function load() {
   fortschritt.value = null;
   const result = await ladeUserliste();
@@ -107,16 +176,17 @@ async function load() {
 let disposeProgress = null;
 
 onMounted(() => {
-  // Feuert laut ARCHITECTURE §3 nur während des N+1-Fallbacks - ihr Eintreffen ist daher selbst
-  // das Signal, die Fortschrittsanzeige samt Warnhinweis zu zeigen.
+  // Feuert nur im N+1-Fallback, sein Eintreffen zeigt die Fortschrittsanzeige.
   disposeProgress = window.api.onUsersLoadProgress((progress) => {
     fortschritt.value = progress;
   });
   load();
+  if (groups.value.length === 0) ladeGruppen();
 });
 
 onUnmounted(() => {
   disposeProgress?.();
+  neuPasswort.value = '';
 });
 </script>
 
@@ -136,7 +206,7 @@ onUnmounted(() => {
       type="button"
       class="btn btn-outline-secondary"
       title="Userliste neu laden"
-      :disabled="usersLadezustand === 'laedt'"
+      :disabled="usersLadezustand === 'laedt' || anlegenLaeuft"
       @click="load"
     >
       <i
@@ -152,6 +222,154 @@ onUnmounted(() => {
     >
       Stand: {{ formatTimestamp(usersFetchedAt) }}
     </span>
+    <button
+      type="button"
+      class="btn btn-outline-secondary"
+      :disabled="usersLadezustand !== 'bereit' || anlegenLaeuft"
+      @click="onAuswahlAusCsv"
+    >
+      <i
+        class="bi bi-upload"
+        aria-hidden="true"
+      />
+      Auswahl aus CSV
+    </button>
+    <button
+      type="button"
+      class="btn btn-outline-secondary"
+      :aria-expanded="formOffen"
+      @click="formOffen = !formOffen"
+    >
+      <i
+        class="bi bi-person-plus"
+        aria-hidden="true"
+      />
+      Benutzer anlegen
+    </button>
+  </div>
+
+  <p
+    v-if="csvRueckmeldung"
+    class="notice"
+  >
+    {{ csvRueckmeldung }}
+  </p>
+
+  <div
+    v-if="formOffen"
+    class="content-card"
+  >
+    <div class="content-card-header">
+      <span>Benutzer anlegen</span>
+    </div>
+    <div class="content-card-body anlegen-form">
+      <div>
+        <label
+          for="neu-userid"
+          class="form-label"
+        >Benutzername</label>
+        <input
+          id="neu-userid"
+          v-model="neuUserid"
+          type="text"
+          class="form-control"
+          autocomplete="off"
+        >
+        <p
+          v-if="useridFehlertext"
+          class="form-fehler"
+        >
+          {{ useridFehlertext }}
+        </p>
+      </div>
+      <div>
+        <label
+          for="neu-anzeigename"
+          class="form-label"
+        >Anzeigename</label>
+        <input
+          id="neu-anzeigename"
+          v-model="neuAnzeigename"
+          type="text"
+          class="form-control"
+        >
+      </div>
+      <div>
+        <label
+          for="neu-passwort"
+          class="form-label"
+        >Passwort</label>
+        <input
+          id="neu-passwort"
+          v-model="neuPasswort"
+          type="password"
+          class="form-control"
+          autocomplete="new-password"
+        >
+      </div>
+      <div>
+        <label
+          for="neu-quota"
+          class="form-label"
+        >Kontingent</label>
+        <select
+          id="neu-quota"
+          v-model="neuQuota"
+          class="form-select"
+        >
+          <option :value="null">
+            Server-Standard
+          </option>
+          <option
+            v-for="preset in QUOTA_PRESETS"
+            :key="preset.id"
+            :value="preset.id"
+          >
+            {{ preset.label }}
+          </option>
+        </select>
+      </div>
+      <div>
+        <label
+          for="neu-gruppen"
+          class="form-label"
+        >Gruppen</label>
+        <select
+          id="neu-gruppen"
+          v-model="neuGruppen"
+          class="form-select"
+          multiple
+        >
+          <option
+            v-for="gruppe in groups"
+            :key="gruppe"
+            :value="gruppe"
+          >
+            {{ gruppe }}
+          </option>
+        </select>
+      </div>
+      <div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="!anlegenMoeglich"
+          @click="onAnlegen"
+        >
+          <i
+            class="bi bi-person-plus"
+            aria-hidden="true"
+          />
+          Anlegen
+        </button>
+        <p
+          v-if="anlegenMeldung"
+          :class="anlegenMeldung.erfolg ? 'notice' : 'form-fehler'"
+        >
+          {{ anlegenMeldung.text }}
+        </p>
+      </div>
+    </div>
   </div>
 
   <p
@@ -285,6 +503,7 @@ onUnmounted(() => {
     :users="users"
     :auswahl="auswahl"
     :admin-user-id="connection.adminUserId"
+    :gesperrt="anlegenLaeuft"
     @finished="load"
   />
   <JobProgress />
@@ -319,6 +538,17 @@ onUnmounted(() => {
 .filterleiste .suche {
   flex: 1;
   min-width: 220px;
+}
+
+.form-fehler {
+  color: var(--danger, #f85149);
+  margin: 4px 0 0;
+}
+
+.anlegen-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
 }
 
 .zusammenfassung {

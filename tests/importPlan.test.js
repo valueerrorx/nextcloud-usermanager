@@ -275,6 +275,14 @@ describe('buildImportPlan — Passwort und displayname', () => {
     expect(plan.rows[0].passwort).toBe('Schule01012000!');
   });
 
+  it('zu kurzes Initialpasswort (9 Zeichen) wird zur Fehlerzeile passwort_zu_kurz, 10 Zeichen bleiben gültig', () => {
+    const rows = [{ zeile: 1, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '01.01.2000' }];
+    const kurz = buildImportPlan({ ...BASIS, rows, prefix: '', max: 64 });
+    expect(kurz.rows[0]).toMatchObject({ status: 'fehler', fehlerId: 'passwort_zu_kurz', passwort: null });
+    const ok = buildImportPlan({ ...BASIS, rows, prefix: 'A', max: 64 });
+    expect(ok.rows[0].status).toBe('neu');
+  });
+
   it('eine Fehlerzeile hat passwort: null', () => {
     const rows = [{ zeile: 1, vorname: '', nachname: '', geburtsdatum: '', fehler: 'vorname_leer' }];
     const plan = buildImportPlan({ ...BASIS, rows, max: 64 });
