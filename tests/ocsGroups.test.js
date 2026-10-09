@@ -1,7 +1,8 @@
-// S10 A2: listGroups, createGroup - each with its own local error-code map (RESEARCH-OCS §5, V4).
+// S10 A2 / S12 A1: listGroups, createGroup, deleteGroup - each with its own local error-code map
+// (RESEARCH-OCS §5, V4).
 import { describe, expect, it, vi } from 'vitest';
 import { createOcsClient } from '../src/main/ocs/client.js';
-import { listGroups, createGroup } from '../src/main/ocs/groups.js';
+import { listGroups, createGroup, deleteGroup } from '../src/main/ocs/groups.js';
 
 function fakeResponse({ status = 200, body = '' } = {}) {
   return { status, text: async () => body };
@@ -82,5 +83,41 @@ describe('createGroup', () => {
     const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(103, null) }));
     const result = await createGroup(makeClient(fetchImpl), 'admins');
     expect(result).toMatchObject({ ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen' });
+  });
+});
+
+describe('deleteGroup', () => {
+  it('DELETE /cloud/groups/{groupid}, Erfolg -> { ok: true }', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, null) }));
+    const result = await deleteGroup(makeClient(fetchImpl), 'admins');
+    expect(result).toEqual({ ok: true, data: null, httpStatus: 200, versuche: 1 });
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toContain('/cloud/groups/admins');
+    expect(options.method).toBe('DELETE');
+  });
+
+  it('kodiert Sonderzeichen im groupid-Pfadsegment ("Jahr 2026/1C & mehr")', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, null) }));
+    await deleteGroup(makeClient(fetchImpl), 'Jahr 2026/1C & mehr');
+    const url = fetchImpl.mock.calls[0][0];
+    expect(url).toContain(`/cloud/groups/${encodeURIComponent('Jahr 2026/1C & mehr')}`);
+  });
+
+  it('OCS-Code 101 -> messageId gruppe_existiert_nicht', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(101, null) }));
+    const result = await deleteGroup(makeClient(fetchImpl), 'admins');
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_existiert_nicht' });
+  });
+
+  it('OCS-Code 102 -> messageId gruppe_loeschen_fehlgeschlagen', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(102, null) }));
+    const result = await deleteGroup(makeClient(fetchImpl), 'admins');
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_loeschen_fehlgeschlagen' });
+  });
+
+  it('kind auth behält seine messageId, die Endpunkt-Map wird dafür nicht befragt', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ status: 401 }));
+    const result = await deleteGroup(makeClient(fetchImpl), 'admins');
+    expect(result).toMatchObject({ ok: false, kind: 'auth', messageId: 'falsche_zugangsdaten' });
   });
 });

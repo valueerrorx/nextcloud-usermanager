@@ -210,6 +210,7 @@ describe('src/preload/index.cjs', () => {
       'filesSaveCsv',
       'groupsList',
       'groupsCreate',
+      'groupsDelete',
       'filesOpenCsv',
     ];
     for (const name of required) {
@@ -304,6 +305,14 @@ describe('src/preload/index.cjs', () => {
     const args = { groupid: 'neue-gruppe' };
     await exposedApi.groupsCreate(args);
     expect(invokeCalls).toEqual([{ channel: 'groups.create', args: [args] }]);
+  });
+
+  // S12 A3: groupsDelete fehlte noch im Routing-Test, analog zu groupsCreate oben.
+  it('groupsDelete() leitet das Argument unverändert an den Kanal groups.delete weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { groupid: 'alte-gruppe' };
+    await exposedApi.groupsDelete(args);
+    expect(invokeCalls).toEqual([{ channel: 'groups.delete', args: [args] }]);
   });
 
   it('filesOpenCsv() leitet das Argument unverändert an den Kanal files.openCsv weiter', async () => {

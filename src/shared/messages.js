@@ -84,4 +84,8 @@ export const MESSAGES = Object.freeze({
   import_bestaetigen: 'Benutzer werden jetzt mit einem Initialpasswort angelegt. Fortfahren?',
   passwort_export_warnung:
     'Die exportierte Datei enthält die Initialpasswörter im Klartext. Bitte sicher aufbewahren und nach Gebrauch löschen.',
+  // S12: Gruppenverwaltung - Löschen, Admin-Schutz, Validierung des Gruppennamens.
+  gruppe_loeschen_fehlgeschlagen: 'Die Gruppe konnte nicht gelöscht werden.',
+  gruppe_admin_geschuetzt: 'Die Gruppe "admin" ist geschützt und kann nicht gelöscht werden.',
+  gruppenname_leer: 'Bitte einen Gruppennamen eingeben.',
 });

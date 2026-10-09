@@ -57,6 +57,13 @@ export const jobResults = ref([]); // ItemResult[] aus actions.run
 export const jobSummary = ref(null); // { ok, fehler, nichtAusgefuehrt, teilweise } | null
 export const dryRunPlan = ref(null); // letzter bestätigter planActions()-Output
 
+// Gruppenliste (S12, ARCHITECTURE §4) - Mitglieder und memberCount werden clientseitig aus
+// `users` abgeleitet (shared/groups.js), nicht hier und nicht per eigenem Request.
+export const groups = ref([]); // string[] aus groups.list, Server-Reihenfolge
+export const groupsLadezustand = ref('laedt'); // 'laedt' | 'leer' | 'fehler' | 'bereit'
+export const groupsFehler = ref(null);
+export const ausgewaehlteGruppe = ref(null); // groupId | null
+
 // Importvorschau (S10, ARCHITECTURE §3.1/§6) - CSV, Optionen und Vorschau-Status von
 // ImportView.vue. buildImportPlan läuft rein im Renderer (shared/importPlan.js), kein Kanal nötig.
 export const importDatei = ref(null); // { path, zeilenAnzahl } | null

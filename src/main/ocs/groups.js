@@ -29,3 +29,18 @@ export async function createGroup(client, groupid) {
   if (!result.ok) return mapOcsError(result, CREATE_GROUP_ERRORS, 'gruppe_anlegen_fehlgeschlagen');
   return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
 }
+
+// Gruppe löschen (RESEARCH-OCS §5, S12 A1): 101 Gruppe existiert nicht, 102 Löschen fehlgeschlagen.
+// Eigene lokale Fehlercode-Map, keine globale Tabelle (REVIEW-NOTES 3).
+const DELETE_GROUP_ERRORS = {
+  101: 'gruppe_existiert_nicht',
+  102: 'gruppe_loeschen_fehlgeschlagen',
+};
+
+// DELETE /cloud/groups/{groupid} - groupid steht im Pfad, daher hier encodeURIComponent, anders
+// als bei createGroup (dort kodiert buildFormBody das Form-Feld schon selbst).
+export async function deleteGroup(client, groupid) {
+  const result = await client.request({ method: 'DELETE', path: `/cloud/groups/${encodeURIComponent(groupid)}` });
+  if (!result.ok) return mapOcsError(result, DELETE_GROUP_ERRORS, 'gruppe_loeschen_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}

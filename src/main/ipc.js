@@ -3,7 +3,8 @@ import { normalizeBaseUrl } from '../shared/url.js';
 import { MESSAGES } from '../shared/messages.js';
 import { checkConnection } from './ocs/connection.js';
 import { fetchAllUsers } from './ocs/userList.js';
-import { listGroups, createGroup } from './ocs/groups.js';
+import { listGroups, createGroup, deleteGroup } from './ocs/groups.js';
+import { istGruppeLoeschbar } from '../shared/groups.js';
 import { runJob } from './actions/pipeline.js';
 import { session } from './session.js';
 import * as credentials from './credentials.js';
@@ -204,6 +205,25 @@ async function handleGroupsCreate({ groupid }) {
   return { ok: true };
 }
 
+// groups.delete (S12 A3): gleiche nicht_verbunden- und Leerstring-Wächter wie groups.create.
+// Der admin-Schutz prüft hier zusätzlich über die pure Funktion aus shared/groups.js (S12 "Die
+// Lehre aus S10") - ein Schutz, der nur im Dialog säße, wäre von jedem anderen Aufrufer umgehbar,
+// genau wie der Selbstschutz in dryRun.js.
+async function handleGroupsDelete({ groupid }) {
+  if (!session.connected) {
+    return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+  }
+  if (!groupid || groupid.trim() === '') {
+    return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
+  }
+  if (!istGruppeLoeschbar(groupid)) {
+    return { ok: false, messageId: 'gruppe_admin_geschuetzt', message: MESSAGES.gruppe_admin_geschuetzt };
+  }
+  const result = await deleteGroup(session.client, groupid);
+  if (!result.ok) return result;
+  return { ok: true };
+}
+
 // Never throws, always a defined zustand (ARCHITECTURE §5) - a double click on "Abbrechen" is
 // harmless because 'bereits_beendet' and 'unbekannt' are both non-error outcomes.
 function handleActionsStop({ jobId }) {
@@ -226,6 +246,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('actions.stop', (event, args) => handleActionsStop(args));
   ipcMain.handle('groups.list', () => handleGroupsList());
   ipcMain.handle('groups.create', (event, args) => handleGroupsCreate(args));
+  ipcMain.handle('groups.delete', (event, args) => handleGroupsDelete(args));
   ipcMain.handle('files.saveCsv', (event, args) => saveCsv(args));
   ipcMain.handle('files.openCsv', (event, args) => openCsv(args));
   ipcMain.handle('tls.respondCertificate', (event, args) => {

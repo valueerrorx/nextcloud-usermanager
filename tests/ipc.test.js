@@ -455,3 +455,61 @@ describe('groups.list / groups.create / files.openCsv', () => {
     expect(net.fetch).not.toHaveBeenCalled();
   });
 });
+
+// S12 A3: groups.delete - gleiche nicht_verbunden-Wächter, eigene Leerstring- und
+// admin-Schutz-Ablehnung, jeweils ohne Request (REVIEW-NOTES [S07] - am Request-Zähler messen).
+describe('groups.delete', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('ist registriert', () => {
+    expect([...handlers.keys()]).toContain('groups.delete');
+  });
+
+  it('ohne Verbindung -> { ok: false, messageId: nicht_verbunden }', async () => {
+    const result = await handlers.get('groups.delete')(null, { groupid: 'admins' });
+    expect(result).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+  });
+
+  it('verbunden ruft DELETE /cloud/groups/{groupid} und liefert { ok: true }', async () => {
+    net.fetch.mockImplementation(async (url, options) => {
+      if (url.includes('/cloud/groups/lehrer') && options.method === 'DELETE') {
+        return fakeResponse({ status: 200, body: envelope(100, null) });
+      }
+      return okResponse();
+    });
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+
+    const result = await handlers.get('groups.delete')(null, { groupid: 'lehrer' });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('leerer/Leerzeichen-Name -> gruppenname_leer, kein Request', async () => {
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    net.fetch.mockClear();
+
+    const result = await handlers.get('groups.delete')(null, { groupid: '   ' });
+
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppenname_leer' });
+    expect(net.fetch).not.toHaveBeenCalled();
+  });
+
+  // Der admin-Schutz sitzt in shared/groups.js#istGruppeLoeschbar (S12 "Die Lehre aus S10") -
+  // dieser Test belegt, dass ipc.js ihn tatsächlich befragt, bevor irgendein Request geht.
+  it("groupid 'admin' -> gruppe_admin_geschuetzt, kein Request", async () => {
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    net.fetch.mockClear();
+
+    const result = await handlers.get('groups.delete')(null, { groupid: 'admin' });
+
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_admin_geschuetzt' });
+    expect(net.fetch).not.toHaveBeenCalled();
+  });
+});
