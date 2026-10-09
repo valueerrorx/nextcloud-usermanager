@@ -121,6 +121,15 @@ ist — das deckt `tests/pool.test.js` ab).
     ok + Fehler + nicht ausgeführt stimmt mit der Anzahl der Items im Bericht überein —
     kein Item wird doppelt und keines gar nicht gezählt.
 33. **Tun:** App neu starten. **Erwartung:** Jobverlauf ist leer (nur Sitzung).
+33a. **Tun:** direkt nach dem Verbinden — **ohne** vorher die Benutzer- oder Gruppenansicht
+    geöffnet zu haben — auf Dashboard wechseln. **Erwartung:** kurzer Ladezustand (StateBlock
+    "Lädt…"), danach echte Kennzahlen aus der nachgeladenen Liste; die Kacheln zeigen **nicht**
+    lauter Nullen, als wäre die Instanz leer (REVIEW-NOTES "dieselbe Falle wie S10/S12").
+33b. **Tun:** den eigenen Admin-Account (den beim Verbinden eingegebenen Loginnamen) in den
+    Kacheln suchen. **Erwartung:** er zählt in der Speicherkachel unter "Unbegrenzte Konten"
+    mit (sein `used`-Wert fließt in "Genutzt (gesamt)" ein, siehe RESEARCH-OCS V3) und
+    erscheint **nicht** in der "Fast voll"-Liste, unabhängig davon, wie viel er tatsächlich
+    nutzt — unbegrenzte Kontingente haben kein Prozent-Kriterium.
 
 ## E. Userliste lesen
 
