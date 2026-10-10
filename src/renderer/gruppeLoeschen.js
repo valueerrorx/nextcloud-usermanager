@@ -5,7 +5,7 @@ import Swal from 'sweetalert2';
 import { planActions } from '../shared/dryRun.js';
 import { planGruppeMitMitgliedern, entscheideGruppeLoeschen, gruppeNichtGeloeschtText } from '../shared/groups.js';
 import { MESSAGES } from '../shared/messages.js';
-import { confirmDelete, escapeHtml, listeHtml, startJob } from './jobRunner.js';
+import { confirmDelete, escapeHtml, listeHtml, startJob, VORSCHAU_DIALOG } from './jobRunner.js';
 import { ladeUserliste } from './loaders.js';
 import { connection, dryRunPlan, jobLaeuft, users } from './state.js';
 
@@ -18,7 +18,7 @@ function bleibtZeile(eintrag) {
 
 function kontextHtml(gid, bleiben) {
   return `<p>Gruppe <strong>${escapeHtml(gid)}</strong> wird gelöscht.</p>
-    <div class="vorschau"><h4>Bleibt (${bleiben.length})</h4>${listeHtml(bleiben, bleibtZeile)}</div>`;
+    <div class="vorschau"><div class="vorschau-titel">Bleibt <span class="vorschau-anzahl">${bleiben.length}</span></div>${listeHtml(bleiben, bleibtZeile)}</div>`;
 }
 
 async function fehler(text) {
@@ -62,6 +62,7 @@ export async function loescheGruppeMitMitgliedern(gid) {
     const { zuLoeschen, bleiben } = gruppenPlan;
     if (zuLoeschen.length === 0) {
       const ok = await Swal.fire({
+        ...VORSCHAU_DIALOG,
         title: 'Gruppe löschen',
         html: `${kontextHtml(gid, bleiben)}<p>Es werden keine Benutzer gelöscht.</p>`,
         showCancelButton: true,

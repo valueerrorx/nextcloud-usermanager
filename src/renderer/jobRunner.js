@@ -19,14 +19,25 @@ export function escapeHtml(value) {
   }[ch]));
 }
 
+function idHtml(userid) {
+  return `<code class="vorschau-id">${escapeHtml(userid)}</code>`;
+}
+
 function planZeile(plan) {
-  if (plan.vorher === null && plan.nachher === null) return escapeHtml(plan.userid);
+  if (plan.vorher === null && plan.nachher === null) return idHtml(plan.userid);
   const pfeil = plan.nachher === null ? '' : ` → ${escapeHtml(plan.nachher)}`;
-  return `${escapeHtml(plan.userid)}: ${escapeHtml(plan.vorher)}${pfeil}`;
+  return `${idHtml(plan.userid)} <span class="vorschau-detail">${escapeHtml(plan.vorher)}${pfeil}</span>`;
 }
 
 function grundZeile(eintrag) {
-  return `${escapeHtml(eintrag.userid)}: ${escapeHtml(resolveGrund(eintrag.grund))}`;
+  return `${idHtml(eintrag.userid)} <span class="vorschau-detail">${escapeHtml(resolveGrund(eintrag.grund))}</span>`;
+}
+
+// Dialog options for every swal2 that shows a preview (wide, left-aligned via CSS class).
+export const VORSCHAU_DIALOG = { width: '42rem', customClass: { popup: 'vorschau-popup' } };
+
+function titelHtml(text, anzahl) {
+  return `<div class="vorschau-titel">${text} <span class="vorschau-anzahl">${anzahl}</span></div>`;
 }
 
 export function listeHtml(eintraege, zeile) {
@@ -39,11 +50,11 @@ export function listeHtml(eintraege, zeile) {
 export function vorschauHtml(plan) {
   return `
     <div class="vorschau">
-      <h4>Wird ausgeführt (${plan.anzahl})</h4>
+      ${titelHtml('Wird ausgeführt', plan.anzahl)}
       ${listeHtml(plan.auszufuehren, planZeile)}
-      <h4>Keine Änderung (${plan.keineAenderung.length})</h4>
+      ${titelHtml('Keine Änderung', plan.keineAenderung.length)}
       ${listeHtml(plan.keineAenderung, grundZeile)}
-      <h4>Ausgeschlossen (${plan.ausgeschlossen.length})</h4>
+      ${titelHtml('Ausgeschlossen', plan.ausgeschlossen.length)}
       ${listeHtml(plan.ausgeschlossen, grundZeile)}
     </div>
   `;
@@ -55,6 +66,7 @@ export function vorschauHtml(plan) {
 // (DECISIONS "Batch-Löschen: Hinweis auf Dateien"). vorHtml: optionaler Kontext oberhalb (S18).
 export async function confirmDelete(plan, vorHtml = '') {
   const result = await Swal.fire({
+    ...VORSCHAU_DIALOG,
     title: 'Löschen bestätigen',
     html: `${vorHtml}${vorschauHtml(plan)}
       <p><strong>Achtung:</strong> Nextcloud löscht beim Löschen eines Benutzers auch dessen

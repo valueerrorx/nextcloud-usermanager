@@ -23,7 +23,12 @@ function broadcast(channel, payload) {
   const windows = BrowserWindow.getAllWindows ? BrowserWindow.getAllWindows() : [];
   for (const win of windows) {
     if (win.isDestroyed()) continue; // a destroyed webContents would throw on send
-    win.webContents.send(channel, payload);
+    try {
+      win.webContents.send(channel, payload);
+    } catch (error) {
+      // Advisory push: a failed send must never abort the job that triggered it.
+      console.error(`${channel} send failed:`, describeError(error));
+    }
   }
 }
 
@@ -203,13 +208,18 @@ async function handleUsersList() {
   if (!session.connected) {
     return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
   }
-  const result = await fetchAllUsers({
-    client: session.client,
-    adminUserId: session.adminUserId,
-    onProgress: (progress) => broadcast('users.onLoadProgress', progress),
-  });
-  if (!result.ok) return result;
-  return { ok: true, users: result.users, mode: result.mode, uebersprungen: result.uebersprungen, fetchedAt: Date.now() };
+  try {
+    const result = await fetchAllUsers({
+      client: session.client,
+      adminUserId: session.adminUserId,
+      onProgress: (progress) => broadcast('users.onLoadProgress', progress),
+    });
+    if (!result.ok) return result;
+    return { ok: true, users: result.users, mode: result.mode, uebersprungen: result.uebersprungen, fetchedAt: Date.now() };
+  } catch (error) {
+    console.error('users.list failed:', describeError(error));
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
 }
 
 // actions.run never fails globally (ARCHITECTURE §3) - only "not connected" returns ok:false,
@@ -233,7 +243,8 @@ async function handleActionsRun(args) {
         shouldStop: () => session.shouldStop(jobId),
         onProgress: (payload) => broadcast('actions.onProgress', payload),
       });
-    } catch {
+    } catch (error) {
+      console.error('actions.run failed:', describeError(error));
       // operations.js#getSteps throws for an unknown action id - a programmer error inside main
       // (by design, see operations.js), but this invoke channel must still resolve, never reject
       // (ARCHITECTURE §3: "nie global fehlerhaft").
@@ -242,7 +253,8 @@ async function handleActionsRun(args) {
       session.setJobState(jobId, 'beendet');
       session.clearStopFlag(jobId);
     }
-  } catch {
+  } catch (error) {
+    console.error('actions.run failed:', describeError(error));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
@@ -253,9 +265,14 @@ async function handleGroupsList() {
   if (!session.connected) {
     return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
   }
-  const result = await listGroups(session.client);
-  if (!result.ok) return result;
-  return { ok: true, groups: result.data };
+  try {
+    const result = await listGroups(session.client);
+    if (!result.ok) return result;
+    return { ok: true, groups: result.data };
+  } catch (error) {
+    console.error('groups.list failed:', describeError(error));
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
 }
 
 // groupid wird hier validiert, nicht nur im Renderer (S10-Review MINOR 2): ein schreibender
@@ -274,7 +291,8 @@ async function handleGroupsCreate(args) {
     const result = await createGroup(session.client, groupid);
     if (!result.ok) return result;
     return { ok: true };
-  } catch {
+  } catch (error) {
+    console.error('groups.create failed:', describeError(error));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
@@ -299,7 +317,8 @@ async function handleGroupsDelete(args) {
     const result = await deleteGroup(session.client, groupid);
     if (!result.ok) return result;
     return { ok: true };
-  } catch {
+  } catch (error) {
+    console.error('groups.delete failed:', describeError(error));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
@@ -317,7 +336,8 @@ async function handleGroupsMembers(args) {
     const result = await getGroupMembers(session.client, groupid);
     if (!result.ok) return result;
     return { ok: true, members: result.data };
-  } catch {
+  } catch (error) {
+    console.error('groups.members failed:', describeError(error));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
@@ -331,7 +351,8 @@ async function handleServerFreeSpace() {
     const result = await getServerInfo(session.client);
     if (!result.ok) return result;
     return { ok: true, freeBytes: result.data.freeBytes };
-  } catch {
+  } catch (error) {
+    console.error('server.freeSpace failed:', describeError(error));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
   }
 }
@@ -349,7 +370,8 @@ function handleActionsStop(args) {
     if (zustand === 'beendet') return { ok: true, zustand: 'bereits_beendet' };
     session.setStopFlag(jobId);
     return { ok: true, zustand: 'gestoppt' };
-  } catch {
+  } catch (error) {
+    console.error('actions.stop failed:', describeError(error));
     return { ok: true, zustand: 'unbekannt' };
   }
 }

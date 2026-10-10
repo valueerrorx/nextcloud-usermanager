@@ -456,6 +456,14 @@ body {
   color: var(--text-primary) !important;
 }
 
+.swal2-popup .swal2-title {
+  font-size: 1.15rem;
+}
+
+.swal2-popup .swal2-html-container {
+  font-size: 0.9rem;
+}
+
 .swal2-popup .swal2-checkbox,
 .swal2-popup .swal2-radio {
   background: transparent;
@@ -473,6 +481,107 @@ body {
   background: var(--body-bg) !important;
   border: 1px solid var(--sidebar-border) !important;
   color: var(--text-primary) !important;
+}
+
+.swal2-popup .swal2-input,
+.swal2-popup .swal2-textarea,
+.swal2-popup .swal2-select {
+  box-sizing: border-box;
+  width: calc(100% - 2rem);
+  max-width: none;
+  margin: 1rem 1rem 3px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color-scheme: dark;
+}
+
+.swal2-popup .swal2-select {
+  background: var(--body-bg);
+  border: 1px solid var(--sidebar-border);
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+}
+
+.swal2-popup .swal2-select option {
+  background: var(--card-bg);
+  color: var(--text-primary);
+}
+
+.swal2-popup .swal2-input:focus,
+.swal2-popup .swal2-textarea:focus,
+.swal2-popup .swal2-select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.3);
+  outline: none;
+}
+
+.swal2-popup .swal2-validation-message {
+  background: var(--body-bg);
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+/* Vorschau-Dialoge: breit, linksbuendig, kompakte Listen */
+.swal2-popup.vorschau-popup .swal2-html-container {
+  text-align: left;
+}
+
+.vorschau {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 0.75rem;
+}
+
+.vorschau-titel {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.vorschau-titel:first-child {
+  margin-top: 0;
+}
+
+.vorschau-anzahl {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--sidebar-border);
+  color: var(--text-primary);
+  font-size: 0.7rem;
+  letter-spacing: 0;
+}
+
+.vorschau ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.vorschau li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+
+.vorschau-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.vorschau-detail {
+  margin-left: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.vorschau-leer {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 .swal2-actions .swal2-styled {

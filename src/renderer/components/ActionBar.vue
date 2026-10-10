@@ -11,7 +11,7 @@ import {
 } from '../../shared/userRows.js';
 import { MESSAGES } from '../../shared/messages.js';
 import { toastError } from '../toast.js';
-import { escapeHtml, vorschauHtml, confirmDelete, startJob } from '../jobRunner.js';
+import { escapeHtml, vorschauHtml, confirmDelete, startJob, VORSCHAU_DIALOG } from '../jobRunner.js';
 import { dryRunPlan, jobLaeuft } from '../state.js';
 
 const props = defineProps({
@@ -95,6 +95,7 @@ async function frageParams(action, user) {
 
 async function confirmNormal(plan) {
   const result = await Swal.fire({
+    ...VORSCHAU_DIALOG,
     title: 'Vorschau',
     html: `${vorschauHtml(plan)}<p>${plan.anzahl} Benutzer werden geändert. Fortfahren?</p>`,
     showCancelButton: true,
@@ -116,6 +117,7 @@ async function onVorschau(action, paramsObj, userids) {
 
   if (plan.anzahl === 0) {
     await Swal.fire({
+      ...VORSCHAU_DIALOG,
       title: 'Vorschau',
       html: `${vorschauHtml(plan)}<p>${MESSAGES.keine_aenderung_noetig}</p>`,
       confirmButtonText: 'OK',

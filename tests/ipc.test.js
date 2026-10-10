@@ -729,3 +729,84 @@ describe('registerIpcHandlers — jeder Kanal löst auch ohne Argument auf (nie 
     }
   });
 });
+
+// Bug hunt: quota change succeeded on the server but the UI showed an error.
+describe('actions.run — user.setQuota Erfolgspfad (Server antwortet 200 / statuscode 100)', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim', remember: false });
+    net.fetch.mockClear();
+  });
+
+  it('liefert ok mit ItemResult ok, auch wenn webContents.send strukturiert klont', async () => {
+    const send = vi.fn((channel, payload) => structuredClone(payload));
+    BrowserWindow.getAllWindows.mockReturnValue([{ isDestroyed: () => false, webContents: { send } }]);
+    const result = await handlers.get('actions.run')(null, {
+      jobId: 'job-quota', action: 'user.setQuota', items: ['sara'], params: { value: '2147483648' },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.summary).toEqual({ ok: 1, fehler: 0, nichtAusgefuehrt: 0, teilweise: 0 });
+    expect(result.results[0]).toMatchObject({ userid: 'sara', status: 'ok', grund: null });
+    expect(() => structuredClone(result)).not.toThrow();
+    expect(send).toHaveBeenCalledWith('actions.onProgress', expect.objectContaining({ jobId: 'job-quota', done: 1, total: 1 }));
+    const [url, options] = net.fetch.mock.calls[0];
+    expect(options.method).toBe('PUT');
+    expect(url).toContain('/cloud/users/sara');
+    expect(options.body).toBe('key=quota&value=2147483648');
+  });
+});
+
+describe('actions.run — webContents.send wirft / Catch-alls loggen', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim', remember: false });
+  });
+
+  it('ein werfendes webContents.send kippt weder Item noch Job (Quota gesetzt -> ok)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    BrowserWindow.getAllWindows.mockReturnValue([{ isDestroyed: () => false, webContents: { send: () => { throw new Error('Object has been destroyed'); } } }]);
+    const result = await handlers.get('actions.run')(null, {
+      jobId: 'job-send', action: 'user.setQuota', items: ['sara'], params: { value: '2147483648' },
+    });
+    expect(result.summary).toEqual({ ok: 1, fehler: 0, nichtAusgefuehrt: 0, teilweise: 0 });
+    expect(result.results[0].status).toBe('ok');
+    expect(errorSpy).toHaveBeenCalledWith('actions.onProgress send failed:', expect.stringContaining('Object has been destroyed'));
+    errorSpy.mockRestore();
+  });
+
+  it('äußerer Catch von actions.run loggt die Exception ohne Argumente und Passwort', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const args = { jobId: 'job-x', action: 'user.setPassword', items: ['sara'], params: { value: 'TopSecretPw' } };
+    Object.defineProperty(args, 'items', { get() { throw new Error('boom'); } });
+    const result = await handlers.get('actions.run')(null, args);
+    expect(result).toEqual({ ok: false, messageId: 'unerwarteter_serverfehler', message: expect.any(String) });
+    expect(errorSpy).toHaveBeenCalledWith('actions.run failed:', 'Error: boom');
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('TopSecretPw');
+    errorSpy.mockRestore();
+  });
+
+  it('users.list und groups.list lösen bei einer Exception auf und loggen', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const client = { request: async () => { throw new Error('kaputt'); } };
+    session.setConnected({ client, baseUrl: 'https://host', adminUser: 'admin', adminUserId: 'admin', appPassword: 'geheim', secretStorage: 'session' });
+    const users = await handlers.get('users.list')(null);
+    const groups = await handlers.get('groups.list')(null);
+    expect(users).toMatchObject({ ok: false, messageId: 'unerwarteter_serverfehler' });
+    expect(groups).toMatchObject({ ok: false, messageId: 'unerwarteter_serverfehler' });
+    expect(errorSpy).toHaveBeenCalledWith('users.list failed:', 'Error: kaputt');
+    expect(errorSpy).toHaveBeenCalledWith('groups.list failed:', 'Error: kaputt');
+    errorSpy.mockRestore();
+  });
+});
