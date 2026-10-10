@@ -32,6 +32,7 @@ export const MESSAGES = Object.freeze({
   userliste_fehlgeschlagen: 'Die Benutzerliste konnte nicht geladen werden.',
   einzelabfragen_aktiv: 'Einzelabfragen aktiv, das kann dauern.',
   einige_user_uebersprungen: 'Einige Benutzer konnten nicht geladen werden und fehlen in der Liste.',
+  job_laeuft_bereits: 'Es läuft bereits ein Auftrag. Bitte warten oder ihn zuerst stoppen.',
   aktion_fehlgeschlagen: 'Die Aktion ist fehlgeschlagen.',
   feld_nicht_editierbar: 'Dieses Feld kann nicht geändert werden.',
   passwort_policy: 'Das Passwort erfüllt die Passwortrichtlinie nicht.',
@@ -93,4 +94,8 @@ export const MESSAGES = Object.freeze({
   benutzer_angelegt: 'Der Benutzer wurde angelegt.',
   benutzer_anlegen_fehlgeschlagen: 'Der Benutzer konnte nicht angelegt werden.',
   passwort_zu_kurz: 'Das Initialpasswort ist kürzer als 10 Zeichen.',
+  // S18: freier Speicher, Gruppe mit Mitgliedern löschen.
+  freiplatz_nicht_verfuegbar: 'Der freie Speicherplatz konnte nicht ermittelt werden.',
+  gruppenmitglieder_fehlgeschlagen: 'Die Mitglieder der Gruppe konnten nicht geladen werden.',
+  userliste_nicht_aktuell: 'Benutzerliste ist nicht aktuell — bitte neu laden.',
 });

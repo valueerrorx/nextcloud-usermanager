@@ -456,6 +456,18 @@ body {
   color: var(--text-primary) !important;
 }
 
+.swal2-popup .swal2-checkbox,
+.swal2-popup .swal2-radio {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.swal2-popup .swal2-checkbox label,
+.swal2-popup .swal2-radio label,
+.swal2-popup .swal2-checkbox .swal2-label {
+  color: inherit;
+}
+
 .swal2-input,
 .swal2-textarea {
   background: var(--body-bg) !important;

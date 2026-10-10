@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const actionBarSrc = readFileSync(fileURLToPath(new URL('../src/renderer/components/ActionBar.vue', import.meta.url)), 'utf8');
+// startJob moved to jobRunner.js in S18 (shared with the group delete flow).
+const jobRunnerSrc = readFileSync(fileURLToPath(new URL('../src/renderer/jobRunner.js', import.meta.url)), 'utf8');
 const importViewSrc = readFileSync(fileURLToPath(new URL('../src/renderer/views/ImportView.vue', import.meta.url)), 'utf8');
 
 // Extrahiert den Funktionskörper zwischen "async function <name>(" und der schließenden Zeile
@@ -39,7 +41,7 @@ describe('ActionBar.vue — pushJobHistorie nur auf dem ausgeführten Pfad', () 
   });
 
   it('startJob (nach actions.run) ruft pushJobHistorie nur innerhalb von "if (result.ok)" auf', () => {
-    const body = funktionsKoerper(actionBarSrc, 'startJob');
+    const body = funktionsKoerper(jobRunnerSrc, 'startJob');
     const okZweigStart = body.indexOf('if (result.ok)');
     const sonstZweigStart = body.indexOf('} else {');
     expect(okZweigStart).toBeGreaterThanOrEqual(0);

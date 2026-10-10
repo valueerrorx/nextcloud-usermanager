@@ -1,4 +1,5 @@
 import { formatBytes } from './quota.js';
+import { freiplatzAnzeige } from './freiplatz.js';
 
 // Abgeleitete Werte fürs Dashboard (ARCHITECTURE §4.1, DECISIONS "Berechnungen gehören nie in
 // Vue-Komponenten"). Pure, kein I/O - DashboardView.vue ruft nur auf und formatiert mit
@@ -87,10 +88,11 @@ export function accentStyle(hex) {
 }
 
 // The four stat cards. Values are preformatted strings; mono marks monospace metrics.
-export function dashboardCards({ users, groupCount }) {
+export function dashboardCards({ users, groupCount, freiplatz = null }) {
   const zaehler = userCounts(users);
   const speicher = storageTotals(users);
   const fastVoll = fastVollListe(users);
+  const frei = freiplatzAnzeige(freiplatz);
   const karte = (key, icon, kicker, wert, label, metrics) => ({
     key, icon, kicker, wert, label, metrics, iconStyle: accentStyle(CARD_ACCENTS[key]),
   });
@@ -101,6 +103,7 @@ export function dashboardCards({ users, groupCount }) {
     ]),
     karte('gruppen', 'bi-collection-fill', 'Gruppen', String(groupCount), 'Gruppen gesamt', []),
     karte('speicher', 'bi-hdd-fill', 'Speicher', formatBytes(speicher.genutztBytes), 'Genutzt (gesamt)', [
+      { label: 'Frei auf dem Server', wert: frei.wert, hinweis: frei.hinweis, mono: frei.hinweis === null },
       { label: 'Summe begrenzter Kontingente', wert: formatBytes(speicher.summeBegrenztBytes), mono: true },
       { label: 'Unbegrenzte Konten', wert: String(speicher.anzahlUnbegrenzt) },
       { label: 'Unbekanntes Kontingent', wert: String(speicher.anzahlUnbekannt) },

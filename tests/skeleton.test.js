@@ -212,6 +212,8 @@ describe('src/preload/index.cjs', () => {
       'groupsList',
       'groupsCreate',
       'groupsDelete',
+      'groupsMembers',
+      'serverFreeSpace',
       'filesOpenCsv',
     ];
     for (const name of required) {
@@ -314,6 +316,17 @@ describe('src/preload/index.cjs', () => {
     const args = { groupid: 'alte-gruppe' };
     await exposedApi.groupsDelete(args);
     expect(invokeCalls).toEqual([{ channel: 'groups.delete', args: [args] }]);
+  });
+
+  it('groupsMembers() leitet das Argument an groups.members, serverFreeSpace() ohne Argumente an server.freeSpace', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { groupid: 'g' };
+    await exposedApi.groupsMembers(args);
+    await exposedApi.serverFreeSpace('ignoriert');
+    expect(invokeCalls).toEqual([
+      { channel: 'groups.members', args: [args] },
+      { channel: 'server.freeSpace', args: [] },
+    ]);
   });
 
   it('filesOpenCsv() leitet das Argument unverändert an den Kanal files.openCsv weiter', async () => {

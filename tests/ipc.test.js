@@ -607,6 +607,55 @@ describe('groups.delete', () => {
   });
 });
 
+// S18: groups.members und server.freeSpace.
+describe('groups.members / server.freeSpace', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  const verbinden = () => handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+
+  it('nicht verbunden -> nicht_verbunden, kein Request', async () => {
+    net.fetch.mockClear();
+    expect(await handlers.get('groups.members')(null, { groupid: 'a' })).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+    expect(await handlers.get('server.freeSpace')()).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+    expect(net.fetch).not.toHaveBeenCalled();
+  });
+
+  it('groups.members verbunden ohne Argument -> ok:false statt Reject, leerer Name -> gruppenname_leer', async () => {
+    await verbinden();
+    net.fetch.mockClear();
+    expect(await handlers.get('groups.members')()).toMatchObject({ ok: false });
+    expect(await handlers.get('groups.members')(null, { groupid: ' ' })).toMatchObject({ ok: false, messageId: 'gruppenname_leer' });
+    expect(net.fetch).not.toHaveBeenCalled();
+  });
+
+  it('groups.members liefert data.users von GET /cloud/groups/{gid}', async () => {
+    await verbinden();
+    net.fetch.mockImplementation(async (url) => {
+      expect(url).toContain('/cloud/groups/Jahr%201');
+      return fakeResponse({ status: 200, body: envelope(100, { users: ['a', 'b'] }) });
+    });
+    expect(await handlers.get('groups.members')(null, { groupid: 'Jahr 1' })).toEqual({ ok: true, members: ['a', 'b'] });
+  });
+
+  it('server.freeSpace liefert freeBytes; Fehler bleibt ein Result (kein Wurf)', async () => {
+    await verbinden();
+    net.fetch.mockResolvedValue(fakeResponse({ status: 200, body: envelope(100, { nextcloud: { system: { freespace: 12345 } } }) }));
+    const ok = await handlers.get('server.freeSpace')();
+    expect(ok).toEqual({ ok: true, freeBytes: 12345 });
+    expect(net.fetch.mock.calls.at(-1)[0]).toContain('/ocs/v1.php/apps/serverinfo/api/v1/info');
+    net.fetch.mockResolvedValue(fakeResponse({ status: 401 }));
+    expect(await handlers.get('server.freeSpace')()).toMatchObject({ ok: false, messageId: 'falsche_zugangsdaten' });
+  });
+});
+
 // CRITICAL-Fix (REVIEW-NOTES [S13], wiederholt aus S08/S09a/S10): fünf Handler destrukturierten
 // bisher in der Funktionssignatur - window.api.connect() ohne Argument liess das als TypeError
 // über die IPC-Grenze platzen statt ein Result zu liefern (ARCHITECTURE §3 "Alle invoke-Kanäle
@@ -637,7 +686,7 @@ describe('registerIpcHandlers — jeder Kanal löst auch ohne Argument auf (nie 
   for (const channel of [
     'app.version', 'connection.connect', 'connection.connectSaved', 'connection.status',
     'connection.logout', 'app.openExternal', 'users.list', 'actions.run', 'actions.stop', 'groups.list',
-    'groups.create', 'groups.delete', 'files.saveCsv', 'files.openCsv', 'tls.respondCertificate',
+    'groups.create', 'groups.delete', 'groups.members', 'server.freeSpace', 'files.saveCsv', 'files.openCsv', 'tls.respondCertificate',
   ]) {
     // Kanalnamen oben nur zur lesbaren Testbezeichnung je Kanal - geprüft wird unten über die
     // tatsächliche Registrierungs-Map, nicht über diese Liste (siehe Test darunter für den Teil,

@@ -8,7 +8,7 @@
 import { MESSAGES } from '../shared/messages.js';
 import {
   users, usersLadezustand, usersFehler, usersFetchedAt, usersMode, usersUebersprungen,
-  groups, groupsLadezustand, groupsFehler,
+  groups, groupsLadezustand, groupsFehler, freiplatz,
 } from './state.js';
 
 // Eigenes try/catch (REVIEW-NOTES [S01] - jede Promise wird awaited oder gecatcht), damit jeder
@@ -57,5 +57,15 @@ export async function ladeGruppen() {
     groupsFehler.value = MESSAGES.unerwarteter_serverfehler;
     console.error('Failed to load group list:', error);
     return { ok: false };
+  }
+}
+
+// Free space is optional (S18): any failure ends as a result for the tile, never as an error state or popup.
+export async function ladeFreiplatz() {
+  try {
+    freiplatz.value = await window.api.serverFreeSpace();
+  } catch (error) {
+    console.error('Failed to load free space:', error);
+    freiplatz.value = { ok: false };
   }
 }

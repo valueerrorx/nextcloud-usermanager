@@ -74,6 +74,7 @@ export const jobHistorie = ref([]);
 export const groups = ref([]); // string[] aus groups.list, Server-Reihenfolge
 export const groupsLadezustand = ref('laedt'); // 'laedt' | 'leer' | 'fehler' | 'bereit'
 export const groupsFehler = ref(null);
+export const freiplatz = ref(null); // server.freeSpace result | null (S18), independent of the dashboard load state
 export const ausgewaehlteGruppe = ref(null); // groupId | null
 
 // Importvorschau (S10, ARCHITECTURE §3.1/§6) - CSV, Optionen und Vorschau-Status von
@@ -109,6 +110,7 @@ export function resetOnConnect() {
   ausgewaehlteGruppe.value = null;
 
   jobHistorie.value = [];
+  freiplatz.value = null;
 
   importDatei.value = null;
   importRows.value = [];

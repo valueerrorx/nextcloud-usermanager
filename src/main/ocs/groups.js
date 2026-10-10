@@ -1,5 +1,6 @@
 // Group endpoints, each function with its OWN local error-code map (ARCHITECTURE §2, REVIEW-NOTES 3).
 import { mapOcsError } from './errors.js';
+import { MESSAGES } from '../../shared/messages.js';
 
 // No endpoint-specific codes documented for a plain group listing (RESEARCH-OCS §5).
 const LIST_GROUPS_ERRORS = {};
@@ -43,4 +44,18 @@ export async function deleteGroup(client, groupid) {
   const result = await client.request({ method: 'DELETE', path: `/cloud/groups/${encodeURIComponent(groupid)}` });
   if (!result.ok) return mapOcsError(result, DELETE_GROUP_ERRORS, 'gruppe_loeschen_fehlgeschlagen');
   return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+// No endpoint-specific codes documented for a single-group lookup.
+const GROUP_MEMBERS_ERRORS = {};
+
+// GET /cloud/groups/{groupid} -> data.users = array of userids (S18). A missing/invalid users
+// field is an error, not "no members": an empty list would let the caller delete the group blindly.
+export async function getGroupMembers(client, groupid) {
+  const result = await client.request({ method: 'GET', path: `/cloud/groups/${encodeURIComponent(groupid)}` });
+  if (!result.ok) return mapOcsError(result, GROUP_MEMBERS_ERRORS, 'gruppenmitglieder_fehlgeschlagen');
+  if (!Array.isArray(result.data?.users)) {
+    return { ok: false, kind: 'notOcs', httpStatus: result.httpStatus, ocsCode: null, messageId: 'gruppenmitglieder_fehlgeschlagen', message: MESSAGES.gruppenmitglieder_fehlgeschlagen };
+  }
+  return { ok: true, data: result.data.users, httpStatus: result.httpStatus, versuche: result.versuche };
 }

@@ -9,19 +9,14 @@ import { MESSAGES } from '../../shared/messages.js';
 import { groupViews, membersOf, nichtMitgliederVon, istGruppeLoeschbar } from '../../shared/groups.js';
 import { resolveGrund } from '../../shared/jobReport.js';
 import { ladeGruppen, ladeUserliste } from '../loaders.js';
+import { loescheGruppeMitMitgliedern } from '../gruppeLoeschen.js';
+import { escapeHtml } from '../jobRunner.js';
 import {
   groups, groupsLadezustand, groupsFehler, ausgewaehlteGruppe,
-  users, usersLadezustand, usersFehler,
+  users, usersLadezustand, usersFehler, jobLaeuft,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
-
-// Nur für swal2-HTML - dasselbe Muster wie App.vue/ActionBar.vue, keine Vue-Komponente innerhalb
-// von swal2 möglich.
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[ch]));
-}
+import JobProgress from '../components/JobProgress.vue';
 
 // Wie in ImportView: eine zuvor schon (nicht-leer) geladene Liste gilt sofort als bereit, keine
 // unnötige zweite Ladeanimation.
@@ -33,6 +28,11 @@ onMounted(() => {
     ladeUserliste();
   }
 });
+
+function loeschTitel(id) {
+  if (!istGruppeLoeschbar(id)) return 'Die admin-Gruppe kann nicht gelöscht werden';
+  return jobLaeuft.value ? 'Während eines laufenden Auftrags nicht möglich' : 'Gruppe löschen';
+}
 
 async function ladeAlles() {
   await Promise.all([ladeGruppen(), ladeUserliste()]);
@@ -143,13 +143,26 @@ async function onGruppeLoeschen(groupView) {
     html: `
       <p>Gruppe <strong>${escapeHtml(groupView.id)}</strong> mit
       <strong>${groupView.memberCount}</strong> Mitglied(ern) löschen?</p>
-      <p>Die Mitglieder selbst werden dabei <strong>nicht</strong> gelöscht.</p>
+      <p>Die Mitglieder selbst werden standardmäßig <strong>nicht</strong> gelöscht.</p>
     `,
+    input: 'checkbox',
+    inputValue: 0,
+    inputPlaceholder: 'Auch Mitglieder löschen, die in keiner anderen Gruppe sind',
     showCancelButton: true,
     confirmButtonText: 'Löschen',
     cancelButtonText: 'Abbrechen',
   });
   if (!bestaetigt.isConfirmed) return;
+  if (bestaetigt.value) {
+    try {
+      if (await loescheGruppeMitMitgliedern(groupView.id) && ausgewaehlteGruppe.value === groupView.id) {
+        ausgewaehlteGruppe.value = null;
+      }
+    } finally {
+      await ladeAlles();
+    }
+    return;
+  }
   try {
     const result = await window.api.groupsDelete({ groupid: groupView.id });
     if (!result.ok) {
@@ -258,9 +271,9 @@ async function onGruppeLoeschen(groupView) {
                   <button
                     type="button"
                     class="btn btn-outline-danger btn-sm"
-                    :disabled="!istGruppeLoeschbar(groupView.id)"
-                    :title="istGruppeLoeschbar(groupView.id) ? 'Gruppe löschen' : 'Die admin-Gruppe kann nicht gelöscht werden'"
-                    :aria-label="istGruppeLoeschbar(groupView.id) ? 'Gruppe löschen' : 'Die admin-Gruppe kann nicht gelöscht werden'"
+                    :disabled="!istGruppeLoeschbar(groupView.id) || jobLaeuft"
+                    :title="loeschTitel(groupView.id)"
+                    :aria-label="loeschTitel(groupView.id)"
                     @click="onGruppeLoeschen(groupView)"
                   >
                     <i
@@ -366,6 +379,8 @@ async function onGruppeLoeschen(groupView) {
       </div>
     </div>
   </div>
+
+  <JobProgress />
 </template>
 
 <style scoped>

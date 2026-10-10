@@ -2,7 +2,8 @@
 // (RESEARCH-OCS §5, V4).
 import { describe, expect, it, vi } from 'vitest';
 import { createOcsClient } from '../src/main/ocs/client.js';
-import { listGroups, createGroup, deleteGroup } from '../src/main/ocs/groups.js';
+import { listGroups, createGroup, deleteGroup, getGroupMembers } from '../src/main/ocs/groups.js';
+import { getServerInfo } from '../src/main/ocs/serverInfo.js';
 
 function fakeResponse({ status = 200, body = '' } = {}) {
   return { status, text: async () => body };
@@ -119,5 +120,57 @@ describe('deleteGroup', () => {
     const fetchImpl = vi.fn(async () => fakeResponse({ status: 401 }));
     const result = await deleteGroup(makeClient(fetchImpl), 'admins');
     expect(result).toMatchObject({ ok: false, kind: 'auth', messageId: 'falsche_zugangsdaten' });
+  });
+});
+
+describe('getGroupMembers (S18)', () => {
+  it('GET /cloud/groups/{gid} (kodiert) -> data.users', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, { users: ['a', 'b'] }) }));
+    const result = await getGroupMembers(makeClient(fetchImpl), 'Jahr 1/C');
+    expect(result).toMatchObject({ ok: true, data: ['a', 'b'] });
+    expect(fetchImpl.mock.calls[0][0]).toContain('/cloud/groups/Jahr%201%2FC?');
+    expect(fetchImpl.mock.calls[0][1].method).toBe('GET');
+  });
+
+  it('data.users fehlt -> Fehler, nie eine leere Liste', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, {}) }));
+    expect(await getGroupMembers(makeClient(fetchImpl), 'g')).toMatchObject({ ok: false, messageId: 'gruppenmitglieder_fehlgeschlagen' });
+  });
+
+  it('OCS-Fehlercode -> Fallback-messageId', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(404, null) }));
+    expect(await getGroupMembers(makeClient(fetchImpl), 'g')).toMatchObject({ ok: false, messageId: 'gruppenmitglieder_fehlgeschlagen' });
+  });
+});
+
+describe('getServerInfo (S18)', () => {
+  it('liest nextcloud.system.freespace über v1.php mit skipApps/skipUpdate', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, { nextcloud: { system: { freespace: 42 } } }) }));
+    const result = await getServerInfo(makeClient(fetchImpl));
+    expect(result).toMatchObject({ ok: true, data: { freeBytes: 42 } });
+    const url = fetchImpl.mock.calls[0][0];
+    expect(url).toContain('/ocs/v1.php/apps/serverinfo/api/v1/info?');
+    expect(url).toContain('skipApps=true');
+    expect(url).toContain('skipUpdate=true');
+    expect(fetchImpl.mock.calls[0][1].headers['OCS-APIRequest']).toBe('true');
+  });
+
+  it('freespace null oder fehlend -> freeBytes null', async () => {
+    const a = vi.fn(async () => fakeResponse({ body: envelope(100, { nextcloud: { system: { freespace: null } } }) }));
+    const b = vi.fn(async () => fakeResponse({ body: envelope(100, {}) }));
+    expect((await getServerInfo(makeClient(a))).data.freeBytes).toBeNull();
+    expect((await getServerInfo(makeClient(b))).data.freeBytes).toBeNull();
+  });
+
+  it('freespace als String -> freeBytes null', async () => {
+    const f = vi.fn(async () => fakeResponse({ body: envelope(100, { nextcloud: { system: { freespace: '42' } } }) }));
+    expect((await getServerInfo(makeClient(f))).data.freeBytes).toBeNull();
+  });
+
+  it('HTTP 401 / 404 mit HTML -> Fehlerresult', async () => {
+    const r401 = await getServerInfo(makeClient(vi.fn(async () => fakeResponse({ status: 401 }))));
+    const r404 = await getServerInfo(makeClient(vi.fn(async () => fakeResponse({ status: 404, body: '<html></html>' }))));
+    expect(r401).toMatchObject({ ok: false, kind: 'auth' });
+    expect(r404).toMatchObject({ ok: false });
   });
 });

@@ -5,7 +5,8 @@ import { describeError } from '../shared/logSafe.js';
 import { isAllowedExternalUrl } from '../shared/externalUrl.js';
 import { checkConnection } from './ocs/connection.js';
 import { fetchAllUsers } from './ocs/userList.js';
-import { listGroups, createGroup, deleteGroup } from './ocs/groups.js';
+import { listGroups, createGroup, deleteGroup, getGroupMembers } from './ocs/groups.js';
+import { getServerInfo } from './ocs/serverInfo.js';
 import { istGruppeLoeschbar } from '../shared/groups.js';
 import { runJob } from './actions/pipeline.js';
 import { session } from './session.js';
@@ -303,6 +304,38 @@ async function handleGroupsDelete(args) {
   }
 }
 
+// groups.members (S18): fresh member list of one group; never throws (destructuring inside try).
+async function handleGroupsMembers(args) {
+  try {
+    const { groupid } = args;
+    if (!session.connected) {
+      return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+    }
+    if (!groupid || groupid.trim() === '') {
+      return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
+    }
+    const result = await getGroupMembers(session.client, groupid);
+    if (!result.ok) return result;
+    return { ok: true, members: result.data };
+  } catch {
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
+}
+
+// server.freeSpace (S18): freeBytes is number|null; a failure is a plain result, the renderer shows no popup.
+async function handleServerFreeSpace() {
+  try {
+    if (!session.connected) {
+      return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+    }
+    const result = await getServerInfo(session.client);
+    if (!result.ok) return result;
+    return { ok: true, freeBytes: result.data.freeBytes };
+  } catch {
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
+}
+
 // Never throws, always a defined zustand (ARCHITECTURE §5) - a double click on "Abbrechen" is
 // harmless because 'bereits_beendet' and 'unbekannt' are both non-error outcomes.
 // CRITICAL-Fix (REVIEW-NOTES [S13]): Destrukturierung jetzt innerhalb des try, siehe handleConnect
@@ -335,6 +368,8 @@ export function registerIpcHandlers() {
   ipcMain.handle('groups.list', () => handleGroupsList());
   ipcMain.handle('groups.create', (event, args) => handleGroupsCreate(args));
   ipcMain.handle('groups.delete', (event, args) => handleGroupsDelete(args));
+  ipcMain.handle('groups.members', (event, args) => handleGroupsMembers(args));
+  ipcMain.handle('server.freeSpace', () => handleServerFreeSpace());
   ipcMain.handle('files.saveCsv', (event, args) => saveCsv(args));
   ipcMain.handle('files.openCsv', (event, args) => openCsv(args));
   ipcMain.handle('tls.respondCertificate', (event, args) => {

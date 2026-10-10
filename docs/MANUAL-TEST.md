@@ -602,3 +602,33 @@ ist — das deckt `tests/pool.test.js` ab).
      Start kein automatischer Verbindungsversuch mehr (Zugang wurde gelöscht).
 212. **Tun:** ohne Keyring mit "Merken" verbinden. **Erwartung:** der Hinweis "nur Sitzung"
      erscheint vor dem Wechsel ins Dashboard und lässt sich bestätigen.
+
+## S18 - Freier Speicher und Gruppe mit Mitgliedern löschen
+
+213. **Tun:** gegen `cloud.xapient.solutions` Dashboard öffnen. **Erwartung:** Speicher-Kachel
+     zeigt "Frei auf dem Server" mit GiB-Wert, der zum Plattenplatz des Servers passt (nicht zu
+     den Kontingenten). **Live-Check:** im Netzwerk/Log erscheint `GET
+     /ocs/v1.php/apps/serverinfo/api/v1/info?skipApps=true&skipUpdate=true` mit HTTP 200; antwortet
+     die App mit 401/404, ist dieser Weg (App-Passwort als Basic-Auth) nicht nutzbar und das
+     Ergebnis dem Tech-Lead zu melden.
+214. **Tun:** "Daten aktualisieren" klicken. **Erwartung:** Freiplatz wird neu geladen.
+215. **Tun:** serverinfo-App deaktivieren (oder Nicht-Admin-Zugang) und Dashboard öffnen.
+     **Erwartung:** "Frei auf dem Server: nicht verfügbar" mit Tooltip; das Dashboard bleibt normal
+     nutzbar, kein Fehlerpopup, kein Fehlerzustand.
+216. **Tun:** Testgruppe mit drei Usern anlegen (A nur in der Gruppe, B zusätzlich in einer
+     zweiten Gruppe, C = eigener Admin). Gruppe löschen, Checkbox **aus** lassen. **Erwartung:** nur
+     die Gruppe verschwindet, alle drei Benutzer bleiben.
+217. **Tun:** dieselbe Konstellation neu aufbauen, Gruppe löschen mit Checkbox **an**.
+     **Erwartung:** Vorschau nennt A unter "wird gelöscht", B unter "bleibt (andere Gruppen: …)", C
+     unter "bleibt (verbundener Admin)"; Bestätigung nur durch Tippen von `1`; danach sind A und die
+     Gruppe weg, B (ohne die Gruppe) und der eigene Admin bestehen weiter.
+218. **Tun:** Gruppe mit Checkbox an löschen, bei der kein Mitglied nur in dieser Gruppe ist.
+     **Erwartung:** Hinweis "Es werden keine Benutzer gelöscht", Gruppe wird gelöscht.
+219. **Tun:** Benutzerliste laden, dann in der Nextcloud-Weboberfläche einen neuen User in die
+     Testgruppe aufnehmen, ohne in der App neu zu laden. Gruppe mit Checkbox an löschen.
+     **Erwartung:** Abbruch mit "Benutzerliste ist nicht aktuell — bitte neu laden", nichts wird
+     gelöscht.
+220. **Tun:** während der Benutzer-Löschung einen Löschfehler provozieren (z. B. einen der User in
+     der Weboberfläche vorher löschen). **Erwartung:** Gruppe bleibt, Meldung "Gruppe nicht gelöscht,
+     weil n Benutzer nicht gelöscht werden konnten"; Fortschritt und Ergebnis-CSV wie bei Batch.
+221. **Tun:** die Gruppe `admin` betrachten. **Erwartung:** Löschen bleibt deaktiviert.

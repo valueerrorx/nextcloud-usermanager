@@ -14,21 +14,22 @@ import { formatTimestamp } from '../../shared/time.js';
 import { dashboardCards, fastVollListe, historyCounts } from '../../shared/dashboard.js';
 import { nextcloudLink } from '../../shared/externalUrl.js';
 import { toastError } from '../toast.js';
-import { ladeGruppen, ladeUserliste } from '../loaders.js';
+import { ladeFreiplatz, ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
   activeView, connection, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, groups, groupsFehler,
-  groupsLadezustand, jobHistorie, users, usersFehler, usersFetchedAt, usersLadezustand,
+  groupsLadezustand, freiplatz, jobHistorie, users, usersFehler, usersFetchedAt, usersLadezustand,
   usersUebersprungen,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
 
 async function ladeAlles() {
-  await Promise.all([ladeUserliste(), ladeGruppen()]);
+  await Promise.all([ladeUserliste(), ladeGruppen(), ladeFreiplatz()]);
 }
 
 onMounted(() => {
   if (users.value.length === 0) ladeUserliste();
   if (groups.value.length === 0) ladeGruppen();
+  ladeFreiplatz();
 });
 
 // Blockiert nur, solange eine der beiden Grundlagen lädt oder fehlgeschlagen ist - ein
@@ -41,7 +42,7 @@ const kombinierterZustand = computed(() => {
 });
 const kombinierteFehlermeldung = computed(() => usersFehler.value ?? groupsFehler.value ?? '');
 
-const karten = computed(() => dashboardCards({ users: users.value, groupCount: groups.value.length }));
+const karten = computed(() => dashboardCards({ users: users.value, groupCount: groups.value.length, freiplatz: freiplatz.value }));
 const serverLink = computed(() => nextcloudLink(connection.baseUrl));
 const fastVoll = computed(() => fastVollListe(users.value));
 
@@ -140,6 +141,7 @@ function zuBenutzerWechseln(userid) {
               <span
                 class="stat-metric-value"
                 :class="{ mono: metrik.mono }"
+                :title="metrik.hinweis ?? undefined"
               >{{ metrik.wert }}</span>
             </div>
           </div>

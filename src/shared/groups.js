@@ -38,3 +38,44 @@ export function nichtMitgliederVon(users, groupId) {
 export function istGruppeLoeschbar(groupId) {
   return groupId !== ADMIN_GROUP;
 }
+
+// Plan for deleting a group together with its members (S18). Members whose ONLY group is `gid`
+// are deleted; others stay. userid and group names are compared exactly (REVIEW-NOTES [S08], [S12]);
+// only the connected admin is matched case-insensitively and is never deleted. A member missing
+// from the loaded user list lands in `unbekannt` (caller must abort).
+export function planGruppeMitMitgliedern({ gid, mitglieder, users, adminUserId }) {
+  const adminLower = adminUserId ? adminUserId.toLowerCase() : null;
+  const zuLoeschen = [];
+  const bleiben = [];
+  const unbekannt = [];
+  for (const userid of mitglieder) {
+    const user = users.find((u) => u.userid === userid);
+    if (!user) {
+      unbekannt.push(userid);
+      continue;
+    }
+    const andereGruppen = user.groups.filter((g) => g !== gid);
+    const istAdmin = adminLower !== null && user.userid.toLowerCase() === adminLower;
+    if (istAdmin || andereGruppen.length > 0) {
+      bleiben.push({ userid: user.userid, andereGruppen });
+    } else {
+      zuLoeschen.push(user.userid);
+    }
+  }
+  return { zuLoeschen, bleiben, unbekannt };
+}
+
+// Delete the group only if every planned user deletion finished 'ok' (S18). `erwartet` is the
+// number of planned deletions; fewer/more results than planned never counts as success.
+export function entscheideGruppeLoeschen({ erwartet, results }) {
+  if (erwartet === 0) return { loeschen: true, nichtGeloescht: 0 };
+  const liste = Array.isArray(results) ? results : [];
+  const ok = liste.filter((r) => r.status === 'ok').length;
+  const loeschen = liste.length === erwartet && ok === erwartet;
+  return { loeschen, nichtGeloescht: loeschen ? 0 : Math.max(1, erwartet - ok) };
+}
+
+// Feedback when the group is kept because user deletions failed (S18).
+export function gruppeNichtGeloeschtText(nichtGeloescht) {
+  return `Gruppe nicht gelöscht, weil ${nichtGeloescht} Benutzer nicht gelöscht werden konnten`;
+}

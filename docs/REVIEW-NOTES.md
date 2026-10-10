@@ -112,3 +112,5 @@ aber die Agent-Schleifen kosten viel. S01 brauchte 11 Durchläufe, S02 neun.
 - **Step-Specs kurz halten** — die S03-Spec hatte 230 Zeilen für ein 140-Zeilen-Modul.
 Die Mutationsbeweis-Technik bleibt, weil sie real Bugs gefunden hat, die grüne Suiten nicht
 fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduziert.
+- [S18] Jeder neue Einstieg in `actions.run` braucht den Job-Guard: zentral in `startJob` (läuft schon ein Job -> ablehnen), nie nur am Button einer Ansicht.
+- [S18] Löschentscheidungen nie auf gecachten Daten treffen: direkt vor der Planung frisch laden (Mitglieder **und** Userliste); scheitert das Laden -> Abbruch ohne Löschung.

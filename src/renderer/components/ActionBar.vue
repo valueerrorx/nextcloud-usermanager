@@ -3,19 +3,16 @@
 // (swal2), actions.run. Rechnet nicht selbst: Dry-Run aus shared/dryRun.js, Begründungstexte aus
 // shared/jobReport.js, Helfer aus shared/userRows.js (ARCHITECTURE §4.1, REVIEW-NOTES [S06]).
 import Swal from 'sweetalert2';
-import { planActions, bestaetigungPasst, planToItems } from '../../shared/dryRun.js';
+import { planActions } from '../../shared/dryRun.js';
 import { gruppenOptionen } from '../../shared/filters.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
-import { resolveGrund } from '../../shared/jobReport.js';
-import { pushJobHistorie } from '../../shared/dashboard.js';
 import {
-  ACTION_LABELS, BATCH_ACTIONS, batchBarVisible, buildUpdateParams, jobToast, optionenObjekt,
+  ACTION_LABELS, BATCH_ACTIONS, batchBarVisible, buildUpdateParams, optionenObjekt,
 } from '../../shared/userRows.js';
 import { MESSAGES } from '../../shared/messages.js';
-import { toastError, toastSuccess } from '../toast.js';
-import {
-  dryRunPlan, jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
-} from '../state.js';
+import { toastError } from '../toast.js';
+import { escapeHtml, vorschauHtml, confirmDelete, startJob } from '../jobRunner.js';
+import { dryRunPlan, jobLaeuft } from '../state.js';
 
 const props = defineProps({
   users: { type: Array, required: true },
@@ -24,14 +21,6 @@ const props = defineProps({
   gesperrt: { type: Boolean, default: false },
 });
 const emit = defineEmits(['finished', 'clear']);
-
-// Nur für die swal2-HTML-Ausgabe - dasselbe Muster wie App.vue's Zertifikatsdialog, keine
-// Vue-Komponente innerhalb von swal2 möglich.
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[ch]));
-}
 
 // Asks for the action's parameters; resolves null when the dialog is cancelled.
 async function frageParams(action, user) {
@@ -104,36 +93,6 @@ async function frageParams(action, user) {
   }
 }
 
-function planZeile(plan) {
-  if (plan.vorher === null && plan.nachher === null) return escapeHtml(plan.userid);
-  const pfeil = plan.nachher === null ? '' : ` → ${escapeHtml(plan.nachher)}`;
-  return `${escapeHtml(plan.userid)}: ${escapeHtml(plan.vorher)}${pfeil}`;
-}
-
-function grundZeile(eintrag) {
-  return `${escapeHtml(eintrag.userid)}: ${escapeHtml(resolveGrund(eintrag.grund))}`;
-}
-
-function listeHtml(eintraege, zeile) {
-  if (eintraege.length === 0) return '<p class="vorschau-leer">— keine —</p>';
-  return `<ul>${eintraege.map((e) => `<li>${zeile(e)}</li>`).join('')}</ul>`;
-}
-
-// Drei Blöcke wie in S08 B2 verlangt: auszuführen (vorher -> nachher), keine Änderung,
-// ausgeschlossen - je mit Begründung aus resolveGrund.
-function vorschauHtml(plan) {
-  return `
-    <div class="vorschau">
-      <h4>Wird ausgeführt (${plan.anzahl})</h4>
-      ${listeHtml(plan.auszufuehren, planZeile)}
-      <h4>Keine Änderung (${plan.keineAenderung.length})</h4>
-      ${listeHtml(plan.keineAenderung, grundZeile)}
-      <h4>Ausgeschlossen (${plan.ausgeschlossen.length})</h4>
-      ${listeHtml(plan.ausgeschlossen, grundZeile)}
-    </div>
-  `;
-}
-
 async function confirmNormal(plan) {
   const result = await Swal.fire({
     title: 'Vorschau',
@@ -143,67 +102,6 @@ async function confirmNormal(plan) {
     cancelButtonText: 'Nein',
   });
   return result.isConfirmed;
-}
-
-// Löschbestätigung: getippte Dry-Run-Zahl (plan.anzahl, NIE die Rohauswahl), getrimmt, exakter
-// Stringvergleich, Button bis zur Übereinstimmung deaktiviert, kein Versuchslimit, auch bei
-// n = 1 (DECISIONS "Löschbestätigung"). Ausdrücklicher Hinweis auf das Mitlöschen der Dateien
-// (DECISIONS "Batch-Löschen: Hinweis auf Dateien").
-async function confirmDelete(plan) {
-  const result = await Swal.fire({
-    title: 'Löschen bestätigen',
-    html: `${vorschauHtml(plan)}
-      <p><strong>Achtung:</strong> Nextcloud löscht beim Löschen eines Benutzers auch dessen
-      Dateien unwiderruflich mit.</p>
-      <p>Zum Bestätigen die Zahl <strong>${plan.anzahl}</strong> eingeben:</p>`,
-    input: 'text',
-    inputPlaceholder: 'Anzahl',
-    showCancelButton: true,
-    confirmButtonText: 'Löschen',
-    cancelButtonText: 'Abbrechen',
-    didOpen: () => {
-      const confirmButton = Swal.getConfirmButton();
-      confirmButton.disabled = true;
-      Swal.getInput().addEventListener('input', (event) => {
-        confirmButton.disabled = !bestaetigungPasst(event.target.value, plan.anzahl);
-      });
-    },
-  });
-  return result.isConfirmed;
-}
-
-async function startJob(plan, action, params) {
-  const neueJobId = `job-${Date.now()}`;
-  jobId.value = neueJobId;
-  jobLaeuft.value = true;
-  jobFortschritt.value = { done: 0, total: plan.anzahl };
-  jobResults.value = [];
-  jobSummary.value = null;
-
-  const items = planToItems(plan);
-  try {
-    const result = await window.api.actionsRun({ jobId: neueJobId, action, items, params });
-    if (result.ok) {
-      jobResults.value = result.results;
-      jobSummary.value = result.summary;
-      // Nur tatsächlich ausgeführte Jobs landen in der Historie, nie die Vorschau (DECISIONS
-      // "Dry-Runs in der Job-Historie") - dieser Pfad läuft erst nach der Bestätigung.
-      jobHistorie.value = pushJobHistorie(jobHistorie.value, {
-        zeitpunkt: Date.now(), aktion: ACTION_LABELS[action], summary: result.summary,
-      });
-      const feedback = jobToast(ACTION_LABELS[action], result.summary);
-      (feedback.kind === 'error' ? toastError : toastSuccess)(feedback.text);
-    } else {
-      await Swal.fire({ title: 'Fehler', text: result.message ?? MESSAGES.aktion_fehlgeschlagen, icon: 'error' });
-    }
-  } catch (error) {
-    console.error('Action job failed:', error);
-    await Swal.fire({ title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error' });
-  } finally {
-    jobLaeuft.value = false;
-    // Die Daten sind jetzt veraltet (B4) - der Elternteil lädt die Userliste neu.
-    emit('finished');
-  }
 }
 
 // Dry-Run for exactly the given userids, then confirmation and execution (single and batch alike).
@@ -229,7 +127,12 @@ async function onVorschau(action, paramsObj, userids) {
   if (!bestaetigt) return;
 
   dryRunPlan.value = plan;
-  await startJob(plan, action, paramsObj);
+  try {
+    await startJob(plan, action, paramsObj);
+  } finally {
+    // Die Daten sind jetzt veraltet (B4) - der Elternteil lädt die Userliste neu.
+    emit('finished');
+  }
 }
 
 function blockiert() {

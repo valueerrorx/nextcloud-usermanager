@@ -34,5 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   groupsList: () => ipcRenderer.invoke('groups.list'),
   groupsCreate: (args) => ipcRenderer.invoke('groups.create', args),
   groupsDelete: (args) => ipcRenderer.invoke('groups.delete', args),
+  groupsMembers: (args) => ipcRenderer.invoke('groups.members', args),
+  serverFreeSpace: () => ipcRenderer.invoke('server.freeSpace'),
   filesOpenCsv: (args) => ipcRenderer.invoke('files.openCsv', args),
 });
