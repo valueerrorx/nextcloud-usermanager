@@ -237,20 +237,20 @@ describe('dashboardCards / accentStyle (S17)', () => {
     expect(cards.map((c) => c.iconStyle.color)).toEqual(['#58a6ff', '#a371f7', '#56d4dd', '#d29922']);
   });
 
-  it('Speicher: genutzt zählt unbegrenzte mit, genau die zwei Zeilen, keine Kontingentzeilen', () => {
+  it('Speicher: genutzt zählt unbegrenzte mit, nur die Zeile Frei, keine Kontingentzeilen', () => {
     const [benutzer, gruppen, speicher] = dashboardCards({ users, groupCount: 7, freiplatz: null });
     expect(benutzer.wert).toBe('3');
     expect(benutzer.metrics).toEqual([{ label: 'Aktiv', wert: '2' }, { label: 'Deaktiviert', wert: '1' }]);
     expect(gruppen.wert).toBe('7');
     expect(speicher.wert).toBe(formatBytes(1450));
-    expect(speicher.metrics.map((m) => m.label)).toEqual(['Genutzt gesamt', 'Frei auf dem Server']);
-    expect(speicher.metrics[0].wert).toBe(formatBytes(1450));
+    expect(speicher.metrics.map((m) => m.label)).toEqual(['Frei auf dem Server']);
+    expect(speicher.label).toBe('Genutzt gesamt');
   });
 
   it('Speicher: Frei auf dem Server zeigt den Serverwert bzw. den Hinweis', () => {
-    const frei = dashboardCards({ users, groupCount: 0, freiplatz: { ok: true, freeBytes: 2048 } })[2].metrics[1];
+    const frei = dashboardCards({ users, groupCount: 0, freiplatz: { ok: true, freeBytes: 2048 } })[2].metrics[0];
     expect(frei).toMatchObject({ label: 'Frei auf dem Server', wert: formatBytes(2048), hinweis: null });
-    const fehlt = dashboardCards({ users, groupCount: 0, freiplatz: null })[2].metrics[1];
+    const fehlt = dashboardCards({ users, groupCount: 0, freiplatz: null })[2].metrics[0];
     expect(fehlt.hinweis).not.toBeNull();
   });
 

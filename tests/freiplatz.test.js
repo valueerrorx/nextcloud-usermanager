@@ -22,10 +22,10 @@ describe('freiplatzAnzeige', () => {
     expect(freiplatzAnzeige(result)).toEqual({ wert: 'nicht verfügbar', hinweis: 'serverinfo-App nicht erreichbar oder keine Berechtigung' });
   });
 
-  it('Speicher-Kachel trägt die Zeile "Frei auf dem Server" neben "Genutzt gesamt"', () => {
+  it('Speicher-Kachel trägt die Zeile "Frei auf dem Server"', () => {
     const speicher = dashboardCards({ users: [], groupCount: 0, freiplatz: { ok: true, freeBytes: 1073741824 } })[2];
     expect(speicher.metrics.find((m) => m.label === 'Frei auf dem Server').wert).toBe(formatBytes(1073741824));
-    expect(speicher.metrics.map((m) => m.label)).toEqual(['Genutzt gesamt', 'Frei auf dem Server']);
+    expect(speicher.metrics.map((m) => m.label)).toEqual(['Frei auf dem Server']);
     const ohne = dashboardCards({ users: [], groupCount: 0 })[2];
     expect(ohne.metrics.find((m) => m.label === 'Frei auf dem Server').wert).toBe('nicht verfügbar');
   });

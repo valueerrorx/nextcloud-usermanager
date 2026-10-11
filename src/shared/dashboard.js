@@ -102,8 +102,7 @@ export function dashboardCards({ users, groupCount, freiplatz = null }) {
       { label: 'Deaktiviert', wert: String(zaehler.deaktiviert) },
     ]),
     karte('gruppen', 'bi-collection-fill', 'Gruppen', String(groupCount), 'Gruppen gesamt', []),
-    karte('speicher', 'bi-hdd-fill', 'Speicher', formatBytes(speicher.genutztBytes), 'Genutzt (gesamt)', [
-      { label: 'Genutzt gesamt', wert: formatBytes(speicher.genutztBytes), mono: true },
+    karte('speicher', 'bi-hdd-fill', 'Speicher', formatBytes(speicher.genutztBytes), 'Genutzt gesamt', [
       { label: 'Frei auf dem Server', wert: frei.wert, hinweis: frei.hinweis, mono: frei.hinweis === null },
     ]),
     karte('kontingente', 'bi-pie-chart-fill', 'Kontingente', formatBytes(speicher.summeBegrenztBytes), 'Summe vergebener Kontingente', [
