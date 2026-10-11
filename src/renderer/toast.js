@@ -9,7 +9,8 @@ const Toast = Swal.mixin({
 });
 
 function show(icon, title) {
-  Toast.fire({ icon, title }).catch((error) => {
+  // SweetAlert instances are thenables with then/finally but no catch(); wrap in a real Promise.
+  Promise.resolve(Toast.fire({ icon, title })).catch((error) => {
     console.error('Failed to show toast:', error);
   });
 }

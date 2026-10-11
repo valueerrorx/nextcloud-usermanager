@@ -76,7 +76,7 @@ export const CARD_ACCENTS = {
   benutzer: '#58a6ff',
   gruppen: '#a371f7',
   speicher: '#56d4dd',
-  fastVoll: '#d29922',
+  kontingente: '#d29922',
 };
 
 // Icon tile style: accent text on an accent background with .12 alpha.
@@ -87,7 +87,7 @@ export function accentStyle(hex) {
   return { background: `rgba(${r}, ${g}, ${b}, 0.12)`, color: hex };
 }
 
-// The four stat cards. Values are preformatted strings; mono marks monospace metrics.
+// The four stat cards: Benutzer, Gruppen, Speicher (Nutzung + Server), Kontingente (Vergabe). Values are preformatted strings; mono marks monospace metrics.
 export function dashboardCards({ users, groupCount, freiplatz = null }) {
   const zaehler = userCounts(users);
   const speicher = storageTotals(users);
@@ -103,11 +103,13 @@ export function dashboardCards({ users, groupCount, freiplatz = null }) {
     ]),
     karte('gruppen', 'bi-collection-fill', 'Gruppen', String(groupCount), 'Gruppen gesamt', []),
     karte('speicher', 'bi-hdd-fill', 'Speicher', formatBytes(speicher.genutztBytes), 'Genutzt (gesamt)', [
+      { label: 'Genutzt gesamt', wert: formatBytes(speicher.genutztBytes), mono: true },
       { label: 'Frei auf dem Server', wert: frei.wert, hinweis: frei.hinweis, mono: frei.hinweis === null },
-      { label: 'Summe begrenzter Kontingente', wert: formatBytes(speicher.summeBegrenztBytes), mono: true },
-      { label: 'Unbegrenzte Konten', wert: String(speicher.anzahlUnbegrenzt) },
-      { label: 'Unbekanntes Kontingent', wert: String(speicher.anzahlUnbekannt) },
     ]),
-    karte('fastVoll', 'bi-exclamation-triangle-fill', 'Fast voll', String(fastVoll.eintraege.length + fastVoll.weitere), 'Benutzer über 90 %', []),
+    karte('kontingente', 'bi-pie-chart-fill', 'Kontingente', formatBytes(speicher.summeBegrenztBytes), 'Summe vergebener Kontingente', [
+      { label: 'Unbegrenzt', wert: String(speicher.anzahlUnbegrenzt) },
+      { label: 'Unbekannt', wert: String(speicher.anzahlUnbekannt) },
+      { label: 'Fast voll (> 90 %)', wert: String(fastVoll.eintraege.length + fastVoll.weitere) },
+    ]),
   ];
 }

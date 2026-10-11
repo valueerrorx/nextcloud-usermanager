@@ -104,9 +104,10 @@ ist — das deckt `tests/pool.test.js` ab).
 
 26. **Tun:** Dashboard öffnen. **Erwartung:** Anzahl User, Anzahl aktiv, Anzahl deaktiviert,
     Anzahl Gruppen — Werte passen zur Nextcloud-Admin-Oberfläche.
-27. **Tun:** Speicherkachel prüfen. **Erwartung:** **vier** getrennte Werte: Gesamtnutzung,
-    Summe der begrenzten Kontingente, Anzahl "unbegrenzt", Anzahl "unbekannt".
-    Keine einzelne Gesamtsumme.
+27. **Tun:** Speicherkachel und Kontingentkachel prüfen. **Erwartung:** Speicher zeigt **nur**
+    "Genutzt gesamt" und "Frei auf dem Server" (keine Kontingentwerte). Kontingente zeigt als
+    großen Wert die Summe vergebener Kontingente, darunter "Unbegrenzt", "Unbekannt" und
+    "Fast voll (> 90 %)" als Anzahlen. Keine separate "Fast voll"-Kachel.
 28. **Tun:** User mit >90 % Auslastung prüfen. **Erwartung:** erscheint in der Liste "fast voll",
     absteigend sortiert; User mit unbegrenztem oder unbekanntem Kontingent erscheinen **nicht**.
     Bei mehr als 20 Treffern zeigt die Liste 20 Einträge plus "und n weitere".
@@ -131,8 +132,8 @@ ist — das deckt `tests/pool.test.js` ab).
     "Lädt…"), danach echte Kennzahlen aus der nachgeladenen Liste; die Kacheln zeigen **nicht**
     lauter Nullen, als wäre die Instanz leer (REVIEW-NOTES "dieselbe Falle wie S10/S12").
 33b. **Tun:** den eigenen Admin-Account (den beim Verbinden eingegebenen Loginnamen) in den
-    Kacheln suchen. **Erwartung:** er zählt in der Speicherkachel unter "Unbegrenzte Konten"
-    mit (sein `used`-Wert fließt in "Genutzt (gesamt)" ein, siehe RESEARCH-OCS V3) und
+    Kacheln suchen. **Erwartung:** er zählt in der Kontingentkachel unter "Unbegrenzt"
+    mit (sein `used`-Wert fließt in "Genutzt gesamt" der Speicherkachel ein, siehe RESEARCH-OCS V3) und
     erscheint **nicht** in der "Fast voll"-Liste, unabhängig davon, wie viel er tatsächlich
     nutzt — unbegrenzte Kontingente haben kein Prozent-Kriterium.
 
@@ -150,8 +151,8 @@ ist — das deckt `tests/pool.test.js` ab).
     Die **Identitätsfelder** `userid`, `displayname`, `email`, `enabled`, `groups` sind
     identisch zum Bulk-Weg. **Kontingent darf abweichen**: der Einzeluser-Endpunkt liefert
     Quota teils nur als Skalar, betroffene User erscheinen als "unbekannt". Dann steigt
-    auf dem Dashboard die Kachelzahl "unbekannt" entsprechend und die Summe der begrenzten
-    Kontingente sinkt — das ist erwartetes Verhalten, kein Fehler.
+    auf dem Dashboard in der Kontingentkachel "Unbekannt" entsprechend und die Summe der
+    vergebenen Kontingente sinkt — das ist erwartetes Verhalten, kein Fehler.
 36. **Tun:** Suche nach Teilstring in userid, Anzeigename und E-Mail, mit und ohne Großschreibung.
     **Erwartung:** case-insensitive Treffer in allen drei Feldern.
 37. **Tun:** Nach Anzeigename sortieren, mit Umlauten (Ärger, Zoller, Öttinger).
@@ -590,7 +591,7 @@ ist — das deckt `tests/pool.test.js` ab).
 207. **Tun:** während eines laufenden Jobs die Sidebar ansehen. **Erwartung:** "Abmelden" ist
      deaktiviert (Tooltip erklärt warum), Zeilen-Buttons sind gesperrt.
 208. **Tun:** Dashboard öffnen. **Erwartung:** vier Kacheln mit farbigem Icon (Benutzer blau,
-     Gruppen violett, Speicher türkis, Fast voll gelb) mit Kicker, großem Wert, Label und
+     Gruppen violett, Speicher türkis, Kontingente gelb) mit Kicker, großem Wert, Label und
      Kennzahlen; darunter "Schnellzugriff" und "Fast voll"-Liste, dann "Letzte Jobs".
 209. **Tun:** im Schnellzugriff "Daten aktualisieren", "Zu Benutzern", "Zu Gruppen",
      "CSV-Import" klicken. **Erwartung:** Icon dreht sich beim Laden; die Links wechseln die
@@ -606,7 +607,7 @@ ist — das deckt `tests/pool.test.js` ab).
 ## S18 - Freier Speicher und Gruppe mit Mitgliedern löschen
 
 213. **Tun:** gegen `cloud.xapient.solutions` Dashboard öffnen. **Erwartung:** Speicher-Kachel
-     zeigt "Frei auf dem Server" mit GiB-Wert, der zum Plattenplatz des Servers passt (nicht zu
+     zeigt neben "Genutzt gesamt" "Frei auf dem Server" mit GiB-Wert, der zum Plattenplatz des Servers passt (nicht zu
      den Kontingenten). **Live-Check:** im Netzwerk/Log erscheint `GET
      /ocs/v1.php/apps/serverinfo/api/v1/info?skipApps=true&skipUpdate=true` mit HTTP 200; antwortet
      die App mit 401/404, ist dieser Weg (App-Passwort als Basic-Auth) nicht nutzbar und das

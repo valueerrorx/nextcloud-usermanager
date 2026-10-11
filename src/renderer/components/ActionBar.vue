@@ -10,6 +10,7 @@ import {
   ACTION_LABELS, BATCH_ACTIONS, batchBarVisible, buildUpdateParams, optionenObjekt,
 } from '../../shared/userRows.js';
 import { MESSAGES } from '../../shared/messages.js';
+import { describeError } from '../../shared/logSafe.js';
 import { toastError } from '../toast.js';
 import { escapeHtml, vorschauHtml, confirmDelete, startJob, VORSCHAU_DIALOG } from '../jobRunner.js';
 import { dryRunPlan, jobLaeuft } from '../state.js';
@@ -150,7 +151,7 @@ async function fuehreAus(action, user, userids) {
     await onVorschau(action, paramsObj, userids);
   } catch (error) {
     console.error('Action failed:', error);
-    toastError(MESSAGES.unerwarteter_serverfehler);
+    toastError(`${MESSAGES.unerwarteter_serverfehler} (${describeError(error)})`);
   }
 }
 

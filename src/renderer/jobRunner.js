@@ -7,6 +7,7 @@ import { resolveGrund } from '../shared/jobReport.js';
 import { pushJobHistorie } from '../shared/dashboard.js';
 import { ACTION_LABELS, jobToast } from '../shared/userRows.js';
 import { MESSAGES } from '../shared/messages.js';
+import { describeError } from '../shared/logSafe.js';
 import { toastError, toastSuccess } from './toast.js';
 import {
   jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
@@ -31,6 +32,11 @@ function planZeile(plan) {
 
 function grundZeile(eintrag) {
   return `${idHtml(eintrag.userid)} <span class="vorschau-detail">${escapeHtml(resolveGrund(eintrag.grund))}</span>`;
+}
+
+// Generic error dialog: German text for the user plus "name: message" of the cause in the footer.
+export function unerwartetFooter(error) {
+  return `<small>${escapeHtml(describeError(error))}</small>`;
 }
 
 // Dialog options for every swal2 that shows a preview (wide, left-aligned via CSS class).
@@ -122,7 +128,9 @@ export async function startJob(plan, action, params) {
     }
   } catch (error) {
     console.error('Action job failed:', error);
-    await Swal.fire({ title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error' });
+    await Swal.fire({
+      title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error', footer: unerwartetFooter(error),
+    });
   } finally {
     jobLaeuft.value = false;
   }

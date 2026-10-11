@@ -232,25 +232,52 @@ describe('dashboardCards / accentStyle (S17)', () => {
 
   it('liefert vier Karten mit Akzentfarben der Vorlage', () => {
     const cards = dashboardCards({ users, groupCount: 7 });
-    expect(cards.map((c) => c.key)).toEqual(['benutzer', 'gruppen', 'speicher', 'fastVoll']);
-    expect(cards.map((c) => c.icon)).toEqual(['bi-people-fill', 'bi-collection-fill', 'bi-hdd-fill', 'bi-exclamation-triangle-fill']);
+    expect(cards.map((c) => c.key)).toEqual(['benutzer', 'gruppen', 'speicher', 'kontingente']);
+    expect(cards.map((c) => c.icon)).toEqual(['bi-people-fill', 'bi-collection-fill', 'bi-hdd-fill', 'bi-pie-chart-fill']);
     expect(cards.map((c) => c.iconStyle.color)).toEqual(['#58a6ff', '#a371f7', '#56d4dd', '#d29922']);
   });
 
-  it('Werte: Benutzer, Gruppen, Fast voll; genutzt zählt unbegrenzte mit', () => {
-    const [benutzer, gruppen, speicher, fastVoll] = dashboardCards({ users, groupCount: 7 });
+  it('Speicher: genutzt zählt unbegrenzte mit, genau die zwei Zeilen, keine Kontingentzeilen', () => {
+    const [benutzer, gruppen, speicher] = dashboardCards({ users, groupCount: 7, freiplatz: null });
     expect(benutzer.wert).toBe('3');
     expect(benutzer.metrics).toEqual([{ label: 'Aktiv', wert: '2' }, { label: 'Deaktiviert', wert: '1' }]);
     expect(gruppen.wert).toBe('7');
     expect(speicher.wert).toBe(formatBytes(1450));
-    expect(speicher.metrics.find((m) => m.label === 'Unbegrenzte Konten').wert).toBe('1');
-    expect(fastVoll.wert).toBe('1');
+    expect(speicher.metrics.map((m) => m.label)).toEqual(['Genutzt gesamt', 'Frei auf dem Server']);
+    expect(speicher.metrics[0].wert).toBe(formatBytes(1450));
   });
 
-  it('Fast voll zählt auch die über max abgeschnittenen Einträge, 90 % selbst nicht', () => {
+  it('Speicher: Frei auf dem Server zeigt den Serverwert bzw. den Hinweis', () => {
+    const frei = dashboardCards({ users, groupCount: 0, freiplatz: { ok: true, freeBytes: 2048 } })[2].metrics[1];
+    expect(frei).toMatchObject({ label: 'Frei auf dem Server', wert: formatBytes(2048), hinweis: null });
+    const fehlt = dashboardCards({ users, groupCount: 0, freiplatz: null })[2].metrics[1];
+    expect(fehlt.hinweis).not.toBeNull();
+  });
+
+  // limited 1000 (95 %), limited 1000 (90 % genau), limited 1000 (91 %), unbegrenzt x2, unbekannt x3
+  it('Kontingente: Summe und Zeilen Unbegrenzt, Unbekannt, Fast voll (90 % zählt nicht, 91 % schon)', () => {
+    const fix = [
+      mk('limited', 1000, 950, 95),
+      mk('limited', 2000, 1800, 90),
+      mk('limited', 3000, 2730, 91),
+      mk('unlimited', null, 10, null),
+      mk('unlimited', null, 20, null),
+      mk('unknown', null, null, null),
+      mk('unknown', null, null, null),
+      mk('unknown', null, null, null),
+    ];
+    const kontingente = dashboardCards({ users: fix, groupCount: 0 })[3];
+    expect(kontingente.wert).toBe(formatBytes(6000));
+    expect(kontingente.metrics).toEqual([
+      { label: 'Unbegrenzt', wert: '2' },
+      { label: 'Unbekannt', wert: '3' },
+      { label: 'Fast voll (> 90 %)', wert: '2' },
+    ]);
+  });
+
+  it('Kontingente: Fast voll zählt auch die über max abgeschnittenen Einträge', () => {
     const viele = Array.from({ length: 25 }, () => mk('limited', 100, 95, 95));
-    expect(dashboardCards({ users: viele, groupCount: 0 })[3].wert).toBe('25');
-    expect(dashboardCards({ users: [mk('limited', 100, 90, 90)], groupCount: 0 })[3].wert).toBe('0');
+    expect(dashboardCards({ users: viele, groupCount: 0 })[3].metrics[2].wert).toBe('25');
   });
 
   it('accentStyle: Akzent mit .12 Alpha als Hintergrund', () => {

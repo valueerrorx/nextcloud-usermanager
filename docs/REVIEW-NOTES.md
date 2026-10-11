@@ -114,3 +114,4 @@ Die Mutationsbeweis-Technik bleibt, weil sie real Bugs gefunden hat, die grüne 
 fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduziert.
 - [S18] Jeder neue Einstieg in `actions.run` braucht den Job-Guard: zentral in `startJob` (läuft schon ein Job -> ablehnen), nie nur am Button einer Ansicht.
 - [S18] Löschentscheidungen nie auf gecachten Daten treffen: direkt vor der Planung frisch laden (Mitglieder **und** Userliste); scheitert das Laden -> Abbruch ohne Löschung.
+- [S19] Test-Attrappen dürfen den Code nach dem Mock-Punkt nicht verdecken: mindestens ein Test pro Ablauf mit echten Folge-Modulen (Toast, Historie). Ein gemockter `toast.js` hat einen Absturz nach jeder erfolgreichen Aktion versteckt. swal2-Instanzen haben kein `.catch` — immer `Promise.resolve(Swal.fire(...))`.

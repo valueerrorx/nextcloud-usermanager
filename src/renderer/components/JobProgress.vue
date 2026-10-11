@@ -8,6 +8,7 @@ import { buildResultCsvReport, buildImportResultCsvReport } from '../../shared/r
 import { resolveGrund, summaryAnzeige } from '../../shared/jobReport.js';
 import { buildImportExportRows } from '../../shared/importView.js';
 import { MESSAGES } from '../../shared/messages.js';
+import { unerwartetFooter } from '../jobRunner.js';
 import {
   jobFortschritt, jobId, jobLaeuft, jobResults, jobSummary, dryRunPlan,
 } from '../state.js';
@@ -60,7 +61,9 @@ async function onAbbrechen() {
   } catch (error) {
     console.error('actions.stop failed:', error);
     stopDisabled.value = false;
-    await Swal.fire({ title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error' });
+    await Swal.fire({
+      title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error', footer: unerwartetFooter(error),
+    });
   }
 }
 
