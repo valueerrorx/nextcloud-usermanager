@@ -42,12 +42,12 @@ describe('parseImportCsv — Zeilenfehler, je eine Fixture (ARCHITECTURE §6)', 
     const result = parseImportCsv(fixture('import-spaltenzahl.csv'));
     expect(result.ok).toBe(true);
     expect(result.rows[0].fehler).toBeUndefined();
-    expect(result.rows[1]).toEqual({ zeile: 2, vorname: '', nachname: '', geburtsdatum: '', fehler: 'spaltenzahl' });
+    expect(result.rows[1]).toEqual({ zeile: 2, vorname: '', nachname: '', passwort: '', fehler: 'spaltenzahl' });
   });
 
   it('import-quote-unbalanciert.csv: unbalanciertes Anfuehrungszeichen -> quote_unbalanciert, nicht still verstuemmelt', () => {
     const result = parseImportCsv(fixture('import-quote-unbalanciert.csv'));
-    expect(result.rows[0]).toEqual({ zeile: 1, vorname: '', nachname: '', geburtsdatum: '', fehler: 'quote_unbalanciert' });
+    expect(result.rows[0]).toEqual({ zeile: 1, vorname: '', nachname: '', passwort: '', fehler: 'quote_unbalanciert' });
   });
 
   it('import-vorname-leer.csv: Zeile 2 ohne Vorname -> vorname_leer', () => {
@@ -60,23 +60,24 @@ describe('parseImportCsv — Zeilenfehler, je eine Fixture (ARCHITECTURE §6)', 
     expect(result.rows[1].fehler).toBe('nachname_leer');
   });
 
-  it('import-datum-formate.csv: auch ein freier Text in der Datumsspalte bleibt eine Datenzeile', () => {
-    const result = parseImportCsv(fixture('import-datum-formate.csv'));
+  it('import-passwort-leer.csv: leere und nur aus Leerzeichen bestehende Zelle -> passwort_leer', () => {
+    const result = parseImportCsv(fixture('import-passwort-leer.csv'));
     expect(result.rows[0].fehler).toBeUndefined();
-    expect(result.rows[1].fehler).toBeUndefined();
-    expect(result.rows[2]).toEqual({ zeile: 3, vorname: 'Lea', nachname: 'Klein', geburtsdatum: 'nichtdatum' });
+    expect(result.rows[1].fehler).toBe('passwort_leer');
+    expect(result.rows[2].fehler).toBe('passwort_leer');
   });
 
-  it('import-datum-ungueltig.csv: 31.04.2010 bleibt Rohtext, kein Zeilenfehler', () => {
-    const result = parseImportCsv(fixture('import-datum-ungueltig.csv'));
-    expect(result.rows[1].fehler).toBeUndefined();
-    expect(result.rows[1].geburtsdatum).toBe('31.04.2010');
+  it('Passwort wird 1:1 uebernommen (nur aeusserer Trim), auch Datumsform, Sonderzeichen und gerade Anzahl Anfuehrungszeichen', () => {
+    const werte = ['01.01.2000', '2000-01-01', 'Ab!c d', 'äöü€', 'a""b'];
+    const text = `Vorname;Nachname;Passwort\n${werte.map((w, i) => `Max${i};Mueller; ${w} `).join('\n')}\n`;
+    const result = parseImportCsv(text);
+    expect(result.rows.map((r) => r.passwort)).toEqual(werte);
   });
 
-  it('import-datum-zukunft.csv: ein zukuenftiges Datum bleibt Rohtext, kein Zeilenfehler', () => {
-    const result = parseImportCsv(fixture('import-datum-zukunft.csv'));
-    expect(result.rows[1].fehler).toBeUndefined();
-    expect(result.rows[1].geburtsdatum).toBe('01.01.2099');
+  it('Passwort mit Trennzeichen -> spaltenzahl, mit einem " -> quote_unbalanciert', () => {
+    const result = parseImportCsv('Vorname;Nachname;Passwort\nMax;Mueller;a;b\nMax;Mueller;a"b\n');
+    expect(result.rows[0].fehler).toBe('spaltenzahl');
+    expect(result.rows[1].fehler).toBe('quote_unbalanciert');
   });
 
   it('import-doppelzeile.csv: Zeile 2 ist Dublette von Zeile 1 (roh, getrimmt, case-insensitiv) -> doppelzeile, Zeile 3 bleibt fehlerfrei', () => {
@@ -86,15 +87,18 @@ describe('parseImportCsv — Zeilenfehler, je eine Fixture (ARCHITECTURE §6)', 
     expect(result.rows[2].fehler).toBeUndefined();
   });
 
-  it("Stufe 9 vergleicht den Rohtext, nicht normalizeComponent: 'Anna Maria'/'AnnaMaria' bei gleichem Passwort ist KEINE Dublette", () => {
-    const text = 'Vorname;Nachname;Passwort\nAnna Maria;Musterfrau;01.01.2000\nAnnaMaria;Musterfrau;01.01.2000\n';
-    const result = parseImportCsv(text);
-    expect(result.rows[0].fehler).toBeUndefined();
+  it('gleicher Name, anderes Passwort (auch nur andere Gross-/Kleinschreibung) ist keine Dublette', () => {
+    const result = parseImportCsv('Vorname;Nachname;Passwort\nMax;Mueller;a\nMax;Mueller;A\n');
     expect(result.rows[1].fehler).toBeUndefined();
   });
 
-  it("der '|'-Trenner im Dublettenschluessel verhindert eine falsche Verschmelzung ('Ann'+'Amarie' vs 'Anna'+'Marie')", () => {
-    const text = 'Vorname;Nachname;Passwort\nAnn;Amarie;01.01.2000\nAnna;Marie;01.01.2000\n';
+  it("Passwort mit '|' verschmilzt nicht mit dem Namen im Dublettenschluessel", () => {
+    const result = parseImportCsv('Vorname;Nachname;Passwort\nMax;Mueller;a|b\nMax;Mueller|a;b\n');
+    expect(result.rows[1].fehler).toBeUndefined();
+  });
+
+  it("Stufe 9 vergleicht den Rohtext, nicht normalizeComponent: 'Anna Maria'/'AnnaMaria' bei gleichem Passwort ist KEINE Dublette", () => {
+    const text = 'Vorname;Nachname;Passwort\nAnna Maria;Musterfrau;01.01.2000\nAnnaMaria;Musterfrau;01.01.2000\n';
     const result = parseImportCsv(text);
     expect(result.rows[0].fehler).toBeUndefined();
     expect(result.rows[1].fehler).toBeUndefined();
@@ -105,7 +109,7 @@ describe('parseImportCsv — BOM, CRLF, Trennzeichenerkennung (S09 Abnahme 3)', 
   it('import-bom-crlf.csv: BOM wird entfernt und CRLF korrekt behandelt', () => {
     const result = parseImportCsv(fixture('import-bom-crlf.csv'));
     expect(result.ok).toBe(true);
-    expect(result.rows).toEqual([{ zeile: 1, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '01.01.2000' }]);
+    expect(result.rows).toEqual([{ zeile: 1, vorname: 'Max', nachname: 'Mueller', passwort: 'Pw1234' }]);
   });
 
   it('import-semikolon.csv: Trennzeichen ; wird erkannt', () => {
@@ -125,8 +129,8 @@ describe('parseImportCsv — BOM, CRLF, Trennzeichenerkennung (S09 Abnahme 3)', 
     expect(result).toEqual({
       ok: true,
       rows: [
-        { zeile: 1, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '01.01.2000' },
-        { zeile: 2, vorname: 'Anna', nachname: 'Schmidt', geburtsdatum: '02.02.2000' },
+        { zeile: 1, vorname: 'Max', nachname: 'Mueller', passwort: 'Pw1234' },
+        { zeile: 2, vorname: 'Anna', nachname: 'Schmidt', passwort: 'Pw5678' },
       ],
     });
   });

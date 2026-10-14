@@ -120,3 +120,4 @@ fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduzier
 - [S20] Keine Denylist-Bereinigung als Ersatz für die Allowlist-Regel „Meldungen nur aus messages.js“ — weder `ocs.meta.message`, `err.message` noch `describeError` über IPC oder in Dialoge.
 - [S20] CI: Actions per SHA pinnen, Rechte je Job minimal, `persist-credentials: false`, Test+Lint vor Release.
 - [S20] Jeder Commit baut für sich allein (keine Importe auf Dateien eines späteren Commits).
+- [S20] Keine zweite „Acceptance“-Testdatei neben der Modul-Testdatei: ein Modul, eine Testdatei (ARCHITECTURE §2/§11); Abnahmefälle gehören in die bestehende Datei, jeder Fall genau einmal — vor dem Verschieben prüfen, ob er dort schon existiert.

@@ -1,5 +1,5 @@
 // Import-CSV and username-list parsing, Stufen 1-9 of ARCHITECTURE §6. Pure, no I/O.
-// CSV columns are Vorname, Nachname, Passwort. The third value is stored as geburtsdatum.
+// CSV columns are Vorname, Nachname, Passwort. The third value is the initial password, used verbatim (trimmed).
 const MAX_ROWS = 2000;
 const HEADER_FIELDS = ['vorname', 'nachname', 'passwort'];
 
@@ -33,31 +33,31 @@ function hasUnbalancedQuotes(line) {
   return count % 2 !== 0;
 }
 
-// RawRow = { zeile, vorname, nachname, geburtsdatum, fehler? } (ARCHITECTURE §6).
+// RawRow = { zeile, vorname, nachname, passwort, fehler? } (ARCHITECTURE §6).
 function parseDataLine(line, zeile, delimiter, seen) {
   if (hasUnbalancedQuotes(line)) {
-    return { zeile, vorname: '', nachname: '', geburtsdatum: '', fehler: 'quote_unbalanciert' };
+    return { zeile, vorname: '', nachname: '', passwort: '', fehler: 'quote_unbalanciert' };
   }
   const fields = line.split(delimiter);
   if (fields.length !== 3) {
-    return { zeile, vorname: '', nachname: '', geburtsdatum: '', fehler: 'spaltenzahl' };
+    return { zeile, vorname: '', nachname: '', passwort: '', fehler: 'spaltenzahl' };
   }
 
   const vorname = fields[0].trim();
   const nachname = fields[1].trim();
-  const geburtsdatum = fields[2].trim();
+  const passwort = fields[2].trim();
 
-  if (vorname === '') return { zeile, vorname, nachname, geburtsdatum, fehler: 'vorname_leer' };
-  if (nachname === '') return { zeile, vorname, nachname, geburtsdatum, fehler: 'nachname_leer' };
+  if (vorname === '') return { zeile, vorname, nachname, passwort, fehler: 'vorname_leer' };
+  if (nachname === '') return { zeile, vorname, nachname, passwort, fehler: 'nachname_leer' };
+  if (passwort === '') return { zeile, vorname, nachname, passwort, fehler: 'passwort_leer' };
 
-  // Stufe 9: raw-text duplicate, trimmed + case-insensitive, '|'-separated key (ARCHITECTURE §6).
-  // Deliberately NOT normalizeComponent: that would already merge e.g. 'Anna Maria'/'AnnaMaria'
-  // here and make the in-file collision path (Stufe 14b) unreachable.
-  const key = [vorname.toLowerCase(), nachname.toLowerCase(), geburtsdatum.toLowerCase()].join('|');
-  if (seen.has(key)) return { zeile, vorname, nachname, geburtsdatum, fehler: 'doppelzeile' };
+  // Stufe 9: same raw name (case-insensitive) and same password (case-sensitive) is a duplicate.
+  // JSON key because the password is free text; only compared in memory, never output.
+  const key = JSON.stringify([vorname.toLowerCase(), nachname.toLowerCase(), passwort]);
+  if (seen.has(key)) return { zeile, vorname, nachname, passwort, fehler: 'doppelzeile' };
   seen.add(key);
 
-  return { zeile, vorname, nachname, geburtsdatum };
+  return { zeile, vorname, nachname, passwort };
 }
 
 export function parseImportCsv(text) {

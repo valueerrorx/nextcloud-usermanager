@@ -67,10 +67,7 @@ src/preload/
 src/shared/                       PURE MODULE: kein import von node:*, electron, fetch, fs
   username.js                     normalizeComponent, buildUsername, normalizeOrder (1:1-Port)
                                   + Zeichensatz, reservierte Namen, MAX_USERID, truncateToFit
-  birthdate.js                    parseBirthdate -> ddmmyyyy, Kalenderprüfung, Zukunftsprüfung
-  password.js                     validatePrefix, buildInitialPassword, checkMinLength,
-                                  beispielPasswort (Live-Beispiel im Import-Dialog)
-  csvImport.js                    zwei Exporte: Import-CSV (Vorname;Nachname;Geburtsdatum) und
+  csvImport.js                    zwei Exporte: Import-CSV (Vorname;Nachname;Passwort) und
                                   Username-Liste (ein Name je Zeile, optionaler Header)
   importPlan.js                   Stufen 10-18 aus §6: Zeilen -> Vorschauzeilen mit Status
   quota.js                        defensiver Quota-Reader + Presets + formatQuotaForApi + formatBytes
@@ -116,8 +113,6 @@ src/renderer/
 tests/                            je getestetes Modul genau eine Datei (Abgleich mit §11)
   username.test.js                14 Zeilen RESEARCH-UPN §11 + 5 Fixtures §10, Zeichensatz,
                                   reservierte Namen, truncateToFit
-  birthdate.test.js               beide Formate, 31.02.2010, Zukunft, Müll
-  password.test.js                Prefix-Validierung, Passwortbildung, Mindestlänge, Live-Beispiel
   csvImport.test.js               je ein Fall pro Datei-/Zeilenfehler aus §6 + Userliste
                                   mit/ohne Header, Leerzeilen, Duplikate
   importPlan.test.js              die vier Fälle aus §6.1 + Status-Matrix + Fehler-IDs
@@ -314,12 +309,10 @@ DECISIONS „Berechnungen gehören nie in Vue-Komponenten“ ist bindend: `Dashb
 | `formatBytes` | `(bytes: number\|null) -> string` | `null` -> „unbekannt“; GiB-Basis 1024, eine Dezimalstelle, deutsches Komma |
 | `quotaStufe` | `(q: QuotaInfo) -> 'unter50' \| 'f50bis90' \| 'ueber90' \| 'unbegrenzt' \| 'unbekannt'` | die **fünf** Filterstufen (DECISIONS „Quota-Filterstufen“, keine Checkbox): `limited` mit `usagePercent < 50` / `>= 50 && <= 90` / `> 90`, `unlimited` -> `unbegrenzt`, alles andere -> `unbekannt`. Der Filter in der Usertabelle vergleicht nur noch gegen diesen Rückgabewert |
 | `matchesSuche` | `(u: UserView, q: string) -> boolean` | case-insensitiver Teilstring über `userid`, `displayname`, `email` (DECISIONS „Suche in der Usertabelle“); leerer/getrimmt leerer Query -> `true` |
-| `beispielPasswort` | `(prefix: string) -> string` | Live-Beispiel im Import-Dialog, feste Beispielsgeburtsdaten `01012010`, z. B. `Schule01012010!`; dieselbe Funktion wie die echte Bildung, nur mit Beispielsdatum |
 
 Ablage: `istFastVoll`, `fastVollListe`, `storageTotals`, `userCounts`, `historyCounts` in
 `shared/dashboard.js`; `formatBytes` in `shared/quota.js` (einzige Stelle, die Quota-Zahlen
-in Text verwandelt); `quotaStufe` und `matchesSuche` in `shared/filters.js`;
-`beispielPasswort` in `shared/password.js`.
+in Text verwandelt); `quotaStufe` und `matchesSuche` in `shared/filters.js`.
 
 ## 5. Action-Pipeline
 
@@ -436,11 +429,11 @@ nutzergewählter Pfad, kein Default im App-Verzeichnis, kein Auto-Open
 Pipeline-Ergebnisse **plus** die schon in der Vorschau abgewiesenen Fehlerzeilen. Letztere haben
 `aktion = 'user.create'`, `status = 'fehler'`, `grund` = der deutsche Text der Zeilenfehler-ID aus
 §6, `httpStatus`/`ocsCode` leer, `passwort` leer. **Jede Zeile ohne ermittelten Kandidaten** — also jeder Fehler, der auftritt, bevor
-Stufe 12 einen `kandidatA` erzeugt hat (z. B. `vorname_leer`, `datum_format`,
+Stufe 12 einen Basis-Kandidaten erzeugt hat (z. B. `vorname_leer`, `passwort_leer`,
 `name_nicht_abbildbar`, `doppelzeile`) — bekommt in Spalte 1 die **Zeilennummer** der CSV in der
 Form `Zeile 17`. **Zeilen mit ermitteltem Kandidaten** tragen diesen Kandidaten in Spalte 1, auch
-wenn sie danach scheiterten: `username_zu_lang` (Stufe 12 bzw. 14c) den gekürzten Kandidaten, und
-die Kollisionsfehler aus 13 / 14b / 14d / 14f den **kollidierenden** Kandidaten. So ist jede
+wenn sie danach scheiterten: `username_zu_lang` (Stufe 12 bzw. 14) den gekürzten Basis-Kandidaten, und
+die Kollisionsfehler aus 13 / 14 den **kollidierenden** Kandidaten. So ist jede
 Eingabezeile auffindbar und der Admin sieht bei Kollisionen sofort, welcher Name belegt war. Damit ist jede Eingabezeile im Export
 genau einmal auffindbar, und `resultCsv.js` braucht keine zweite Spaltendefinition.
 
@@ -454,7 +447,7 @@ Reihenfolge der Stufen, von CSV-Bytes zur Vorschauzeile. Stufen 1-9 in `shared/c
 ```js
 // shared/csvImport.js — Stufen 1-9
 parseImportCsv(text)        -> { ok, rows: RawRow[], fileError? }
-//   RawRow = { zeile, vorname, nachname, geburtsdatum, fehler? }
+//   RawRow = { zeile, vorname, nachname, passwort, fehler? }
 parseUserList(text)         -> { ok, usernames: string[], fileError? }   // Batch-Input
 
 // shared/importPlan.js — Stufen 10-18
@@ -462,10 +455,9 @@ buildImportPlan({
   rows,              // RawRow[] aus parseImportCsv
   serverUserIds,     // string[], lowercase-normalisiert, aus state.users
   order,             // 'givenFirst' | 'surnameFirst'
-  prefix,            // Passwort-Prefix, schon validiert
   max = MAX_USERID,  // Testbarkeit: §6.1 läuft mit max = 20
 }) -> { rows: PreviewRow[], summary: { neu, kollisionAufgeloest, fehler } }
-//   PreviewRow = { zeile, vorname, nachname, ddmmyyyy, username|null,
+//   PreviewRow = { zeile, vorname, nachname, username|null,
 //                  status: 'neu'|'kollision_aufgeloest'|'fehler',
 //                  gekuerzt: boolean, fehlerId?, displayname, passwort|null }
 
@@ -482,23 +474,23 @@ Ergebnis der vorherigen, und eine Zeile verlässt die Pipeline bei ihrem ersten 
 2. CRLF und CR auf LF normalisieren, abschließende Leerzeilen verwerfen.
 3. Trennzeichenerkennung an der Headerzeile: häufigeres von `;` und `,` gewinnt;
    **bei Gleichstand `;`** (deutsches Excel); kommt keines vor -> Dateifehler `header_fehlt`.
-4. Header prüfen: genau `Vorname`, `Nachname`, `Geburtsdatum`, getrimmt, case-insensitiv.
+4. Header prüfen: genau `Vorname`, `Nachname`, `Passwort`, getrimmt, case-insensitiv.
 5. Zeilenobergrenze 2000 (DECISIONS „Zeilenobergrenze Import-CSV“) -> sonst `zeilenlimit`.
 6. Je Zeile splitten. **Kein RFC4180-Quoting** (DECISIONS „RFC4180-Quoting in der Import-CSV“):
    enthält ein Feld ein `"` in unbalancierter Zahl -> Zeilenfehler `quote_unbalanciert`.
    Falsche Spaltenzahl -> `spaltenzahl`.
-7. Felder trimmen; leerer Vor- oder Nachname -> `vorname_leer` / `nachname_leer`.
-8. Geburtsdatum: `dd.mm.yyyy` oder `yyyy-mm-dd` (DECISIONS „Erwartetes Geburtsdatums-Format“),
-   intern immer `ddmmyyyy` (DECISIONS „Geburtsdatum-Normalform“).
-   Nicht parsbar -> `datum_format`; kalendarisch ungültig (31.02.2010) ->
-   `datum_ungueltig`; in der Zukunft -> `datum_zukunft`.
-9. Dublette innerhalb der Datei: Vergleich von Vorname+Nachname+ddmmyyyy **auf dem Rohtext**,
-   getrimmt und case-insensitiv, Schlüssel **`'|'`-getrennt** (`roh.toLowerCase()` je Feld, mit
-   `'|'` gejoint — identisches Schema wie `identitaet` in Stufe 14). Ohne Trenner würden
-   `Ann|Amarie` und `Anna|Marie` bei gleichem Geburtsdatum zu einer falschen `doppelzeile`
-   verschmelzen. -> `doppelzeile`. Bewusst **nicht** über
-   `normalizeComponent`: sonst würde `Anna Maria` / `AnnaMaria` hier schon wegfallen und der
-   Fall `benutzer_existiert_bereits` aus Stufe 14b wäre unerreichbar.
+7. Felder trimmen (nur äußeres Trimmen); leerer Vor- oder Nachname -> `vorname_leer` /
+   `nachname_leer`.
+8. Passwort: die Zelle wird **1:1** übernommen (nur Trimmen, kein Prefix, kein `!`, keine
+   Datumsinterpretation; DECISIONS 2026-10-14). Leer (auch nur Leerzeichen) -> `passwort_leer`.
+   Keine lokale Längen- oder Policy-Prüfung; der Server entscheidet (OCS 107).
+9. Dublette innerhalb der Datei: gleicher Vorname+Nachname (Rohtext, getrimmt, case-insensitiv)
+   **und** identisches Passwort (case-sensitiv) -> `doppelzeile`. Schlüssel
+   `JSON.stringify([vorname.toLowerCase(), nachname.toLowerCase(), passwort])`, weil das Passwort
+   Freitext ist; nur im Speicher verglichen, nie ausgegeben. Bewusst **nicht** über
+   `normalizeComponent`: `Anna Maria` / `AnnaMaria` bleiben getrennte Zeilen und werden in
+   Stufe 14 per Zähler aufgelöst. Prüfreihenfolge je Zeile: quote, spaltenzahl, vorname_leer,
+   nachname_leer, passwort_leer, doppelzeile.
 10. `normalizeComponent` auf Vor- und Nachname (Regex-Kette exakt in der Reihenfolge
     RESEARCH-UPN §1, Schritte 1-8, 1:1 portiert). Ist eine Komponente `''` **oder besteht sie
     nur aus Punkten** (`/^\.+$/`) -> `name_nicht_abbildbar`
@@ -519,7 +511,7 @@ Ergebnis der vorherigen, und eine Zeile verlässt die Pipeline bei ihrem ersten 
 
     `first` = die unverkürzbare Vornamen-Komponente, `second` = die kürzbare
     Nachnamen-Komponente — **nicht** „links/rechts“, sondern fest Vorname/Nachname,
-    unabhängig von `order`. `suffix` = `''` oder `'.ddmmyyyy'`. Budget für `second` ist
+    unabhängig von `order`. `suffix` = `''` oder `'.n'` (Zähler, n >= 2). Budget für `second` ist
     `max - first.length - 1 (Trennpunkt) - suffix.length`. Ist das Budget `>= second.length`,
     passiert nichts (`gekuerzt: false`). Ist es `>= 1`, wird `second` von rechts auf das Budget
     geschnitten (`gekuerzt: true`) — der Nachname behält **mindestens 1 Zeichen**. Ist es `< 1`,
@@ -528,64 +520,50 @@ Ergebnis der vorherigen, und eine Zeile verlässt die Pipeline bei ihrem ersten 
     danach mit `buildUsername(vn, nnGekuerzt, order) + suffix` zusammen. Genau deshalb darf
     **nicht** am Gesamtstring gekürzt werden: Rohnamen dürfen Punkte enthalten, und bei
     `surnameFirst` würde ein Schnitt „von rechts“ den Vornamen oder das Suffix treffen.
-    Ergebnis dieser Stufe: `kandidatA` plus Flag `gekuerzt`.
+    Ergebnis dieser Stufe: Basis-Kandidat plus Flag `gekuerzt`.
 13. **Kollision mit einem bestehenden Nextcloud-User** (case-insensitiv,
-    DECISIONS „Vergleich bei Username-Kollisionen“). Ist `kandidatA` im Set der vom Server
+    DECISIONS „Vergleich bei Username-Kollisionen“). Ist der Basis-Kandidat im Set der vom Server
     geladenen `userid`s -> Zeilenfehler `benutzer_existiert_bereits`. **Hier wird nichts
-    aufgelöst**, auch nicht per Geburtsdatum (DECISIONS „Kollisionsauflösung: Geltungsbereich“).
+    aufgelöst** und nicht weitergezählt (DECISIONS 2026-10-14 „Kollisionsauflösung im Import“).
     Bewusst in Kauf genommen: trifft erst der **gekürzte** Name einen bestehenden User, lautet
     die Meldung ebenfalls `benutzer_existiert_bereits` — zu einer Server-`userid` gibt es keine
     Identitätsinformation, mit der sich der Fall unterscheiden ließe.
-14. **Kollision innerhalb der Importdatei** — der **einzige** Fall, in dem das Suffix greift.
-    Der Lauf führt eine Registry `vergeben: Map<finalName.toLowerCase(), identitaet>` mit
-    `identitaet = normVorname + '|' + normNachname + '|' + ddmmyyyy`. Teilschritte:
-    - **14a** `kandidatA` frei -> `kandidat = kandidatA`, Status `neu`.
-    - **14b** `kandidatA` belegt von Zeile R **mit gleicher `identitaet`** ->
-      `benutzer_existiert_bereits` (DECISIONS „Kollision auch mit Geburtsdatum nicht
-      auflösbar“). Gleicher normalisierter Name *und* gleiches Geburtsdatum heißt: das Suffix
-      wäre identisch und kann nichts unterscheiden. Kein Zählersuffix. Dieser Fall sind
-      unterschiedliche Schreibweisen derselben Person (`Anna Maria` / `AnnaMaria`), die Stufe 9
-      absichtlich durchlässt.
-    - **14c** `kandidatA` belegt, `identitaet` **verschieden** -> `suffix = '.' + ddmmyyyy` an
-      die **gewählte** Reihenfolge anhängen (DECISIONS „Kollisionssuffix und
-      Reihenfolge-Schalter“) und **Stufe 12 erneut** mit diesem `suffix` ausführen (nur der
-      Nachname schrumpft weiter, das Suffix bleibt unangetastet). `passt: false` ->
-      `username_zu_lang`. Ergebnis ist `kandidatB`.
-    - **14d** `kandidatB` steht im Set der bestehenden Nextcloud-User ->
-      `benutzer_existiert_bereits`.
-    - **14e** `kandidatB` in der Datei frei -> Status `kollision_aufgeloest`.
-    - **14f** `kandidatB` in der Datei belegt von Zeile S:
-      - `identitaet` gleich -> `benutzer_existiert_bereits` (wie 14b, nur eine Ebene später).
-      - `identitaet` verschieden -> `username_nach_kuerzung_nicht_eindeutig`
-        (DECISIONS „Fehler-ID bei nach Kürzung ununterscheidbaren Namen“). **Nicht** als
-        `benutzer_existiert_bereits` melden. *Beweis, dass hier zwingend gekürzt wurde:*
-        gleiche `kandidatB` bedeutet gleiches Suffix (also gleiches Geburtsdatum) und gleiches
-        `first.trunc(second)`. Ohne Kürzung wären damit auch die normalisierten Komponenten
-        gleich und die `identitaet` identisch — Widerspruch.
+14. **Kollision innerhalb der Importdatei** — der **einzige** Fall, in dem der Zähler greift.
+    Der Lauf führt eine Registry `vergeben: Set<finalName.toLowerCase()>`; das Passwort fließt
+    nie in Username, Suffix oder Registry. Ablauf:
+    - Basis-Kandidat in der Datei frei -> Status `neu`.
+    - Sonst für n = 2, 3, …: Suffix `.n`, Stufe 12 **je n neu** (n = 10 ist ein Zeichen länger,
+      nur der Nachname schrumpft weiter). `passt: false` -> `username_zu_lang` (username =
+      Basis-Kandidat). Kandidat im Set der Nextcloud-User -> `benutzer_existiert_bereits`
+      (username = dieser Kandidat), **kein** Weiterzählen. In der Datei belegt -> n + 1.
+      Frei -> Status `kollision_aufgeloest`.
+    - Keine Obergrenze für n; die Schleife endet spätestens bei `MAX_ROWS + 1`, weil die Registry
+      endlich ist. Der Zähler wird an die **gewählte** Reihenfolge angehängt
+      (`mueller.max.2`). Schreibvarianten (`Müller`/`Mueller`) laufen durch denselben Zähler.
+    - Ein Stufe-15-Fehler am finalen Kandidaten ist ein Zeilenfehler, ohne weiteres Zählen;
+      die Zeile registriert nichts.
 15. **Validierung des finalen Strings** — erst jetzt, nach Kürzung *und* nach Suffix
     (DECISIONS „Reihenfolge der Validierung im Importpipeline“): reservierte Namen aus
     RESEARCH-OCS §7 -> `username_reserviert`; zusätzlich defensiv Zeichensatz `[a-z0-9.]`,
     nicht nur Punkte, Länge `<= MAX_USERID` über denselben Validator, den auch die manuell
     eingegebene `userid` benutzt (§6.2). Vorher wäre die Prüfung wertlos: Kürzung und Suffix
-    verändern den String noch. Reserviert ist erreichbar (`Owncloud`/`Log` -> `owncloud.log`),
+    verändern den String noch. Reserviert ist erreichbar (`Nextcloud`/`Log` -> `nextcloud.log`),
     ein Zeichensatzverstoß ist es nicht — siehe Fehlertabelle.
 16. `displayname = "${Vorname} ${Nachname}"` in Originalschreibweise
     (DECISIONS „Anzeigename-Format importierter User“). `email` bleibt leer
     (DECISIONS „Wird beim CSV-Import eine E-Mail gesetzt?“).
-17. Initialpasswort `` `${prefix}${ddmmyyyy}!` `` (DECISIONS „Wie wird das Initialpasswort
-    gebildet?“ / „`<Sonderzeichen>` im Initialpasswort“). Prefix: Pflicht, 3-20 Zeichen,
-    `[A-Za-z0-9]`, erster Buchstabe groß (DECISIONS „Prefix-Validierung Initialpasswort“);
-    Ergebnis lokal auf ≥ 10 Zeichen prüfen.
+17. Initialpasswort = Wert der Spalte `Passwort` (`row.passwort`), unverändert. Keine lokale
+    Mindestlängenprüfung (DECISIONS 2026-10-14).
 18. **Registrieren.** Nur eine Zeile, die Stufe 15 bestanden hat, trägt
-    `finalName.toLowerCase() -> identitaet` in die Registry der Stufe 14 ein. Fehlerzeilen
+    `finalName.toLowerCase()` in die Registry der Stufe 14 ein. Fehlerzeilen
     registrieren nichts und belegen damit keinen Namen für Folgezeilen.
 
 **Folge der Stufe 13 — der saubere Re-Import ist beweisbar:** Ein zweiter Lauf derselben Datei
 findet jeden Namen aus dem ersten Lauf im Server-Set und endet für **jede Zeile, die im ersten
 Lauf tatsächlich angelegt wurde**, mit `benutzer_existiert_bereits`. Zeilen, die schon vor
-Stufe 13 scheitern (`datum_format`, `vorname_leer`, …), scheitern erneut mit **ihrer eigenen**
-Fehler-ID — das ist korrekt und kein Widerspruch zum Beweis. Es entsteht nie ein `.ddmmyyyy`-Zweitaccount, weil das Suffix
-bestehende User gar nicht mehr betrachtet. **Preis** (bewusst akzeptiert, siehe DECISIONS):
+Stufe 13 scheitern (`passwort_leer`, `vorname_leer`, …), scheitern erneut mit **ihrer eigenen**
+Fehler-ID — das ist korrekt und kein Widerspruch zum Beweis. Es entsteht nie ein `.n`-Zweitaccount, weil der Zähler
+bestehende User nicht überspringt. **Preis** (bewusst akzeptiert, siehe DECISIONS):
 ein echter Neuzugang, der denselben erzeugten Namen wie ein Altuser hätte, muss manuell mit
 abweichender `userid` angelegt werden.
 
@@ -594,35 +572,30 @@ abweichender `userid` angelegt werden.
 Jeder Fall ist ein Pflichttest in `tests/importPlan.test.js`. `max = 20` in den Beispielen,
 damit die Kürzung sichtbar bleibt; produktiv ist `MAX_USERID = 64`.
 
-1. **Zwei Namen, die zum gleichen String kürzen** (`givenFirst`, alle drei Zeilen Geburtsdatum
-   `02.02.2011`, Budget für den Nachnamen = `20 - 3 - 1 = 16`):
+1. **Zwei Namen, die zum gleichen String kürzen** (`givenFirst`, Fixture
+   `import-kuerzung-gleich-max20.csv`, gleiches Passwort, Budget für den Nachnamen = `20 - 3 - 1 = 16`):
 
-   | # | Vorname | Nachname | kandidatA | Ergebnis |
-   |---|---|---|---|---|
-   | 1 | `Ann` | `Bergmannschneider` | `ann.bergmannschneide` (gekürzt) | `neu` + `gekuerzt` |
-   | 2 | `Ann` | `Bergmannschneiderhuber` | `ann.bergmannschneide` -> belegt, `identitaet` ≠ -> Suffix, Budget `20-3-1-9 = 7` -> `ann.bergman.02022011` | `kollision_aufgeloest` + `gekuerzt` |
-   | 3 | `Ann` | `Bergmannschneidermeier` | kandidatA belegt -> Suffix -> `ann.bergman.02022011` **schon von Zeile 2 vergeben**, `identitaet` ≠ | `username_nach_kuerzung_nicht_eindeutig` |
+   | # | Vorname | Nachname | Ergebnis |
+   |---|---|---|---|
+   | 1 | `Ann` | `Bergmannschneider` | `ann.bergmannschneide`, `neu` + `gekuerzt` |
+   | 2 | `Ann` | `Bergmannschneiderhuber` | Basis belegt -> `.2`, Budget `20-3-1-2 = 14` -> `ann.bergmannschnei.2`, `kollision_aufgeloest` + `gekuerzt` |
+   | 3 | `Ann` | `Bergmannschneidermeier` | `ann.bergmannschnei.3`, `kollision_aufgeloest` + `gekuerzt` |
 
-   Zeile 3 ist der Kern: drei verschiedene Nachnamen, die erst durch die Kürzung
-   ununterscheidbar werden. Der Test prüft die **Fehler-ID**, nicht nur „ist ein Fehler“.
-2. **Kürzung plus Datei-Kollision.** Zeile 2 der Tabelle oben, isoliert getestet: das Suffix
-   `.02022011` ist **vollständig** erhalten, gekürzt wurde ausschließlich die
-   Nachnamen-Komponente, und der finale String ist genau `max` Zeichen lang. Bei
-   `surnameFirst` dasselbe mit `bergman.ann.02022011` — der Test läuft über **beide**
-   Reihenfolgen, weil nur so belegt ist, dass nicht am Gesamtstring gekürzt wird.
+2. **Kürzung plus Zähler.** Zehn Zeilen gleichen Namens: n = 9 -> `ann.bergmannschnei.9`,
+   n = 10 -> `ann.bergmannschne.10` (Budget wird je n neu berechnet), alle genau `max` Zeichen.
 3. **Re-Import derselben Datei.** Lauf 1 gegen ein leeres Server-Set: Status wie in der Tabelle.
    Lauf 2 mit genau den in Lauf 1 erzeugten Namen als Server-Set: **jede** Zeile
    `benutzer_existiert_bereits` schon in Stufe 13, kein einziger `kollision_aufgeloest`,
-   kein neuer Name mit `.ddmmyyyy`, `summary.ok === 0`.
+   kein neuer Name mit `.n`, `summary.ok === 0`.
 4. **Nachname, der nicht genug gekürzt werden kann.** Vorname so lang, dass
    `max - first.length - 1 - suffix.length < 1`, z. B. `first` = 19 Zeichen bei `max = 20`.
    Ohne Suffix -> `username_zu_lang` direkt in Stufe 12. Mit Suffix (also nach einer
-   Datei-Kollision) -> ebenfalls `username_zu_lang`, gemeldet aus Stufe 14c. Der Nachname wird
+   Datei-Kollision) -> ebenfalls `username_zu_lang`, gemeldet aus Stufe 14 (Username = Basis-Kandidat). Der Nachname wird
    **nie** auf 0 Zeichen gekürzt, und es wird **nie** der Vorname beschnitten.
 
 Vorschauzeilen-Status (fixe Liste): `neu`, `kollision_aufgeloest`, `fehler`.
 Zusatz-Flag: `gekuerzt` (kombinierbar mit `neu` und `kollision_aufgeloest`).
-Die Vorschautabelle zeigt Zeilennummer, Name, Geburtsdatum, erzeugten Username, Status und
+Die Vorschautabelle zeigt Zeilennummer, Name, Passwort (exakt das gesetzte), erzeugten Username, Status und
 bei `fehler` den deutschen Text der Fehler-ID.
 
 ### 6.2 Validator für manuell eingegebene `userid`
@@ -649,23 +622,20 @@ Zeilen- und Dateifehler des **Imports**, abschließende Enumeration mit UI-Text 
 |---|---|
 | `datei_leer` | Die Datei ist leer. |
 | `nur_header` | Die Datei enthält nur die Kopfzeile. |
-| `header_fehlt` | Kopfzeile fehlt oder Spalten heißen nicht Vorname, Nachname, Geburtsdatum. |
+| `header_fehlt` | Kopfzeile fehlt oder Spalten heißen nicht Vorname, Nachname, Passwort. |
 | `zeilenlimit` | Mehr als 2000 Zeilen. Bitte die Datei aufteilen. |
 | `spaltenzahl` | Zeile hat nicht genau 3 Spalten. |
 | `quote_unbalanciert` | Unvollständiges Anführungszeichen. Anführungszeichen werden nicht unterstützt. |
 | `vorname_leer` | Vorname fehlt. |
 | `nachname_leer` | Nachname fehlt. |
 | `name_nicht_abbildbar` | Aus diesem Namen lässt sich kein Username bilden. |
-| `datum_format` | Geburtsdatum muss dd.mm.yyyy oder yyyy-mm-dd sein. |
-| `datum_ungueltig` | Dieses Datum existiert nicht. |
-| `datum_zukunft` | Geburtsdatum liegt in der Zukunft. |
+| `passwort_leer` | Passwort fehlt. |
 | `doppelzeile` | Identische Zeile kommt in der Datei mehrfach vor. |
 | `username_zu_lang` | Username ist auch nach Kürzen des Nachnamens zu lang. |
 | `username_reserviert` | Dieser Username ist in Nextcloud reserviert. |
 | `username_leer` | Bitte einen Benutzernamen eingeben. |
 | `username_nur_punkte` | Ein Benutzername darf nicht nur aus Punkten bestehen. |
 | `username_zeichen` | Der Benutzername enthält nicht erlaubte Zeichen. |
-| `username_nach_kuerzung_nicht_eindeutig` | Zwei verschiedene Namen werden durch das Kürzen zum gleichen Username. Bitte einen der beiden manuell anlegen. |
 | `benutzer_existiert_bereits` | Benutzer existiert bereits. |
 
 `username_zeichen` steht **nicht** in dieser Liste: die Generatorausgabe besteht per
@@ -674,9 +644,8 @@ Punkt-Komponenten fängt Stufe 10 ab. Die ID existiert nur für manuell eingegeb
 (§6.2); eine Importzeile kann sie nicht erzeugen. `username_reserviert` bleibt dagegen
 erreichbar.
 
-`benutzer_existiert_bereits` deckt **drei** Wege ab und braucht deshalb eine neutrale Meldung:
-Kollision mit einem bestehenden Nextcloud-User (Stufe 13 und 14d) und gleiche `identitaet`
-innerhalb der Datei (Stufe 14b und 14f). Die Vorschauzeile nennt zusätzlich den belegten
+`benutzer_existiert_bereits` bedeutet Kollision mit einem bestehenden Nextcloud-User (Stufe 13
+und 14, Basis- oder Zähler-Kandidat). Die Vorschauzeile nennt zusätzlich den belegten
 Username, damit der Admin den Fall unterscheiden kann.
 
 Zielgruppen im Import-Dialog: nur vom Server gelesene Gruppen (`groups.list` muss vor dem
@@ -685,8 +654,9 @@ Zielgruppen im Import-Dialog: nur vom Server gelesene Gruppen (`groups.list` mus
 Vorschau markiert „wird neu angelegt“, swal2 fragt **einmal** explizit nach, danach legt
 `groups.create` die Gruppe **vor** dem Importlauf an. So kann OCS `104` nicht mitten im Import
 auftreten.
-Das Geburtsdatum erscheint in der Vorschau und im Export, sonst nirgends; es wird nicht geloggt.
-Die Passwortliste wird beim Verlassen der Importansicht aus `state.js` entfernt.
+Das Passwort erscheint in der Vorschau und im Export, sonst nirgends; es wird nicht geloggt.
+Beim Verlassen der Importansicht werden `importRows` und `importPlanRows` (beide mit
+Klartext-Passwörtern) aus `state.js` entfernt.
 
 ## 7. OCS-Client
 
@@ -882,7 +852,7 @@ Die frühere `ConnectView`-Seite und der Kanal `connection.forgetSaved` existier
 
 ## 11. Teststrategie
 
-**Pur unit-getestet, ohne Mocks** (alles in `src/shared/`): `username`, `birthdate`, `password`,
+**Pur unit-getestet, ohne Mocks** (alles in `src/shared/`): `username`,
 `csvImport` (beide Exporte), `importPlan`, `quota`, `pool`, `dryRun`, `resultCsv`, `filters`,
 `dashboard`, `userView`, `messages`, `url`. Diese Module importieren nichts mit I/O — das ist
 eine Review-Regel, nicht nur eine Konvention. **Jedes hier genannte Modul hat genau eine
@@ -898,8 +868,7 @@ Pflichtfälle:
   bei `passt: false` kommt `second` unverändert zurück). `gekuerzt: true` impliziert `=== max`,
   **nicht umgekehrt**: am Grenzwert `budget === second.length` gilt `=== max` bei
   `gekuerzt: false`. Dieser Grenzwert ist Pflichttest;
-- die **vier Fälle aus §6.1**, jeweils gegen die konkrete Fehler-ID geprüft, insbesondere
-  `username_nach_kuerzung_nicht_eindeutig` ≠ `benutzer_existiert_bereits`;
+- die **vier Fälle aus §6.1**, jeweils gegen die konkrete Fehler-ID geprüft;
 - Re-Import derselben CSV ergibt für **jede** Zeile `benutzer_existiert_bereits` (§6.1 Fall 3);
 - jeder Datei- und Zeilenfehler aus der Enumeration in §6 genau einmal;
 - alle sechs Quota-Shapes, die fünf `quotaStufe`-Ergebnisse, `istFastVoll` an den Grenzen
@@ -953,9 +922,9 @@ Die Gruppenmitglieder-Fixtures entfallen mit `groups.members` (§3).
 | Brute-Force-Sperre durch Batch-Last | Parallelität fest 4, 429-Backoff 2 s/6 s, danach Item-Fehler |
 | safeStorage still auf Klartext | Backendprüfung vor jedem Speichern, `basic_text` persistiert nie, sichtbarer Sitzungshinweis |
 | Klartextpasswörter im Export | Warnung vor dem Speicherdialog, nutzergewählter Pfad, Liste beim Verlassen der Ansicht verworfen |
-| Kollisionsname kodiert das Geburtsdatum | Geburtsdatum nur in Vorschau und Export sichtbar, nirgends sonst, nie geloggt; Suffix entsteht nur bei Datei-Kollisionen, also selten |
-| Re-Import erzeugt Dubletten | Suffix löst **nur** dateiinterne Kollisionen; jede Kollision mit einem bestehenden User ist ein Zeilenfehler (§6 Stufe 13), Pflichttest §6.1 Fall 3 |
-| Kürzung macht verschiedene Namen gleich | Eigene Fehler-ID `username_nach_kuerzung_nicht_eindeutig` statt stiller Verschmelzung oder falscher „existiert bereits“-Meldung |
+| Passwort leckt in den Username | Das Passwort fließt nie in Username, Suffix oder Registry; der Zähler `.n` kommt nur aus der Reihenfolge in der Datei (Unabhängigkeitstest) |
+| Re-Import erzeugt Dubletten | Der Zähler löst **nur** dateiinterne Kollisionen; jede Kollision mit einem bestehenden User ist ein Zeilenfehler (§6 Stufe 13), Pflichttest §6.1 Fall 3 |
+| Kürzung macht verschiedene Namen gleich | Der Zähler `.n` unterscheidet sie; das Budget für den Nachnamen wird je n neu berechnet |
 | Teilerfolg bei `user.create` mit Gruppe und bei `user.update` mit zwei Feldern | Getrennte Schritte, Status `teilweise` mit benanntem Schritt, kein Rollback; `summary.teilweise` zählt sie sichtbar |
 | Groß-/Kleinschreibung bei User-IDs | Jede Existenz- und Kollisionsprüfung vergleicht case-insensitiv |
 | Vorschauzahl weicht von Rohauswahl ab | Löschbestätigung nutzt ausschließlich `aenderungen.length` aus dem Dry-Run |
@@ -990,7 +959,6 @@ Die Gruppenmitglieder-Fixtures entfallen mit `groups.members` (§3).
 - MB-Grenze beim CSV-Öffnen — die 2000-Zeilen-Grenze deckt dasselbe Problem fachlich ab.
 - Separate Module `usernameRules.js` und `csvUserList.js` — in `username.js` bzw. `csvImport.js`
   integriert (DECISIONS „Modulverschlankung“); die Kürzung braucht ohnehin die Generator-Komponenten.
-- Zählersuffixe (`...2`, `...3`) bei Kollisionen — nur das Geburtsdatum, und nur dateiintern.
 - `electron-vite`, `concurrently`, `wait-on` — `scripts/dev.mjs` mit `node:child_process` genügt.
 - ESM-Preload — `sandbox: true` lädt nur CommonJS; deshalb die einzige `.cjs`-Datei.
 - Persistierte TLS-Ausnahme — nur Sitzung, Fingerprint nach jedem Start neu bestätigen.

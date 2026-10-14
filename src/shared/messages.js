@@ -65,12 +65,8 @@ export const MESSAGES = Object.freeze({
   vorname_leer: 'Vorname fehlt.',
   nachname_leer: 'Nachname fehlt.',
   name_nicht_abbildbar: 'Aus diesem Namen lässt sich kein Username bilden.',
-  datum_format: 'Geburtsdatum muss dd.mm.yyyy oder yyyy-mm-dd sein.',
-  datum_ungueltig: 'Dieses Datum existiert nicht.',
-  datum_zukunft: 'Geburtsdatum liegt in der Zukunft.',
+  passwort_leer: 'Passwort fehlt.',
   doppelzeile: 'Identische Zeile kommt in der Datei mehrfach vor.',
-  username_nach_kuerzung_nicht_eindeutig:
-    'Zwei verschiedene Namen werden durch das Kürzen zum gleichen Username. Bitte einen der beiden manuell anlegen.',
   benutzer_existiert_bereits: 'Benutzer existiert bereits.',
   // S10: Importvorschau - Datei- und Gruppen-Fehler jenseits der Zeilenfehler aus S09.
   datei_lesen_fehlgeschlagen: 'Die Datei konnte nicht gelesen werden.',

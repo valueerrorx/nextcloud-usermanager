@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   auswahl, ausgewaehlteGruppe, groups, groupsFehler, groupsLadezustand, importDatei,
-  importFehler, importGruppen, importPlanRows, importPrefix, importQuota, importRows,
+  importFehler, importGruppen, importPlanRows, importQuota, importRows,
   importSummary, jobHistorie, resetOnConnect, users, usersFehler, usersFetchedAt,
   usersLadezustand, usersMode, usersUebersprungen,
 } from '../src/renderer/state.js';
@@ -28,10 +28,9 @@ describe('resetOnConnect', () => {
     jobHistorie.value = [{ zeitpunkt: 1, aktion: 'alt', summary: null }];
 
     importDatei.value = { path: '/alt.csv', zeilenAnzahl: 1 };
-    importRows.value = [{ zeile: 1, vorname: 'Alt', nachname: 'User', geburtsdatum: '01.01.2000' }];
+    importRows.value = [{ zeile: 1, vorname: 'Alt', nachname: 'User', passwort: 'geheim' }];
     importPlanRows.value = [{ zeile: 1, username: 'alt.user', passwort: 'geheim' }];
     importSummary.value = { neu: 1, kollisionAufgeloest: 0, fehler: 0 };
-    importPrefix.value = 'Schule';
     importGruppen.value = ['alte-gruppe'];
     importQuota.value = '5gb';
     importFehler.value = 'alter Importfehler';
@@ -57,7 +56,6 @@ describe('resetOnConnect', () => {
     expect(importRows.value).toEqual([]);
     expect(importPlanRows.value).toEqual([]);
     expect(importSummary.value).toBeNull();
-    expect(importPrefix.value).toBe('');
     expect(importGruppen.value).toEqual([]);
     expect(importQuota.value).toBeNull();
     expect(importFehler.value).toBeNull();

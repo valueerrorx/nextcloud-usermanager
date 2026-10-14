@@ -1,8 +1,5 @@
 // Import plan, Stufen 10-18 of ARCHITECTURE §6. Pure, no I/O.
-// A recognized date becomes ddmmyyyy. Any other cell text is used as written, because the
-// column only feeds the initial password and, on a name clash, the username suffix.
-import { parseBirthdate } from './birthdate.js';
-import { buildInitialPassword } from './password.js';
+// The password column is used verbatim and never feeds the username.
 import {
   MAX_USERID,
   normalizeComponent,
@@ -13,20 +10,6 @@ import {
 } from './username.js';
 
 const ONLY_DOTS = /^\.+$/;
-const USERNAME_TOKEN = /^[a-z0-9.]+$/;
-
-// Recognized dates stay in ddmmyyyy. Everything else is the trimmed cell, not a row error.
-function geburtsdatumAnteil(geburtsdatum, heute) {
-  const parsed = parseBirthdate(geburtsdatum, { heute });
-  if (parsed.ok) return parsed.ddmmyyyy;
-  return String(geburtsdatum ?? '').trim();
-}
-
-// Suffix must survive the username charset. Slashes and spaces are stripped, not rejected.
-function kollisionsSuffix(anteil) {
-  const sicher = USERNAME_TOKEN.test(anteil) ? anteil : normalizeComponent(anteil);
-  return sicher === '' ? '' : `.${sicher}`;
-}
 
 function isUnmappable(normalized) {
   return normalized === '' || ONLY_DOTS.test(normalized);
@@ -42,10 +25,9 @@ function baseFields(row) {
   };
 }
 
-function fehlerZeile(row, fehlerId, { ddmmyyyy = null, username = null, gekuerzt = false } = {}) {
+function fehlerZeile(row, fehlerId, { username = null, gekuerzt = false } = {}) {
   return {
     ...baseFields(row),
-    ddmmyyyy,
     username,
     status: 'fehler',
     gekuerzt,
@@ -54,134 +36,76 @@ function fehlerZeile(row, fehlerId, { ddmmyyyy = null, username = null, gekuerzt
   };
 }
 
-function erfolgsZeile(row, { ddmmyyyy, username, status, gekuerzt, prefix }) {
+function erfolgsZeile(row, { username, status, gekuerzt }) {
   return {
     ...baseFields(row),
-    ddmmyyyy,
     username,
     status,
     gekuerzt,
-    passwort: buildInitialPassword(prefix, ddmmyyyy),
+    passwort: row.passwort,
   };
 }
 
-// Processes one RawRow through Stufen 8 (Geburtsdatum) and 10-15, returns a PreviewRow plus the
-// identitaet to register (Stufe 18 decides whether that registration actually happens).
+// Builds one candidate; n === 1 is the base name, n >= 2 gets the counter suffix '.n'.
+function buildKandidat(row, normVorname, normNachname, n, ctx) {
+  const suffix = n === 1 ? '' : `.${n}`;
+  const trunc = truncateToFit({ first: normVorname, second: normNachname, suffix, max: ctx.max });
+  if (!trunc.passt) return { passt: false };
+  const kandidat = buildUsername(row.vorname, trunc.second, normalizeOrder(ctx.order)) + suffix;
+  return { passt: true, kandidat, gekuerzt: trunc.gekuerzt };
+}
+
+// Processes one RawRow through Stufen 10-15 and returns the PreviewRow.
 function processRow(row, ctx) {
   // Stufe 1-9 Zeilenfehler verlassen die Pipeline sofort, ohne Kandidaten.
-  if (row.fehler) return { preview: fehlerZeile(row, row.fehler), identitaet: null };
-
-  const ddmmyyyy = geburtsdatumAnteil(row.geburtsdatum, ctx.heute);
+  if (row.fehler) return fehlerZeile(row, row.fehler);
 
   // Stufe 10
   const normVorname = normalizeComponent(row.vorname);
   const normNachname = normalizeComponent(row.nachname);
   if (isUnmappable(normVorname) || isUnmappable(normNachname)) {
-    return { preview: fehlerZeile(row, 'name_nicht_abbildbar', { ddmmyyyy }), identitaet: null };
+    return fehlerZeile(row, 'name_nicht_abbildbar');
   }
 
-  const order = normalizeOrder(ctx.order);
-  const identitaet = `${normVorname}|${normNachname}|${ddmmyyyy}`;
+  // Stufe 12: Basis-Kandidat ohne Suffix. first = Vorname (nie gekuerzt), second = Nachname.
+  const basis = buildKandidat(row, normVorname, normNachname, 1, ctx);
+  if (!basis.passt) return fehlerZeile(row, 'username_zu_lang');
 
-  // Stufe 12: Kuerzung ohne Suffix. first = Vorname (nie gekuerzt), second = Nachname.
-  const trunc1 = truncateToFit({ first: normVorname, second: normNachname, suffix: '', max: ctx.max });
-  if (!trunc1.passt) return { preview: fehlerZeile(row, 'username_zu_lang', { ddmmyyyy }), identitaet: null };
-  const kandidatA = buildUsername(row.vorname, trunc1.second, order);
-
-  // Stufe 13: Kollision mit bestehendem Nextcloud-User ist ein harter Fehler, nichts wird aufgeloest.
-  if (ctx.serverSet.has(kandidatA.toLowerCase())) {
-    return {
-      preview: fehlerZeile(row, 'benutzer_existiert_bereits', { ddmmyyyy, username: kandidatA, gekuerzt: trunc1.gekuerzt }),
-      identitaet: null,
-    };
+  // Stufe 13: Kollision mit bestehendem Nextcloud-User ist ein harter Fehler, kein Weiterzaehlen.
+  if (ctx.serverSet.has(basis.kandidat.toLowerCase())) {
+    return fehlerZeile(row, 'benutzer_existiert_bereits', { username: basis.kandidat, gekuerzt: basis.gekuerzt });
+  }
+  if (!ctx.vergeben.has(basis.kandidat.toLowerCase())) {
+    return finalizeKandidat(row, ctx, { ...basis, status: 'neu' });
   }
 
-  const belegtA = ctx.vergeben.get(kandidatA.toLowerCase());
-
-  // Stufe 14a: kandidatA ist frei in der Datei.
-  if (belegtA === undefined) {
-    return finalizeKandidat(row, ctx, {
-      kandidat: kandidatA,
-      ddmmyyyy,
-      gekuerzt: trunc1.gekuerzt,
-      status: 'neu',
-      identitaet,
-    });
+  // Stufe 14: in der Datei belegt -> Zaehlersuffix .2, .3, ... (endet: Kuerzung scheitert -> username_zu_lang, oder ein Platz ist frei, da die Registry endlich ist).
+  for (let n = 2; ; n += 1) {
+    const cand = buildKandidat(row, normVorname, normNachname, n, ctx);
+    if (!cand.passt) return fehlerZeile(row, 'username_zu_lang', { username: basis.kandidat, gekuerzt: basis.gekuerzt });
+    const lower = cand.kandidat.toLowerCase();
+    if (ctx.serverSet.has(lower)) {
+      return fehlerZeile(row, 'benutzer_existiert_bereits', { username: cand.kandidat, gekuerzt: cand.gekuerzt });
+    }
+    if (!ctx.vergeben.has(lower)) return finalizeKandidat(row, ctx, { ...cand, status: 'kollision_aufgeloest' });
   }
-
-  // Stufe 14b: gleiche identitaet -> kein Suffix hilft, derselbe Mensch unter anderer Schreibweise.
-  if (belegtA === identitaet) {
-    return {
-      preview: fehlerZeile(row, 'benutzer_existiert_bereits', { ddmmyyyy, username: kandidatA, gekuerzt: trunc1.gekuerzt }),
-      identitaet: null,
-    };
-  }
-
-  // Stufe 14c: verschiedene identitaet -> Suffix anhaengen, Stufe 12 erneut mit diesem Suffix.
-  const suffix = kollisionsSuffix(ddmmyyyy);
-  const trunc2 = truncateToFit({ first: normVorname, second: normNachname, suffix, max: ctx.max });
-  if (!trunc2.passt) {
-    return {
-      preview: fehlerZeile(row, 'username_zu_lang', { ddmmyyyy, username: kandidatA, gekuerzt: trunc1.gekuerzt }),
-      identitaet: null,
-    };
-  }
-  const kandidatB = buildUsername(row.vorname, trunc2.second, order) + suffix;
-
-  // Stufe 14d
-  if (ctx.serverSet.has(kandidatB.toLowerCase())) {
-    return {
-      preview: fehlerZeile(row, 'benutzer_existiert_bereits', { ddmmyyyy, username: kandidatB, gekuerzt: trunc2.gekuerzt }),
-      identitaet: null,
-    };
-  }
-
-  const belegtB = ctx.vergeben.get(kandidatB.toLowerCase());
-
-  // Stufe 14e: kandidatB frei in der Datei.
-  if (belegtB === undefined) {
-    return finalizeKandidat(row, ctx, {
-      kandidat: kandidatB,
-      ddmmyyyy,
-      gekuerzt: trunc2.gekuerzt,
-      status: 'kollision_aufgeloest',
-      identitaet,
-    });
-  }
-
-  // Stufe 14f: kandidatB auch schon belegt.
-  if (belegtB === identitaet) {
-    return {
-      preview: fehlerZeile(row, 'benutzer_existiert_bereits', { ddmmyyyy, username: kandidatB, gekuerzt: trunc2.gekuerzt }),
-      identitaet: null,
-    };
-  }
-  return {
-    preview: fehlerZeile(row, 'username_nach_kuerzung_nicht_eindeutig', { ddmmyyyy, username: kandidatB, gekuerzt: trunc2.gekuerzt }),
-    identitaet: null,
-  };
 }
 
 // Stufe 15: Validierung am finalen String (nach Kuerzung und Suffix), erst jetzt.
-function finalizeKandidat(row, ctx, { kandidat, ddmmyyyy, gekuerzt, status, identitaet }) {
+function finalizeKandidat(row, ctx, { kandidat, gekuerzt, status }) {
   const validation = validateUserid(kandidat, { quelle: 'generator' });
-  if (!validation.ok) {
-    return { preview: fehlerZeile(row, validation.messageId, { ddmmyyyy, username: kandidat, gekuerzt }), identitaet: null };
-  }
-  return {
-    preview: erfolgsZeile(row, { ddmmyyyy, username: kandidat, status, gekuerzt, prefix: ctx.prefix }),
-    identitaet,
-  };
+  if (!validation.ok) return fehlerZeile(row, validation.messageId, { username: kandidat, gekuerzt });
+  // Stufe 18: nur Zeilen, die Stufe 15 bestanden haben, kommen in die Registry.
+  ctx.vergeben.add(kandidat.toLowerCase());
+  return erfolgsZeile(row, { username: kandidat, status, gekuerzt });
 }
 
-export function buildImportPlan({ rows = [], serverUserIds = [], order, prefix, max = MAX_USERID, heute } = {}) {
+export function buildImportPlan({ rows = [], serverUserIds = [], order, max = MAX_USERID } = {}) {
   const ctx = {
     serverSet: new Set(serverUserIds.map((id) => String(id).toLowerCase())),
-    vergeben: new Map(), // finalName.toLowerCase() -> identitaet (Stufe 14 Registry)
+    vergeben: new Set(), // finale Usernamen (lowercase) dieser Datei
     order,
-    prefix,
     max,
-    heute,
   };
 
   const previewRows = [];
@@ -190,14 +114,11 @@ export function buildImportPlan({ rows = [], serverUserIds = [], order, prefix, 
   let fehler = 0;
 
   for (const row of rows) {
-    const { preview, identitaet } = processRow(row, ctx);
+    const preview = processRow(row, ctx);
     previewRows.push(preview);
     if (preview.status === 'neu') neu += 1;
     else if (preview.status === 'kollision_aufgeloest') kollisionAufgeloest += 1;
     else fehler += 1;
-
-    // Stufe 18: nur Zeilen, die Stufe 15 bestanden haben, registrieren.
-    if (identitaet) ctx.vergeben.set(preview.username.toLowerCase(), identitaet);
   }
 
   return { rows: previewRows, summary: { neu, kollisionAufgeloest, fehler } };

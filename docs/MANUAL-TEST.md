@@ -16,7 +16,8 @@ Zeilennummern.
 Legende: **Tun** = Handlung, **Erwartung** = Soll-Verhalten.
 Nummern mit Buchstaben (`43a`) sind später ergänzte Fälle; die Nummern **19** und **72** sind
 bewusst frei (in #99 aufgegangen bzw. gestrichen, weil Parallelität nicht manuell beobachtbar
-ist — das deckt `tests/pool.test.js` ab).
+ist — das deckt `tests/pool.test.js` ab). **114** ist frei, weil der Prefix-Fall mit S20 entfiel;
+der Nachfolgefall steht als #113a.
 
 ---
 
@@ -364,7 +365,7 @@ ist — das deckt `tests/pool.test.js` ab).
 ## I. CSV-Import neuer User
 
 73. **Tun:** `import-ok.csv` laden. **Erwartung:** Vorschautabelle mit Zeilennummer, Name,
-    Geburtsdatum, erzeugtem Username und Status; alle Zeilen Status "neu".
+    Passwort (exakt wie in der Datei), erzeugtem Username und Status; alle Zeilen Status "neu".
 74. **Tun:** Reihenfolge-Schalter auf `nachname.vorname` umstellen.
     **Erwartung:** alle Usernames wechseln die Reihenfolge; Anzeigename bleibt
     "Vorname Nachname" in Originalschreibweise.
@@ -384,46 +385,51 @@ ist — das deckt `tests/pool.test.js` ab).
 80. **Tun:** `import-spaltenzahl.csv` und `import-quote-unbalanciert.csv`.
     **Erwartung:** betroffene Zeilen als Fehler markiert mit dem jeweiligen Grund; gute Zeilen
     bleiben importierbar. Bei der unbalancierten Quote wird nichts still abgeschnitten.
-81. **Tun:** Datumsvarianten prüfen: `01.02.2010`, `2010-02-01`, `31.02.2010`, `01/02/2010`,
-    ein Datum in der Zukunft. **Erwartung:** die ersten zwei gültig und identisch normalisiert;
-    die anderen drei als "existiert nicht" / "Format" / "Zukunft" markiert.
-82. **Tun:** `import-doppelzeile.csv` (zwei identische Zeilen).
+81. **Tun:** Passwortvarianten prüfen: `1234`, `01.01.2000`, `Ab!c d`, `äöü€`, eine leere Zelle,
+    eine Zelle nur aus Leerzeichen. **Erwartung:** die ersten vier erscheinen in der Spalte
+    "Passwort" exakt so wie in der Datei (ohne Leerzeichen am Rand), kein Prefix, kein
+    angehängtes `!`; die beiden leeren Zellen als Fehler "Passwort fehlt.".
+82. **Tun:** `import-doppelzeile.csv` (gleicher Name und gleiches Passwort, Schreibweise egal).
     **Erwartung:** zweite Zeile als "Identische Zeile kommt mehrfach vor" markiert.
 83. **Tun:** `import-kollision.csv`, die einen Namen enthält, der **in Nextcloud schon
     existiert**. **Erwartung:** Zeile ist ein **Fehler** "Benutzer existiert bereits" und wird
-    übersprungen. Es wird **kein** `.ddmmyyyy`-Account angelegt: das Geburtsdatum-Suffix löst
+    übersprungen. Es wird **kein** Account mit Zählersuffix (`.2`) angelegt: der Zähler löst
     ausschließlich Kollisionen **innerhalb der Importdatei**. Die übrigen Zeilen bleiben
     importierbar.
-84. **Tun:** CSV mit zwei verschiedenen Personen gleichen Namens aber verschiedenen
-    Geburtsdaten, keiner davon in Nextcloud vorhanden.
-    **Erwartung:** eine Zeile "neu", die andere "Kollision aufgelöst" mit `.ddmmyyyy` in der
-    **gewählten** Reihenfolge; beide Usernames eindeutig; nach dem Import existieren beide
-    User in Nextcloud.
-85. **Tun:** CSV mit zwei identischen Namen **und** identischem Geburtsdatum in verschiedener
-    Schreibweise (z. B. `Anna Maria`/`AnnaMaria`, also nicht komplett doppelt).
-    **Erwartung:** zweite Zeile als Fehler "Benutzer existiert bereits", kein Zählersuffix wie
-    `...2` — das Suffix wäre für beide Zeilen identisch und kann nicht unterscheiden.
+84. **Tun:** `import-kollision-zaehler.csv` (`Max;Mueller;A`, `Max;Müller;B`, `max;mueller;C`),
+    keiner davon in Nextcloud vorhanden.
+    **Erwartung:** `max.mueller` ("neu"), `max.mueller.2` und `max.mueller.3` ("Kollision
+    aufgelöst") in der **gewählten** Reihenfolge (bei `nachname.vorname` `mueller.max.2`); das
+    Passwort steht nirgends im Username; nach dem Import existieren alle drei User.
+84a. **Tun:** dieselben Zeilen, aber in Nextcloud existiert nur `max.mueller.2`.
+    **Erwartung:** Zeile 1 "neu", Zeilen 2 und 3 Fehler "Benutzer existiert bereits" mit
+    `max.mueller.2` (kein Sprung auf `.3`).
+85. **Tun:** CSV mit den Zeilen `Anna Maria;Musterfrau;X` und
+    `AnnaMaria;Musterfrau;X`. **Erwartung:** keine Dublette (Rohnamen verschieden); Zeile 1
+    `annamaria.musterfrau`, Zeile 2 `annamaria.musterfrau.2` ("Kollision aufgelöst").
+85a. **Tun:** zweimal `Max;Mueller;A` in einer Datei. **Erwartung:** zweite Zeile als
+    "Identische Zeile kommt mehrfach vor" markiert; `Max;Mueller;A` und `MAX;mueller;a` sind
+    dagegen keine Dublette (Passwort case-sensitiv).
 86. **Tun:** `import-lange-namen.csv` (sehr langer Nachname, sehr langer Vorname).
     **Erwartung:** gekürzt wird **nur die Nachnamen-Komponente**, der Vorname bleibt
     unangetastet; die Zeile ist mit "gekürzt" markiert und die Kollisionsprüfung lief auf dem
     gekürzten Wert. Mit Reihenfolge `nachname.vorname` wiederholen: auch dann wird der
     **Nachname** gekürzt, obwohl er links steht — nicht der Vorname am Ende. Bei einer
-    Kollision bleibt das `.ddmmyyyy`-Suffix **vollständig** erhalten und nur der Nachname
+    Kollision bleibt der Zähler (`.2`, `.10`) **vollständig** erhalten und nur der Nachname
     schrumpft weiter. Passt der Name auch mit einem einzelnen Nachnamen-Zeichen nicht, ist
     die Zeile der Fehler "auch nach Kürzen des Nachnamens zu lang".
-86a. **Tun:** `import-kuerzung-gleich.csv` (drei lange Nachnamen mit gemeinsamem Anfang, die
-    nach dem Kürzen denselben Username ergäben, gleiches Geburtsdatum).
-    **Erwartung:** die betroffene Zeile zeigt die **eigene** Meldung "Zwei verschiedene Namen
-    werden durch das Kürzen zum gleichen Username" — ausdrücklich **nicht** "Benutzer
-    existiert bereits", denn die Namen sind verschieden. Keine stille Verschmelzung zweier
-    Personen auf einen Account.
+86a. **Tun:** `import-kuerzung-gleich-max20.csv` bzw. drei lange Nachnamen mit gemeinsamem Anfang,
+    die nach dem Kürzen denselben Username ergäben.
+    **Erwartung:** die Zeilen bekommen `.2`, `.3`; alle Usernames sind verschieden und nicht
+    länger als erlaubt. Keine stille Verschmelzung zweier Personen auf einen Account.
 87. **Tun:** `import-2001-zeilen.csv`. **Erwartung:** klare Meldung zur Grenze von 2000 Zeilen,
     kein Teilimport.
-88. **Tun:** Prefix-Feld leer lassen, `ab` (zu kurz), `schule` (klein beginnend),
-    `Schule!` (Sonderzeichen), 25 Zeichen. **Erwartung:** jeweils Validierungsfehler;
-    "Anlegen" bleibt gesperrt.
-89. **Tun:** Prefix `Schule` setzen. **Erwartung:** Live-Beispiel im Dialog zeigt
-    z. B. `Schule01012010!`.
+88. **Tun:** die Optionen-Karte betrachten. **Erwartung:** es gibt kein Prefix-Feld; der
+    Hinweis bei den Spalten nennt, dass das Passwort wie in der Datei übernommen wird und die
+    Passwortrichtlinie des Servers gilt.
+89. **Tun:** eine Datei mit Passwort `1234` importieren (Server verlangt längeres Passwort).
+    **Erwartung:** die Vorschau zeigt `1234`; der Server-Fehler erscheint als Zeilenfehler im
+    Bericht, kein lokaler Mindestlängen-Fehler.
 90. **Tun:** Zielgruppen-Auswahl öffnen. **Erwartung:** nur vom Server gelesene Gruppen wählbar;
     eine neue Gruppe entsteht nur über die ausdrückliche Aktion "Gruppe neu anlegen",
     kein Freitext. Die Liste ist gefüllt, weil die Importansicht die Gruppen beim Öffnen lädt;
@@ -449,7 +455,7 @@ ist — das deckt `tests/pool.test.js` ab).
     die Spalten `userid;aktion;status;grund;httpStatus;ocsCode;passwort`.
     Der Export enthält **alle** Eingabezeilen: die angelegten User **und** die bereits in der
     Vorschau abgewiesenen Fehlerzeilen mit ihrem Grund. Bei Zeilen, für die nie ein Username
-    entstand (z. B. leerer Vorname, kaputtes Datum), steht in Spalte 1 die **Zeilennummer**
+    entstand (z. B. leerer Vorname, leeres Passwort), steht in Spalte 1 die **Zeilennummer**
     (`Zeile 17`). Jede Zeile der Eingabedatei ist genau einmal auffindbar.
 94a. **Tun:** direkt im Anschluss an #94 den Export-Button erneut klicken und in der
     swal2-Warnung diesmal **"Abbrechen"** anklicken. **Erwartung:** kein Speicherdialog öffnet
@@ -469,7 +475,7 @@ ist — das deckt `tests/pool.test.js` ab).
     **keine** Zeile als "neu" und **keine** als "Kollision aufgelöst". Der Button "Anlegen"
     führt zu 0 angelegten Usern (bzw. ist gesperrt, weil keine gültige Zeile übrig ist).
     In Nextcloud entsteht **kein** zusätzlicher Account, insbesondere keiner mit
-    `.ddmmyyyy`-Suffix. Die Userzahl auf dem Dashboard ist unverändert.
+    Zählersuffix. Die Userzahl auf dem Dashboard ist unverändert.
 96a. **Tun:** dieselbe CSV ein drittes Mal, diesmal mit umgeschalteter Reihenfolge
     (`nachname.vorname`) importieren. **Erwartung:** die Zeilen sind **neu**, weil andere
     Usernames entstehen. Bewusstes Verhalten: der Schalter gehört zur Namensbildung. Nicht
@@ -484,13 +490,13 @@ ist — das deckt `tests/pool.test.js` ab).
 98. **Tun:** während aller Tests DevTools-Konsole und Netzwerk-Tab des Renderers beobachten.
     **Erwartung:** nirgends das App-Passwort, nirgends ein `Authorization`-Header, nirgends
     ein Initialpasswort; keine Requests vom Renderer an den Nextcloud-Host.
-99. **Tun:** `~/.config/<appname>/` nach dem Import durchsuchen (`grep -ri` nach Prefix,
+99. **Tun:** `~/.config/<appname>/` nach dem Import durchsuchen (`grep -ri` nach
     Initialpasswort und App-Passwort) und `credentials.json` öffnen.
     **Erwartung:** keine Treffer, keine Logdatei, keine Jobverlauf-Datei. `credentials.json`
     enthält nur URL, Admin-Name und einen Base64-Blob — kein Klartextpasswort und kein
     teilmaskiertes Passwort. Ohne "Zugang speichern" existiert die Datei gar nicht.
 100. **Tun:** einen exportierten Bericht (nicht den Import-Export) öffnen.
-     **Erwartung:** keine Passwortspalte, keine Geburtsdaten.
+     **Erwartung:** keine Passwortspalte.
 101. **Tun:** einen Link in der App anklicken bzw. `window.open` provozieren.
      **Erwartung:** kein neues Electron-Fenster, keine Navigation weg von der App.
 
@@ -541,11 +547,9 @@ ist — das deckt `tests/pool.test.js` ab).
 113. **Tun:** eine CSV mit Dateifehler wählen (leer, nur Kopfzeile, falsche Kopfzeile, über
      2000 Zeilen, unbalanciertes Anführungszeichen). **Erwartung:** der deutsche Fehlertext
      erscheint **statt** der Vorschautabelle, keine leere Tabelle.
-114. **Tun:** Passwort-Prefix leer lassen, dann zu kurz, dann mit Kleinbuchstaben beginnend,
-     dann gültig eingeben. **Erwartung:** passender deutscher Fehlertext erscheint live bei
-     jeder Eingabe und verschwindet bei einem gültigen Prefix; das Live-Beispiel darunter
-     (z. B. `Schule01012010!`) ändert sich synchron mit dem Prefix.
-115. **Tun:** mit gültigem Prefix die Reihenfolge zwischen "vorname.nachname" und
+113a. **Tun:** Import laden, in eine andere Ansicht wechseln und zurück. **Erwartung:** die
+     Vorschau ist leer (Klartext-Passwörter wurden beim Verlassen verworfen).
+115. **Tun:** die Reihenfolge zwischen "vorname.nachname" und
      "nachname.vorname" umschalten. **Erwartung:** die Usernames in der Vorschautabelle ändern
      sich sofort entsprechend, ohne die Datei neu zu laden.
 116. **Tun:** "Gruppe neu anlegen" klicken, einen neuen Namen eingeben und bestätigen.
@@ -553,17 +557,17 @@ ist — das deckt `tests/pool.test.js` ab).
      Gruppenliste lädt neu und die neue Gruppe ist sofort als Zielgruppe ankreuzbar. Einen
      bereits existierenden Namen eingeben -> Fehlermeldung "Diese Gruppe existiert schon."
 117. **Tun:** eine Import-CSV mit allen drei Fällen aus einer Datei laden: zwei eindeutige
-     neue Namen, zwei Namen mit gleichem Nachnamen-Präfix (Kollision), und eine Zeile mit
-     ungültigem Datum. **Erwartung:** Vorschautabelle zeigt alle drei Statusfarben (grün "neu",
+     neue Namen, zwei Namen mit gleichem Namen (Kollision, Zähler `.2`), und eine Zeile mit
+     leerem Passwort. **Erwartung:** Vorschautabelle zeigt alle drei Statusfarben (grün "neu",
      gelb "Kollision aufgelöst", rot "Fehler" mit deutschem Begründungstext), die
      Kopfzeilen-Zusammenfassung nennt die drei Zahlen korrekt.
 118. **Tun:** eine CSV mit einem sehr langen Nachnamen laden, der gekürzt werden muss.
      **Erwartung:** die betroffene Zeile zeigt ein Schere-Icon mit Tooltip "Nachname wurde
      gekürzt" neben dem Username.
-119. **Tun:** eine Datei laden, die ausschließlich Fehlerzeilen ergibt (z. B. nur ungültige
-     Daten). **Erwartung:** die Vorschautabelle zeigt genau diese Fehlerzeilen, der
+119. **Tun:** eine Datei laden, die ausschließlich Fehlerzeilen ergibt (z. B. nur leere
+     Passwörter). **Erwartung:** die Vorschautabelle zeigt genau diese Fehlerzeilen, der
      "Anlegen"-Button bleibt deaktiviert (0 anzulegende Zeilen).
-120. **Tun:** mit gültigem Prefix und mindestens einer "neu"/"kollision_aufgeloest"-Zeile den
+120. **Tun:** mit mindestens einer "neu"/"kollision_aufgeloest"-Zeile den
      "Anlegen"-Button betrachten, dann klicken. **Erwartung:** Button zeigt die Anzahl der
      tatsächlich anzulegenden Zeilen, ist nur dann aktiv; der Klick zeigt in diesem Schritt nur
      einen Platzhalter-Hinweis, es wird **kein** User angelegt (`POST /cloud/users` darf im

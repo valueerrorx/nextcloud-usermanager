@@ -1,6 +1,8 @@
 // S10-Review [S06]: serverUserIds/anzahlAnzulegen/dateiName waren Ableitungen in ImportView.vue
 // und damit untestbar - hier als pure Funktionen geprüft.
 import { describe, expect, it } from 'vitest';
+import { parseImportCsv } from '../src/shared/csvImport.js';
+import { buildImportPlan } from '../src/shared/importPlan.js';
 import { anzahlAnzulegen, dateiName, serverUserIds, buildCreateUserItems, buildImportExportRows } from '../src/shared/importView.js';
 
 describe('serverUserIds', () => {
@@ -102,5 +104,40 @@ describe('buildImportExportRows', () => {
     expect(rows[3]).toMatchObject({ userid: 'dave', status: 'fehler', grund: 'benutzer_existiert_bereits', passwort: null });
     expect(rows[4]).toMatchObject({ userid: 'Zeile 5', status: 'fehler', grund: 'name_nicht_abbildbar', passwort: null });
     expect(rows[5]).toMatchObject({ userid: 'erin', status: 'fehler', grund: 'username_zu_lang', passwort: null });
+  });
+});
+
+describe('Passwort-Verdrahtung CSV -> Plan -> Action/Export (S20 AC1)', () => {
+  const plan = (body) => buildImportPlan({
+    rows: parseImportCsv(`Vorname;Nachname;Passwort\n${body}`).rows, serverUserIds: [], order: 'givenFirst', max: 20,
+  });
+  const ok = (userid) => ({ userid, aktion: 'user.create', status: 'ok', grund: null, httpStatus: 200, ocsCode: 100 });
+
+  it('Max;Mueller;1234 -> Plan-Passwort 1234 und byUserid[max.mueller].password 1234', () => {
+    const p = plan('Max;Mueller;1234');
+    expect(p.rows[0].passwort).toBe('1234');
+    const { items, byUserid } = buildCreateUserItems(p.rows);
+    expect(items).toEqual(['max.mueller']);
+    expect(byUserid['max.mueller'].password).toBe('1234');
+  });
+
+  it('Passwoerter mit Datumsform und Sonderzeichen erreichen die Action unveraendert', () => {
+    const p = plan('Max;Mueller;  01.01.2000\t \nAnna;Schmidt;Ab!c d\nBen;Weiss;äöü€');
+    const { byUserid } = buildCreateUserItems(p.rows);
+    expect(byUserid['max.mueller'].password).toBe('01.01.2000');
+    expect(byUserid['anna.schmidt'].password).toBe('Ab!c d');
+    expect(byUserid['ben.weiss'].password).toBe('äöü€');
+  });
+
+  it('Fehlerzeile (leeres Passwort) kommt nicht in die Action', () => {
+    const p = plan('Max;Mueller;1\nAnna;Schmidt;');
+    expect(buildCreateUserItems(p.rows).items).toEqual(['max.mueller']);
+  });
+
+  it('Export-Passwortspalte: CSV-Wert fuer ok-Zeilen, null und Zeile N/passwort_leer fuer die Fehlerzeile', () => {
+    const p = plan('Max;Mueller;01.01.2000\nAnna;Schmidt;\nBen;Weiss;Ab!c d');
+    const ex = buildImportExportRows(p.rows, [ok('max.mueller'), ok('ben.weiss')]);
+    expect(ex.map((e) => e.passwort)).toEqual(['01.01.2000', null, 'Ab!c d']);
+    expect(ex[1]).toMatchObject({ userid: 'Zeile 2', status: 'fehler', grund: 'passwort_leer' });
   });
 });

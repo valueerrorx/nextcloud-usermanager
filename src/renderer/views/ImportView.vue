@@ -1,13 +1,12 @@
 <script setup>
 // CSV wählen, Optionen setzen, Vorschau sehen (S10, ARCHITECTURE §3.1/§6). Das Anlegen selbst ist
-// S11. Rechnet nichts selbst: parseImportCsv/buildImportPlan aus shared/, Live-Beispiel aus
-// shared/password.js - keine neue Importlogik hier (S10 spec "Ausdrücklich NICHT").
+// S11. Rechnet nichts selbst: parseImportCsv/buildImportPlan aus shared/ - keine neue Importlogik
+// hier. importRows und importPlanRows enthalten Klartext-Passwörter und werden beim Verlassen geleert.
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import Swal from 'sweetalert2';
 import { MESSAGES } from '../../shared/messages.js';
 import { parseImportCsv } from '../../shared/csvImport.js';
 import { buildImportPlan } from '../../shared/importPlan.js';
-import { beispielPasswort } from '../../shared/password.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import { anzahlAnzulegen, buildCreateUserItems, dateiName, serverUserIds } from '../../shared/importView.js';
 import { plainGroupIds } from '../../shared/groups.js';
@@ -15,7 +14,7 @@ import { describeError } from '../../shared/logSafe.js';
 import { pushJobHistorie } from '../../shared/dashboard.js';
 import { ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
-  importDatei, importRows, importPlanRows, importSummary, importPrefix, importOrder,
+  importDatei, importRows, importPlanRows, importSummary, importOrder,
   importGruppen, importQuota, importFehler, users, usersLadezustand, usersFehler,
   groups, groupsLadezustand, groupsFehler,
   jobId, jobLaeuft, jobQuelle, jobFortschritt, jobResults, jobSummary, jobHistorie,
@@ -62,16 +61,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  // Initialpasswörter dürfen nicht die ganze Sitzung im Speicher bleiben (CRITICAL-Fix
-  // S10-Review, ARCHITECTURE §6) - mit dem Verlassen der View verschwindet die Vorschau.
-  // importRows (Namen+Geburtsdaten) und importPrefix gehören dazu (REVIEW-NOTES [S13]
-  // "deterministisch rekonstruierbar ist nicht gelöscht"): buildInitialPassword(prefix, ddmmyyyy)
-  // ist deterministisch, also bleiben die Initialpasswörter exakt rekonstruierbar, solange diese
-  // beiden Eingaben noch im Speicher stehen - auch ohne importPlanRows/importSummary.
+  // Klartext-Passwörter in importRows und importPlanRows dürfen nicht die ganze Sitzung im Speicher bleiben.
   importPlanRows.value = [];
   importSummary.value = null;
   importRows.value = [];
-  importPrefix.value = '';
 });
 
 // ---- Schritt 1: Datei ----
@@ -104,9 +97,6 @@ async function onDateiWaehlen() {
 }
 
 // ---- Schritt 2: Optionen ----
-// Live-Beispiel über dieselbe Funktion wie das echte Initialpasswort (ARCHITECTURE §4.1).
-const passwortBeispiel = computed(() => beispielPasswort(importPrefix.value));
-
 function istGruppeAusgewaehlt(groupId) {
   return importGruppen.value.includes(groupId);
 }
@@ -166,7 +156,6 @@ const plan = computed(() => {
     rows: importRows.value,
     serverUserIds: serverUserIdListe.value,
     order: importOrder.value,
-    prefix: importPrefix.value,
   });
 });
 
@@ -273,8 +262,10 @@ async function onAnlegen() {
       </button>
       <p class="notice">
         Spalten: <span class="mono">Vorname</span>, <span class="mono">Nachname</span>, <span class="mono">Passwort</span>.
-        Beispiel: <span class="mono">Max;Mueller;01012000</span>
+        Beispiel: <span class="mono">Max;Mueller;Geheim123</span>
         (Semikolon oder Komma).
+        Passwort wird übernommen wie in der Datei (ohne Leerzeichen am Anfang/Ende); die
+        Passwortrichtlinie des Servers gilt.
       </p>
       <p
         v-if="importDatei"
@@ -303,23 +294,6 @@ async function onAnlegen() {
       <span>2. Optionen</span>
     </div>
     <div class="content-card-body">
-      <div class="mb-3">
-        <label
-          class="form-label"
-          for="import-prefix"
-        >Passwort-Prefix</label>
-        <input
-          id="import-prefix"
-          v-model="importPrefix"
-          type="text"
-          class="form-control"
-          placeholder="optional, z. B. Schule"
-        >
-        <p class="notice">
-          Beispiel: <span class="mono">{{ passwortBeispiel }}</span>
-        </p>
-      </div>
-
       <div class="mb-3">
         <span class="form-label">Reihenfolge</span>
         <div class="order-switch">
@@ -463,7 +437,7 @@ async function onAnlegen() {
               <td>{{ zeile.zeile }}</td>
               <td>{{ zeile.vorname }}</td>
               <td>{{ zeile.nachname }}</td>
-              <td>{{ zeile.ddmmyyyy ?? '—' }}</td>
+              <td>{{ zeile.passwort ?? '—' }}</td>
               <td>
                 {{ zeile.username ?? '—' }}
                 <i

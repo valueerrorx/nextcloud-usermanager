@@ -86,7 +86,6 @@ export const importDatei = ref(null); // { path, zeilenAnzahl } | null
 export const importRows = ref([]); // RawRow[] aus parseImportCsv
 export const importPlanRows = ref([]); // PreviewRow[] aus buildImportPlan
 export const importSummary = ref(null); // { neu, kollisionAufgeloest, fehler } | null
-export const importPrefix = ref('');
 export const importOrder = ref('givenFirst'); // 'givenFirst' | 'surnameFirst'
 export const importGruppen = ref([]); // ausgewählte Zielgruppen, groupId-Strings
 export const importQuota = ref(null); // QUOTA_PRESETS-id | null, Kontingent für neue User
@@ -119,7 +118,6 @@ export function resetOnConnect() {
   importRows.value = [];
   importPlanRows.value = [];
   importSummary.value = null;
-  importPrefix.value = '';
   importGruppen.value = [];
   importQuota.value = null;
   importFehler.value = null;
