@@ -11,6 +11,7 @@ Desktop-App für Admins, um Nextcloud-User und -Gruppen effizient zu verwalten, 
 
 ### 1. Dashboard (Startseite)
 - Kennzahlen: Anzahl User, aktive/deaktivierte User, Anzahl Gruppen, Gesamt-Speichernutzung vs. Summe der Kontingente.
+- Systeminfos des Servers (Host, OS, CPU, RAM, Uptime, Disk, externe IP), falls lesbar (DECISIONS 2026-10-14).
 - Liste "fast voll" (User über 90 % ihres Kontingents).
 - Zuletzt durchgeführte Batch-Jobs mit Ergebnis.
 
@@ -39,11 +40,11 @@ Für jeden Batch-Job:
 - Ergebnisbericht pro User (ok/fehler + Grund), als CSV exportierbar.
 
 ### 6. CSV-Import neuer User
-- Input: simple CSV mit `Vorname`, `Nachname`, `Geburtsdatum` (Trennzeichen `;` oder `,`, UTF-8, mit Header).
+- Input: simple CSV mit `Vorname`, `Nachname`, `Passwort` (Trennzeichen `;` oder `,`, UTF-8, mit Header). Passwort wird 1:1 übernommen (DECISIONS 2026-10-14).
 - Aus jeder Zeile wird ein eindeutiger Nextcloud-Username erzeugt.
 - **Username-Regeln exakt wie die UPN-Erzeugung im Referenzprojekt "Microsoft 365 Users"** (Pfad in CLAUDE.md): Sonderzeichen-Ersetzung, Umlaute, Doppelnamen, Leerzeichen, Bindestriche, Eindeutigkeit bei Kollisionen. Die Logik wird 1:1 portiert und mit Tests belegt, deren Beispiele aus dem Referenzprojekt abgeleitet sind.
 - Eindeutigkeit gegen bestehende Nextcloud-User UND innerhalb der Importdatei.
-- Vorschau-Tabelle vor dem Anlegen: Zeile, Name, Geburtsdatum, erzeugter Username, Status (neu / Kollision aufgelöst / Fehler).
+- Vorschau-Tabelle vor dem Anlegen: Zeile, Name, erzeugter Username, Status (neu / Kollision aufgelöst / Fehler).
 - Optional beim Import: Zielgruppe(n) und Kontingent für alle importierten User.
 - Ergebnis-Export (CSV) mit Username und Initialpasswort.
 

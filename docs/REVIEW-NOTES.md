@@ -115,3 +115,8 @@ fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduzier
 - [S18] Jeder neue Einstieg in `actions.run` braucht den Job-Guard: zentral in `startJob` (läuft schon ein Job -> ablehnen), nie nur am Button einer Ansicht.
 - [S18] Löschentscheidungen nie auf gecachten Daten treffen: direkt vor der Planung frisch laden (Mitglieder **und** Userliste); scheitert das Laden -> Abbruch ohne Löschung.
 - [S19] Test-Attrappen dürfen den Code nach dem Mock-Punkt nicht verdecken: mindestens ein Test pro Ablauf mit echten Folge-Modulen (Toast, Historie). Ein gemockter `toast.js` hat einen Absturz nach jeder erfolgreichen Aktion versteckt. swal2-Instanzen haben kein `.catch` — immer `Promise.resolve(Swal.fire(...))`.
+- [S20] Ändert ein Feld seine Bedeutung, wird es durchgehend umbenannt und jeder Konsument neu geprüft: ein als `geburtsdatum` weitergereichtes Passwort landete als Kollisionssuffix im öffentlichen Username.
+- [S20] Eine DECISIONS-Zeile wird nie still im Code umgekehrt; erst neue DECISIONS-Zeile, dann Code. Fixtures nicht an neues Verhalten anpassen, ohne dass die Entscheidung existiert.
+- [S20] Keine Denylist-Bereinigung als Ersatz für die Allowlist-Regel „Meldungen nur aus messages.js“ — weder `ocs.meta.message`, `err.message` noch `describeError` über IPC oder in Dialoge.
+- [S20] CI: Actions per SHA pinnen, Rechte je Job minimal, `persist-credentials: false`, Test+Lint vor Release.
+- [S20] Jeder Commit baut für sich allein (keine Importe auf Dateien eines späteren Commits).
