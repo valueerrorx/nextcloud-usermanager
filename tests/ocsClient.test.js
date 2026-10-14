@@ -1,6 +1,6 @@
 // S03 ocsClient: all 16 Abnahmekriterien from docs/steps/S03-ocs-client.md, driven against an
 // injected fetchImpl. No real network access.
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createOcsClient } from '../src/main/ocs/client.js';
 
 // Minimal but faithful fake Response: status, headers.get(), and text() (the client never calls json()).
@@ -536,3 +536,79 @@ describe('14. fetchImpl fehlt', () => {
 
 // Criterion 15 (the 9 new messageIds, driven through request) lives in tests/messages.test.js
 // per the S03 spec's file layout, not here.
+
+describe('16. fetchText (S24)', () => {
+  const textSpy = () => vi.fn(async () => 'geheimer body');
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('ruft mit redirect manual, Basic-Header und signal auf und liest den Body bei 200', async () => {
+    const text = textSpy();
+    const fetchImpl = singleFetch({ status: 200, text });
+    const client = createOcsClient({ ...baseOpts, fetchImpl });
+    const result = await client.fetchText('/index.php/settings/admin/serverinfo');
+    expect(result).toEqual({ ok: true, status: 200, text: 'geheimer body' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://h/index.php/settings/admin/serverinfo');
+    expect(options.redirect).toBe('manual');
+    expect(options.headers.Authorization).toBe(`Basic ${Buffer.from('user:passwort').toString('base64')}`);
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it.each([
+    ['302 mit Location', { status: 302, headers: { get: () => 'https://evil.example/' }, text: textSpy() }],
+    ['status 0 opaqueredirect', { status: 0, type: 'opaqueredirect', text: textSpy() }],
+  ])('Redirect-Form %s -> ok false, ein Request, text() nicht gelesen', async (_name, response) => {
+    const fetchImpl = singleFetch(response);
+    const result = await createOcsClient({ ...baseOpts, fetchImpl }).fetchText('/x');
+    expect(result.ok).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(response.text).not.toHaveBeenCalled();
+  });
+
+  it('fetchImpl rejectet mit Redirect was cancelled -> ok false, status null, ein Request', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchImpl = singleFetch(thrown(new Error('Redirect was cancelled')));
+    const result = await createOcsClient({ ...baseOpts, fetchImpl }).fetchText('/x');
+    expect(result).toEqual({ ok: false, status: null });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('500 -> ok false mit Status, text() nicht gelesen', async () => {
+    const text = textSpy();
+    const fetchImpl = singleFetch({ status: 500, text });
+    const result = await createOcsClient({ ...baseOpts, fetchImpl }).fetchText('/x');
+    expect(result).toEqual({ ok: false, status: 500 });
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('Nicht-2xx -> body.cancel wird aufgerufen', async () => {
+    const cancel = vi.fn(async () => {});
+    const fetchImpl = singleFetch({ status: 500, text: textSpy(), body: { cancel } });
+    await createOcsClient({ ...baseOpts, fetchImpl }).fetchText('/x');
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('body.cancel wirft synchron bei 302 -> status bleibt 302, kein console.error', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const cancel = vi.fn(() => { throw new Error('cancel kaputt'); });
+    const fetchImpl = singleFetch({ status: 302, text: textSpy(), body: { cancel } });
+    const result = await createOcsClient({ ...baseOpts, fetchImpl }).fetchText('/x');
+    expect(result).toEqual({ ok: false, status: 302 });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('Exception -> ok false, console.error ohne Passwort und dessen Base64', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchImpl = singleFetch(thrown(new Error('boom geheim')));
+    const client = createOcsClient({ baseUrl: 'https://h', adminUser: 'admin', appPassword: 'geheim', fetchImpl });
+    expect(await client.fetchText('/x')).toEqual({ ok: false, status: null });
+    expect(spy).toHaveBeenCalled();
+    const logged = JSON.stringify(spy.mock.calls.flat().map((arg) => (arg instanceof Error ? `${arg.name}${arg.message}${arg.stack}` : arg)));
+    expect(logged).not.toContain('geheim');
+    expect(logged).not.toContain(Buffer.from('admin:geheim').toString('base64'));
+  });
+});

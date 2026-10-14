@@ -1,4 +1,5 @@
 import { MESSAGES } from '../../shared/messages.js';
+import { describeError } from '../../shared/logSafe.js';
 
 // Explicit set, not a prefix match (REVIEW-NOTES, S03 spec §4.A.2) - a 'CERT_'-prefix match would
 // miss the two most common internal-CA codes and report a reachable server as unreachable.
@@ -243,17 +244,24 @@ export function createOcsClient({
   }
 
   // Same credentials as OCS. Used for the admin system page, which is not an OCS route.
+  // Never follows redirects, so Basic-Auth stays on our origin; the body is read on 2xx only.
   async function fetchText(path) {
     const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
     const headers = { ...buildHeaders(adminUser, appPassword, false), Accept: 'text/html' };
     try {
       const response = await fetchImpl(url, {
-        method: 'GET', headers, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs),
+        method: 'GET', headers, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs),
       });
+      if (response.status < 200 || response.status >= 300) {
+        try {
+          await response.body?.cancel?.(); // release the unread body
+        } catch { /* cancel failure must not change the status */ }
+        return { ok: false, status: response.status };
+      }
       const text = await response.text();
-      if (response.status < 200 || response.status >= 300) return { ok: false, status: response.status };
       return { ok: true, status: response.status, text };
-    } catch {
+    } catch (error) {
+      console.error('fetchText failed:', describeError(error, [appPassword]));
       return { ok: false, status: null };
     }
   }

@@ -48,7 +48,7 @@ export default [
   },
   {
     // src/shared/ is pure: no I/O, no node:*, no electron, no vue (ARCHITECTURE §2)
-    files: ['src/shared/**/*.js'],
+    files: ['src/shared/**/*.js', 'src/main/ocs/serverInfoPage.js'],
     rules: {
       'no-restricted-imports': [
         'error',

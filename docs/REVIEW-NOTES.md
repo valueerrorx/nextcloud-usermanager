@@ -121,4 +121,4 @@ fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduzier
 - [S20] CI: Actions per SHA pinnen, Rechte je Job minimal, `persist-credentials: false`, Test+Lint vor Release.
 - [S20] Jeder Commit baut für sich allein (keine Importe auf Dateien eines späteren Commits).
 - [S20] Keine zweite „Acceptance“-Testdatei neben der Modul-Testdatei: ein Modul, eine Testdatei (ARCHITECTURE §2/§11); Abnahmefälle gehören in die bestehende Datei, jeder Fall genau einmal — vor dem Verschieben prüfen, ob er dort schon existiert.
-- [S23] Doku-Drift bei Fehlercodes: ändert sich ein OCS-Code-Mapping, auch die IPC-Tabelle in ARCHITECTURE nachziehen (wie [S12] für Parameternamen).
+- [S23/S24] Doku-Drift IPC-Tabelle (3x: S12, S23, S24): ändert sich Rückgabeform, Typ oder Fehlercode eines IPC-Kanals, wird die Zeile der IPC-Tabelle in ARCHITECTURE im selben Schritt angepasst; Coder grept nach dem Kanalnamen.

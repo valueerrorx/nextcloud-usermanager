@@ -57,6 +57,8 @@ src/main/
   ocs/users.js                    User-Endpunkte, jede Funktion mit EIGENER Fehlercode-Map
   ocs/groups.js                   Gruppen-Endpunkte, jede Funktion mit EIGENER Fehlercode-Map
   ocs/userList.js                 users/details-Probe, Session-Memo, N+1-Fallback mit Fortschritt
+  ocs/serverInfo.js               getServerInfo (info, basicdata, Admin-Seite), resolveExternalIp
+  ocs/serverInfoPage.js           pur, nur Main: parseServerInfoPage, systemSnapshot, formatUptime, isPublicIp
   actions/pipeline.js             runJob({ ..., shouldStop }): Pool 4, Fortschritts-Events,
                                   Ergebnisliste; shouldStop wird injiziert, kein session-Zugriff
   actions/operations.js           Action-ID -> OCS-Aufrufe (ein bis zwei Schritte je Item)
@@ -185,12 +187,12 @@ auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 | `app.openExternal` | invoke | `{ url }` | `{ ok }` | `link_nicht_erlaubt` (nur https und Host `xapient.solutions`) |
 | `users.list` | invoke | – | `{ ok, users: UserView[], mode, fetchedAt }` | 401, 429, Netz, `details_und_fallback_fehlgeschlagen` |
 | `users.onLoadProgress` | main->renderer | – | `{ done, total }` | – (nur im N+1-Fallback) |
-| `groups.list` | invoke | – | `{ ok, groups: GroupView[] }` | 401, 429, Netz |
+| `groups.list` | invoke | – | `{ ok, groups: { id, displayname }[] }` | 401, 429, Netz |
 | `groups.create` | invoke | `{ groupid }` | `{ ok }` | 101/103 -> `gruppe_anlegen_fehlgeschlagen`, 102 -> `gruppe_existiert`, `gruppenname_leer` |
 | `groups.delete` | invoke | `{ groupid }` | `{ ok }` | 101 -> `gruppe_existiert_nicht`, 102 -> `gruppe_loeschen_fehlgeschlagen`, `gruppe_admin_geschuetzt` |
 | `groups.rename` | invoke | `{ groupid, displayname }` | `{ ok }` | 101 -> `gruppe_umbenennen_fehlgeschlagen`, 998 -> `gruppe_existiert_nicht`, `gruppenname_leer`; ändert nur den Anzeigenamen, die ID bleibt |
 | `groups.members` | invoke | `{ groupid }` | `{ ok, members: string[] }` | `nicht_verbunden`, `gruppenname_leer`, `gruppenmitglieder_fehlgeschlagen` (S18, `GET /cloud/groups/{gid}`) |
-| `server.freeSpace` | invoke | – | `{ ok, freeBytes: number\|null }` | `nicht_verbunden`, jeder OCS-/Netzfehler; `serverinfo`-App, kein Fehlerpopup (S18) |
+| `server.freeSpace` | invoke | – | `{ ok, freeBytes: number\|null, system }` mit `system`: `{ hostname, betriebssystem, prozessor, ramBytes, uptime, ip, diskMount, diskFreeBytes, diskTotalBytes, aktiv24h, aktiv7d }` (jeder Wert String, Zahl oder `null`) | `nicht_verbunden`, jeder OCS-/Netzfehler; `serverinfo`-App, kein Fehlerpopup (S18) |
 | `actions.run` | invoke | `{ jobId, action, items, params }` | `{ ok, results: ItemResult[], summary }` | nie global fehlerhaft; Fehler stehen je Item |
 | `actions.stop` | invoke | `{ jobId }` | `{ ok, zustand: 'gestoppt' \| 'bereits_beendet' \| 'unbekannt' }` | nie Fehler, siehe §5 |
 | `actions.onProgress` | main->renderer | – | `{ jobId, done, total, result }` | – |
@@ -265,10 +267,18 @@ im Speicher — kein Kanal nötig.
   groups: string[], quota: QuotaInfo, istVerbundenerAdmin: boolean }
 ```
 
-`GroupView`: `{ id, memberCount }` — `memberCount` **und** die Mitgliederliste werden clientseitig
+`GroupView`: `{ id, displayname, memberCount, istAdmin }` — `groups.list` liefert `{ id, displayname }[]`; `memberCount` **und** die Mitgliederliste werden clientseitig
 aus `UserView.groups` abgeleitet, nicht per Request (DECISIONS „Größenordnung der Zielinstanz“:
 unter 5000 User, Liste ist ohnehin komplett geladen). Deshalb setzt die Gruppenansicht eine
 geladene Userliste voraus und lädt sie bei Bedarf selbst nach.
+
+**Systeminfos (`server.freeSpace`):** `getServerInfo` liest zuerst `apps/serverinfo/api/v1/info`
+(freespace, RAM, CPU-Anzahl, aktive Benutzer); erst wenn das gelingt, laufen `basicdata` (Uptime)
+und die Admin-Seite `/index.php/settings/admin/serverinfo` (Hostname, OS, CPU, Platte, IP; HTML,
+geparst in `ocs/serverInfoPage.js`) parallel. Die externe IP löst `resolveExternalIp` per DNS auf; diese aufgelöste IP gewinnt, die IP der Seite ist nur der Fallback (`ipc.js`).
+`fetchText` folgt nie einem Redirect (`redirect: 'manual'`, Basic-Auth bleibt auf dem eigenen
+Origin) und liest den Body nur bei 2xx. Scheitert `basicdata` oder die Seite, fehlen nur deren
+Felder (`null`); die Seite wird nicht erneut angefragt.
 
 `QuotaInfo` (Output von `shared/quota.js`, der **einzige** erlaubte Quota-Zugang für
 Dashboard, Tabelle, Filter und Dry-Run):

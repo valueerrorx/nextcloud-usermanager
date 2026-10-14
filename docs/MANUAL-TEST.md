@@ -653,3 +653,7 @@ der Nachfolgefall steht als #113a.
 221e. **Tun:** CSV-Import ausführen und den Fehlerpfad provozieren, der den Dialog im `catch` der
       ImportView auslöst (z. B. Main-Prozess-Fehler). **Erwartung:** Dialog zeigt die deutsche Meldung
       "Unerwartete Antwort des Servers." ohne Klammerzusatz; das technische Detail steht klein im Fuß.
+
+## S24 - Systeminfo
+
+221f. **Tun:** gegen die echte Nextcloud verbinden und das Dashboard öffnen. **Erwartung:** Hostname, Betriebssystem und Prozessor werden weiterhin angezeigt (sonst leitet der Server die Admin-Seite um und die Felder zeigen "nicht verfügbar").

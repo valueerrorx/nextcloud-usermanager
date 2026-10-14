@@ -1,6 +1,6 @@
 // serverinfo app endpoint (S18). Local error map; any failure is mapped to the fallback id.
 import { lookup } from 'node:dns/promises';
-import { isPublicIp, systemSnapshot, parseServerInfoPage } from '../../shared/systemInfo.js';
+import { isPublicIp, systemSnapshot, parseServerInfoPage } from './serverInfoPage.js';
 import { mapOcsError } from './errors.js';
 
 const SERVER_INFO_ERRORS = {};
@@ -14,8 +14,10 @@ export async function getServerInfo(client) {
     query: { skipApps: 'true', skipUpdate: 'true' },
   });
   if (!result.ok) return mapOcsError(result, SERVER_INFO_ERRORS, 'freiplatz_nicht_verfuegbar');
-  const basic = await client.request({ method: 'GET', path: '/apps/serverinfo/api/v1/basicdata' });
-  const page = await client.fetchText('/index.php/settings/admin/serverinfo');
+  const [basic, page] = await Promise.all([
+    client.request({ method: 'GET', path: '/apps/serverinfo/api/v1/basicdata' }),
+    client.fetchText('/index.php/settings/admin/serverinfo'),
+  ]);
   const freespace = result.data?.nextcloud?.system?.freespace;
   return {
     ok: true,

@@ -1,5 +1,6 @@
 // S10 A2 / S12 A1: listGroups, createGroup, deleteGroup - each with its own local error-code map
 // (RESEARCH-OCS §5, V4).
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { createOcsClient } from '../src/main/ocs/client.js';
 import { listGroups, createGroup, deleteGroup, renameGroup, getGroupMembers } from '../src/main/ocs/groups.js';
@@ -203,17 +204,7 @@ describe('getServerInfo (S18)', () => {
   });
 
   it('liest Betriebszeit, aktive Benutzer und die Systemseite', async () => {
-    const html = `<div class="server-info-wrapper"><h2><img> cloud.example</h2>
-      <table><tr><td class="info">Linux 6.1</td></tr>
-      <tr><td class="info">Intel Xeon</strong> (4 Threads)</td></tr></table>
-      <span id="servertime"></span>
-      <div class="disk-status"><div class="diskinfo-container">
-        <span class="info">/</span><span class="info">ext4</span>
-        <span class="info">10.00 GB</span><span class="info">4.00 GB</span>
-      </div></div>
-      <div class="section network-infos"><h3>lo</h3><span class="info">127.0.0.1</span>
-      <h3>eth0</h3>IPv4: <span class="info">10.0.0.8, 198.51.100.20</span> IPv6: <span class="info">fe80::1</span>
-      <div class="active-users-wrapper"></div></div></div>`;
+    const html = readFileSync(new URL('./fixtures/serverinfo-page.html', import.meta.url), 'utf8');
     const fetchImpl = vi.fn(async (url) => {
       if (String(url).includes('/api/v1/basicdata')) {
         return fakeResponse({ body: envelope(100, { uptime: '2 days, 1 hours, 0 minutes, 9 seconds' }) });
@@ -227,19 +218,67 @@ describe('getServerInfo (S18)', () => {
     const result = await getServerInfo(makeClient(fetchImpl));
     expect(result.data.freeBytes).toBe(42);
     expect(result.data.system).toMatchObject({
-      hostname: 'cloud.example',
-      betriebssystem: 'Linux 6.1',
-      prozessor: 'Intel Xeon (4 Threads)',
+      hostname: 'host.example',
+      betriebssystem: 'Ubuntu 24.04',
+      prozessor: 'AMD EPYC (8 Threads)',
       ramBytes: 1024 ** 3,
       uptime: '2 Tage, 1 Stunde, 0 Minuten',
-      ip: '198.51.100.20',
+      ip: '203.0.113.10',
       diskMount: '/',
-      diskFreeBytes: Math.round(4 * 1024 ** 3),
-      diskTotalBytes: Math.round(10 * 1024 ** 3),
+      diskFreeBytes: Math.round(40 * 1024 ** 3),
+      diskTotalBytes: Math.round(100 * 1024 ** 3),
       aktiv24h: 3,
       aktiv7d: 9,
     });
     expect(fetchImpl.mock.calls.some((call) => String(call[0]).includes('/index.php/settings/admin/serverinfo'))).toBe(true);
+  });
+
+  it('basicdata 500 und Systemseite 302 -> ok, freeBytes gesetzt, Uptime/Hostname null, RAM/CPU aus info', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes('/api/v1/basicdata')) return fakeResponse({ status: 500 });
+      if (String(url).includes('/settings/admin/serverinfo')) return fakeResponse({ status: 302 });
+      return fakeResponse({ body: envelope(100, { nextcloud: { system: { freespace: 42, mem_total: 2048, cpunum: 4 } } }) });
+    });
+    const result = await getServerInfo(makeClient(fetchImpl));
+    expect(result.ok).toBe(true);
+    expect(result.data.freeBytes).toBe(42);
+    expect(result.data.system.uptime).toBeNull();
+    expect(result.data.system.hostname).toBeNull();
+    expect(result.data.system.ramBytes).toBe(2048 * 1024);
+    expect(result.data.system.prozessor).toBe('4 Threads');
+  });
+
+  it('basicdata und Systemseite laufen parallel', async () => {
+    let releaseBasic;
+    let releasePage;
+    const heldBasic = new Promise((resolve) => { releaseBasic = resolve; });
+    const heldPage = new Promise((resolve) => { releasePage = resolve; });
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes('/api/v1/basicdata')) {
+        await heldBasic;
+        return fakeResponse({ body: envelope(100, { uptime: 'Unknown' }) });
+      }
+      if (String(url).includes('/settings/admin/serverinfo')) {
+        await heldPage;
+        return fakeResponse({ status: 302 });
+      }
+      return fakeResponse({ body: envelope(100, { nextcloud: { system: { freespace: 1 } } }) });
+    });
+    const requested = (part) => fetchImpl.mock.calls.some((call) => String(call[0]).includes(part));
+    const pending = getServerInfo(makeClient(fetchImpl));
+    await vi.waitFor(() => {
+      expect(requested('/api/v1/basicdata')).toBe(true);
+      expect(requested('/settings/admin/serverinfo')).toBe(true);
+    });
+    releaseBasic();
+    releasePage();
+    expect((await pending).ok).toBe(true);
+  });
+
+  it('info 401 -> genau ein Request', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ status: 401 }));
+    await getServerInfo(makeClient(fetchImpl));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('resolveExternalIp lässt private Antworten und Hostnamen ohne Punkt weg', async () => {
