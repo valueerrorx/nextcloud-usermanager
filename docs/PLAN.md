@@ -36,10 +36,11 @@ größte Korrektheitsverpflichtung des Ziels ist und vollständig spezifiziert v
 - [x] S17 Benutzerliste & Dashboard nach M365-Vorlage | acceptance: Filter in einer Zeile; Aktions-Buttons je Zeile; Batch-Leiste ab 2 ausgewählten über der Tabelle; Dashboard mit Icon-Kacheln und Schnellzugriff; Löschbestätigung bleibt Dry-Run-Zahl | status: **done** (911 Tests; Regression behoben: ohne Zeilen-Button war das Kontingent eines einzelnen Users nicht mehr setzbar)
 - [x] S18 Freier Speicher + Gruppe mit Mitgliedern löschen | acceptance: siehe docs/steps/S18-speicher-gruppe-mit-mitgliedern.md | status: **done** (956 Tests)
 - [x] S20 Import: Passwort-Spalte 1:1 + Zählerkollision | acceptance: siehe docs/steps/S20-import-passwort.md | status: **done** (995 Tests; Passwort-Leak in Usernames bei Namensgleichheit behoben, 3 Review-Runden wegen doppelter Tests)
-- [ ] S21 Fehlertexte nur aus messages.js (107-Ausnahme) | acceptance: Servertext nur bei 107 auf user.create/setPassword; `actions.run`-Catch ohne Exceptiontext; Renderer-Dialoge ohne `describeError`; `console.error` im Main nur im Dev-Modus | status: todo
-- [ ] S22 Batch/IPC-Robustheit | acceptance: leere Gruppenschritte -> nicht ausgeführt statt ok (0 Requests); `groupid` Typprüfung; deutscher Satz in operations.js -> messageId; 404/998 beim Gruppen-Umbenennen verifiziert | status: todo
-- [ ] S23 Systeminfo absichern | acceptance: `fetchText` mit `redirect: 'manual'`/Origin-Prüfung, Header- und Timeout-Tests, geloggter Catch; Scraper-Fehler -> Hinweis; Modul gesplittet (Main-Parser vs. Renderer-Format); ARCHITECTURE aktualisiert (freeSpace, groups.list, Import) | status: todo
-- [ ] S24 CI + Fenstergröße | acceptance: appimage.yml SHA-gepinnt, `persist-credentials: false`, Publish-Job mit `contents: write`, Test+Lint-Gate, `--target`, `concurrency`; Startfenster auf Arbeitsfläche geklemmt | status: todo
+- [ ] S21 Standard-Kontingent | acceptance: siehe docs/steps/S21-standard-kontingent.md | status: todo
+- [ ] S22 Fehlertexte nur aus messages.js (107-Ausnahme) | acceptance: Servertext nur bei 107 auf user.create/setPassword; `actions.run`-Catch ohne Exceptiontext; Renderer-Dialoge ohne `describeError`; `console.error` im Main nur im Dev-Modus | status: todo
+- [ ] S23 Batch/IPC-Robustheit | acceptance: leere Gruppenschritte -> nicht ausgeführt statt ok (0 Requests); `groupid` Typprüfung; deutscher Satz in operations.js -> messageId; 404/998 beim Gruppen-Umbenennen verifiziert | status: todo
+- [ ] S24 Systeminfo absichern | acceptance: `fetchText` mit `redirect: 'manual'`/Origin-Prüfung, Header- und Timeout-Tests, geloggter Catch; Scraper-Fehler -> Hinweis; Modul gesplittet (Main-Parser vs. Renderer-Format); ARCHITECTURE aktualisiert (freeSpace, groups.list, Import) | status: todo
+- [ ] S25 CI + Fenstergröße | acceptance: appimage.yml SHA-gepinnt, `persist-credentials: false`, Publish-Job mit `contents: write`, Test+Lint-Gate, `--target`, `concurrency`; Startfenster auf Arbeitsfläche geklemmt | status: todo
 
 ## Hinweise zur Umsetzung
 
@@ -93,5 +94,5 @@ persistente Job-Historie (nur Sitzung), E-Mail beim Einzel-Anlegen (Bearbeiten d
 
 ## Stand 2026-10-14
 
-Commits `d8064d3` und `ad5983b` („build first version“) entstanden außerhalb des Build-Loops (u. a. `src/shared/systemInfo.js`, `GroupName.vue`, `.github/workflows/appimage.yml`, Änderungen an pipeline/client/ipc) — ohne Spec-Gate und ohne Senior-Review. Tests und Lint grün. Review: REJECT (4 kritisch). Befunde verteilt auf S20-S24.
+Commits `d8064d3` und `ad5983b` („build first version“) entstanden außerhalb des Build-Loops (u. a. `src/shared/systemInfo.js`, `GroupName.vue`, `.github/workflows/appimage.yml`, Änderungen an pipeline/client/ipc) — ohne Spec-Gate und ohne Senior-Review. Tests und Lint grün. Review: REJECT (4 kritisch). Befunde verteilt auf S20, S22-S25.
 Praxisfehler vom Nutzer: CSV-Passwort `1234` funktionierte nicht, weil der Code `<Prefix>1234!` setzte -> S20.
