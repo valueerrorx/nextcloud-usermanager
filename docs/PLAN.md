@@ -84,7 +84,7 @@ Vier API-Fakten sind unverifiziert; der Entwurf ist darauf defensiv ausgelegt. K
 |---|---|
 | Username-Generator: Unit-Tests mit allen Regeln und Beispielen aus dem Referenzprojekt, 100 % grün | erfüllt — 186 Tests, Port codepoint-identisch zum Referenzprojekt verifiziert |
 | Batch-Jobs mit gemockter API inkl. Teilfehlern | erfüllt — Lastfall 50 Items / 7 Fehler / 429 / Abbruch, `teilweise`, Einzelfehler bricht nie ab |
-| `npm test` und `npm run lint` grün | erfüllt — 1018 Tests / 51 Dateien (Stand 2026-10-14), Lint grün |
+| `npm test` und `npm run lint` grün | erfüllt — 1058 Tests / 50 Dateien nach S25 (2026-10-14), Lint grün |
 | `npm run build` erzeugt lauffähige App unter Linux | erfüllt — AppImage gebaut; Start mit Display vom Nutzer zu bestätigen |
 | Alle Funktionen gegen eine echte Test-Nextcloud manuell durchgespielt | **offen — beim Nutzer**, Checkliste in `docs/MANUAL-TEST.md` |
 
@@ -96,3 +96,5 @@ persistente Job-Historie (nur Sitzung), E-Mail beim Einzel-Anlegen (Bearbeiten d
 
 Commits `d8064d3` und `ad5983b` („build first version“) entstanden außerhalb des Build-Loops (u. a. `src/shared/systemInfo.js`, `GroupName.vue`, `.github/workflows/appimage.yml`, Änderungen an pipeline/client/ipc) — ohne Spec-Gate und ohne Senior-Review. Tests und Lint grün. Review: REJECT (4 kritisch). Befunde verteilt auf S20, S22-S25.
 Praxisfehler vom Nutzer: CSV-Passwort `1234` funktionierte nicht, weil der Code `<Prefix>1234!` setzte -> S20.
+
+Nach S20-S25 (2026-10-14): alle Review-Befunde der Fremd-Commits behoben, alle Schritte done. Offen beim Nutzer: manuelle Abnahme (`docs/MANUAL-TEST.md`, neu u. a. #113a, #221a-f) und ein echter Release-Lauf des Workflows.
