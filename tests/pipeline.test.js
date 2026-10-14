@@ -1,9 +1,12 @@
 // S07 A3: runJob - 50 items/7 errors/one exhausted 429/abort at item 20, concurrency 4,
 // 'teilweise' for user.update, a single item failure never aborts the job, shouldStop is
 // injected (pipeline.js never reads the session singleton - that's why there is no electron
-// mock anywhere in this file).
+// mock anywhere in this file). Also holds the S22 end-to-end block (server text only for 107 on password steps).
 import { describe, expect, it, vi } from 'vitest';
 import { runJob } from '../src/main/actions/pipeline.js';
+import { createOcsClient } from '../src/main/ocs/client.js';
+import { MESSAGES } from '../src/shared/messages.js';
+import { resolveGrund } from '../src/shared/jobReport.js';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -356,8 +359,8 @@ describe('runJob - Fortschritt feuert live, nicht erst nach Jobende', () => {
   });
 });
 
-describe('runJob - Serverhinweis statt messageId', () => {
-  it('user.enable reicht den Hinweis als Begründung durch', async () => {
+describe('runJob - kein Servertext bei nicht passwortsetzenden Schritten', () => {
+  it('user.enable mit Servertext: grund ist die messageId', async () => {
     const client = {
       request: vi.fn(async () => ({
         ok: false,
@@ -365,14 +368,15 @@ describe('runJob - Serverhinweis statt messageId', () => {
         httpStatus: 200,
         ocsCode: 107,
         messageId: 'ocs_fehler',
-        hinweis: 'Das Passwort muss mindestens 10 Zeichen lang sein.',
+        serverText: 'Das Passwort muss mindestens 10 Zeichen lang sein.',
         versuche: 1,
       })),
     };
     const { results } = await runJob({
       jobId: 'hinweis', action: 'user.enable', items: ['alice'], params: {}, client,
     });
-    expect(results[0].grund).toBe('Das Passwort muss mindestens 10 Zeichen lang sein.');
+    expect(results[0].grund).toBe('aktion_fehlgeschlagen');
+    expect(JSON.stringify(results[0])).not.toContain('mindestens 10');
   });
 });
 
@@ -397,5 +401,136 @@ describe('runJob - user.removeFromGroup mit mehreren Gruppen', () => {
     expect(client.request).toHaveBeenCalledTimes(2);
     expect(results[0].status).toBe('teilweise');
     expect(results[0].grund).toBe('Entfernen aus Gruppe "lehrer" fehlgeschlagen');
+  });
+});
+
+// S22 Abnahme 1-6: Ende-zu-Ende mit echtem Client (gemocktes fetchImpl), echten users.js/operations.js.
+describe('runJob - S22 Servertext nur bei OCS 107 auf passwortsetzenden Schritten (Ende-zu-Ende)', () => {
+  function body(statuscode, extra = {}, data = null) {
+    return JSON.stringify({ ocs: { meta: { status: statuscode === 100 ? 'ok' : 'failure', statuscode, ...extra }, data } });
+  }
+
+  // route(method, url, formString) -> { status?, body }; records every request.
+  function e2eClient(route) {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, options) => {
+      calls.push({ url, method: options.method, body: String(options.body ?? '') });
+      const { status = 200, body: text } = route(options.method, url, String(options.body ?? ''));
+      return { status, headers: { get: () => null }, text: async () => text };
+    });
+    const client = createOcsClient({
+      baseUrl: 'https://h', adminUser: 'admin', appPassword: 'app-secret-pw', fetchImpl, sleep: vi.fn(),
+    });
+    return { client, calls };
+  }
+
+  function createParams(password, groups = []) {
+    return { byUserid: { alice: { password, displayName: 'Alice' } }, groups, quota: '5 GB' };
+  }
+
+  it('1. user.create mit 107: grund ist passwort_policy + bereinigter Servertext, ohne Passwort', async () => {
+    const { client } = e2eClient(() => ({ body: body(107, { message: 'Das Passwort ist zu kurz. Pa55wort' }) }));
+    const { results } = await runJob({
+      jobId: 'ac1', action: 'user.create', items: ['alice'], params: createParams('Pa55wort'), client,
+    });
+    expect(results[0].status).toBe('fehler');
+    expect(results[0].grund).toBe(`${MESSAGES.passwort_policy} (Das Passwort ist zu kurz.)`);
+    expect(JSON.stringify(results[0])).not.toContain('Pa55wort');
+  });
+
+  it('2. user.setPassword mit 107: grund ist passwort_policy + bereinigter Servertext', async () => {
+    const { client, calls } = e2eClient(() => ({ body: body(107, { message: 'Das Passwort ist zu kurz. Pa55wort' }) }));
+    const { results } = await runJob({
+      jobId: 'ac2', action: 'user.setPassword', items: ['alice'], params: { value: 'Pa55wort' }, client,
+    });
+    expect(calls[0].method).toBe('PUT');
+    expect(calls[0].body).toContain('key=password');
+    expect(results[0].grund).toBe(`${MESSAGES.passwort_policy} (Das Passwort ist zu kurz.)`);
+    expect(JSON.stringify(results[0])).not.toContain('Pa55wort');
+  });
+
+  it('3. 102 auf user.create und 101 auf user.setQuota: nur die gemappte messageId, kein serverText, kein Leak', async () => {
+    const create = e2eClient(() => ({ body: body(102, { message: 'geheim: xyz' }) }));
+    const createRes = await runJob({
+      jobId: 'ac3a', action: 'user.create', items: ['alice'], params: createParams('Pa55wort'), client: create.client,
+    });
+    expect(createRes.results[0].grund).toBe('benutzer_existiert_bereits');
+    expect(JSON.stringify(createRes.results[0])).not.toContain('geheim');
+
+    const quota = e2eClient(() => ({ body: body(101, { message: 'geheim: xyz' }) }));
+    const quotaRes = await runJob({
+      jobId: 'ac3b', action: 'user.setQuota', items: ['alice'], params: { value: '1 GB' }, client: quota.client,
+    });
+    expect(quotaRes.results[0].grund).toBe('aktion_fehlgeschlagen');
+    expect(JSON.stringify(quotaRes.results[0])).not.toContain('geheim');
+
+    // Das Client-Failure selbst traegt bei Nicht-107 kein serverText.
+    const raw = await create.client.request({ method: 'POST', path: '/cloud/users', form: { userid: 'a', password: 'Pa55wort' } });
+    expect(raw.ocsCode).toBe(102);
+    expect(raw).not.toHaveProperty('serverText');
+    const rawQuota = await quota.client.request({ method: 'PUT', path: '/cloud/users/alice', form: { key: 'quota', value: '1 GB' } });
+    expect(rawQuota.ocsCode).toBe(101);
+    expect(rawQuota).not.toHaveProperty('serverText');
+  });
+
+  it('4. 107 auf user.setQuota und auf einem Gruppenschritt mit Gruppe "password": kein Servertext im grund', async () => {
+    const quota = e2eClient(() => ({ body: body(107, { message: 'Servertext-quota' }) }));
+    const quotaRes = await runJob({
+      jobId: 'ac4a', action: 'user.setQuota', items: ['alice'], params: { value: '1 GB' }, client: quota.client,
+    });
+    expect(quotaRes.results[0].grund).toBe('passwort_policy'); // gemappte messageId (SET_USER_FIELD_ERRORS 107), ohne Klammer
+    expect(JSON.stringify(quotaRes.results[0])).not.toContain('Servertext');
+
+    // user.removeFromGroup: Schrittname ist die Gruppen-ID "password" -> darf nicht als passwortsetzend gelten.
+    const remove = e2eClient(() => ({ body: body(107, { message: 'Servertext-gruppe' }) }));
+    const removeRes = await runJob({
+      jobId: 'ac4b', action: 'user.removeFromGroup', items: ['alice'], params: { groupid: 'password' }, client: remove.client,
+    });
+    expect(removeRes.results[0].status).toBe('fehler');
+    expect(removeRes.results[0].grund).toBe('aktion_fehlgeschlagen');
+    expect(JSON.stringify(removeRes.results[0])).not.toContain('Servertext');
+
+    // user.create: create ok, Gruppenschritt "password" scheitert mit 107.
+    const create = e2eClient((method, url) => (url.includes('/groups')
+      ? { body: body(107, { message: 'Servertext-gruppe' }) }
+      : { body: body(100) }));
+    const createRes = await runJob({
+      jobId: 'ac4c', action: 'user.create', items: ['alice'], params: createParams('Pa55wort', ['password']), client: create.client,
+    });
+    expect(createRes.results[0].status).toBe('teilweise');
+    expect(createRes.results[0].grund).toBe('Gruppe "password" konnte nicht zugewiesen werden');
+    expect(JSON.stringify(createRes.results[0])).not.toContain('Servertext');
+  });
+
+  it('5. HTTP 500 mit Envelope statuscode 100: grund unerwarteter_serverfehler, kein Servertext, kein HTTP-Fallback', async () => {
+    const { client } = e2eClient(() => ({ status: 500, body: body(100, { message: 'interner Text' }, { message: 'geheim' }) }));
+    const { results } = await runJob({
+      jobId: 'ac5', action: 'user.create', items: ['alice'], params: createParams('Pa55wort'), client,
+    });
+    expect(results[0].grund).toBe('unerwarteter_serverfehler');
+    expect(JSON.stringify(results[0])).not.toContain('interner Text');
+    expect(JSON.stringify(results[0])).not.toContain('geheim');
+    expect(JSON.stringify(results[0])).not.toContain('HTTP 500');
+  });
+
+  it('6. Passwort "abc" (< 4 Zeichen) mit 107: grund ist exakt passwort_policy, kein serverText', async () => {
+    const { client } = e2eClient(() => ({ body: body(107, { message: 'abc zu kurz' }) }));
+    const { results } = await runJob({
+      jobId: 'ac6', action: 'user.setPassword', items: ['alice'], params: { value: 'abc' }, client,
+    });
+    // Pipeline liefert die messageId; resolveGrund macht daraus exakt MESSAGES.passwort_policy.
+    expect(results[0].grund).toBe('passwort_policy');
+    expect(resolveGrund(results[0].grund)).toBe(MESSAGES.passwort_policy);
+    const raw = await client.request({ method: 'PUT', path: '/cloud/users/alice', form: { key: 'password', value: 'abc' } });
+    expect(raw).not.toHaveProperty('serverText');
+  });
+
+  it('7. user.create mit Passwort "abc" (< 4 Zeichen) und 107: grund ist passwort_policy, kein Servertext', async () => {
+    const { client } = e2eClient(() => ({ body: body(107, { message: 'abc zu kurz' }) }));
+    const { results } = await runJob({
+      jobId: 'ac7', action: 'user.create', items: ['alice'], params: createParams('abc'), client,
+    });
+    expect(results[0].grund).toBe('passwort_policy');
+    expect(JSON.stringify(results[0])).not.toContain('abc zu kurz');
   });
 });

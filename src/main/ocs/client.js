@@ -18,10 +18,10 @@ const CERT_CODES = new Set([
 // Kinds that are never retried, regardless of HTTP status (a false password must not be retried).
 const NEVER_RETRY_KINDS = new Set(['auth', 'forbidden', 'notOcs', 'timeout', 'cert']);
 
-const USELESS_HINWEIS = new Set(['failure', 'error', 'bad request', 'forbidden', 'ok']);
+const USELESS_SERVER_TEXT = new Set(['failure', 'error', 'bad request', 'forbidden', 'ok']);
 
-// Drops secrets the server may echo, then keeps a short reason for the UI.
-function sanitizeHinweis(text, secrets) {
+// Drops secrets the server may echo, then keeps a short text (only used for OCS 107).
+function sanitizeServerText(text, secrets) {
   if (typeof text !== 'string') return null;
   let out = text;
   for (const secret of secrets) {
@@ -29,7 +29,7 @@ function sanitizeHinweis(text, secrets) {
     if (out.includes(secret)) out = out.split(secret).join('');
   }
   out = out.replace(/\s+/g, ' ').trim();
-  if (out === '' || USELESS_HINWEIS.has(out.toLowerCase())) return null;
+  if (out === '' || USELESS_SERVER_TEXT.has(out.toLowerCase())) return null;
   if (out.length > 240) out = `${out.slice(0, 240)}…`;
   return out;
 }
@@ -41,9 +41,15 @@ function collectSecrets(form, appPassword, adminUser) {
   return secrets;
 }
 
-function makeFailure(kind, httpStatus, ocsCode, messageId, hinweis = null) {
+// The password a request sets (create form or PUT key=password), else null.
+function settingPassword(form) {
+  const pw = form?.key === 'password' ? form.value : form?.password;
+  return typeof pw === 'string' ? pw : null;
+}
+
+function makeFailure(kind, httpStatus, ocsCode, messageId, serverText = null) {
   const failure = { ok: false, kind, httpStatus, ocsCode, messageId, message: MESSAGES[messageId] };
-  if (typeof hinweis === 'string') failure.hinweis = hinweis;
+  if (typeof serverText === 'string') failure.serverText = serverText;
   return failure;
 }
 
@@ -192,17 +198,18 @@ export function createOcsClient({
     }
 
     if (meta.statuscode !== 100) {
-      const secrets = collectSecrets(form, appPassword, adminUser);
-      const hinweis = sanitizeHinweis(meta.message, secrets)
-        ?? sanitizeHinweis(ocs.data?.message, secrets);
-      return makeFailure('ocs', httpStatus, meta.statuscode, 'ocs_fehler', hinweis);
+      // Server text only for 107 on password-setting requests with a password >= 4 chars (secrets can't be stripped reliably below).
+      let serverText = null;
+      if (meta.statuscode === 107 && (settingPassword(form)?.length ?? 0) >= 4) {
+        const secrets = collectSecrets(form, appPassword, adminUser);
+        serverText = sanitizeServerText(meta.message, secrets)
+          ?? sanitizeServerText(ocs.data?.message, secrets);
+      }
+      return makeFailure('ocs', httpStatus, meta.statuscode, 'ocs_fehler', serverText);
     }
 
     if (httpStatus < 200 || httpStatus >= 300) {
-      const secrets = collectSecrets(form, appPassword, adminUser);
-      const serverText = sanitizeHinweis(meta.message, secrets)
-        ?? sanitizeHinweis(ocs.data?.message, secrets);
-      return makeFailure('http', httpStatus, meta.statuscode, 'unerwarteter_serverfehler', serverText ?? `HTTP ${httpStatus}`);
+      return makeFailure('http', httpStatus, meta.statuscode, 'unerwarteter_serverfehler');
     }
 
     return { ok: true, data: ocs.data ?? null, httpStatus };

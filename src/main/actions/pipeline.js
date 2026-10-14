@@ -1,6 +1,7 @@
 // Action pipeline: runJob (ARCHITECTURE §5, S07-batch-kern.md A3). shouldStop is injected, same
 // as ocs/client.js's credentials - this module never reads the session singleton.
 import { runPool } from '../../shared/pool.js';
+import { MESSAGES } from '../../shared/messages.js';
 import { getSteps } from './operations.js';
 
 // Default wording for a failed non-first step, same sentence S07 already shipped for
@@ -8,6 +9,14 @@ import { getSteps } from './operations.js';
 // group, not "gruppe-x", and use "zugewiesen" instead of "gesetzt").
 function teilfehlerGrund(step) {
   return step.teilfehlerGrund ?? `${step.name} konnte nicht gesetzt werden`;
+}
+
+// Server text reaches the result only for OCS 107 on a password-setting step; else the messageId.
+function fehlerGrund(step, result) {
+  if (step.setsPassword && result.ocsCode === 107 && result.serverText) {
+    return `${MESSAGES.passwort_policy} (${result.serverText})`;
+  }
+  return result.messageId;
 }
 
 // Runs an item's steps in order. The first step is a precondition for every later one: if it
@@ -33,7 +42,7 @@ async function runIndependent(client, steps) {
   if (okCount === 0) {
     return {
       status: 'fehler',
-      grund: failure.result.hinweis || failure.result.messageId,
+      grund: fehlerGrund(failure.step, failure.result),
       httpStatus: failure.result.httpStatus,
       ocsCode: failure.result.ocsCode,
     };
@@ -59,7 +68,7 @@ async function runSteps(client, steps) {
     // job keeps going because a single item's result never aborts the pool.
     return {
       status: 'fehler',
-      grund: first.hinweis || first.messageId,
+      grund: fehlerGrund(steps[0], first),
       httpStatus: first.httpStatus,
       ocsCode: first.ocsCode,
     };

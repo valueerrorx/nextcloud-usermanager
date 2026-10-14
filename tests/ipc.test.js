@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MESSAGES } from '../src/shared/messages.js';
 
 const handlers = new Map();
 const { fakeApp } = vi.hoisted(() => ({
@@ -835,10 +836,12 @@ describe('actions.run — webContents.send wirft / Catch-alls loggen', () => {
   it('äußerer Catch von actions.run loggt die Exception ohne Argumente und Passwort', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const args = { jobId: 'job-x', action: 'user.setPassword', items: ['sara'], params: { value: 'TopSecretPw' } };
-    Object.defineProperty(args, 'items', { get() { throw new Error('boom'); } });
+    Object.defineProperty(args, 'items', { get() { throw new Error('boom geheim'); } });
     const result = await handlers.get('actions.run')(null, args);
-    expect(result).toEqual({ ok: false, messageId: 'unerwarteter_serverfehler', message: expect.any(String) });
-    expect(errorSpy).toHaveBeenCalledWith('actions.run failed:', 'Error: boom');
+    expect(result).toEqual({ ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler });
+    expect(errorSpy).toHaveBeenCalledWith('actions.run failed:', 'Error: boom [redacted]');
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('geheim');
+    expect(JSON.stringify(result)).not.toContain('geheim');
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('TopSecretPw');
     errorSpy.mockRestore();
   });

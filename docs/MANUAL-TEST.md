@@ -647,3 +647,9 @@ der Nachfolgefall steht als #113a.
 221c. **Tun:** mehrere User auswählen, "Kontingent setzen" -> "Standard-Kontingent (Server)". **Erwartung:**
       Vorschau führt alle aus (Label "Standard-Kontingent (Server)"), danach gilt in Nextcloud das Server-Standardkontingent.
 221d. **Tun:** Dialog "Kontingent setzen" öffnen. **Erwartung:** vorbelegt ist "1 GB", "Standard-Kontingent (Server)" steht als erster Eintrag in der Liste.
+
+## S22 - Fehlertexte
+
+221e. **Tun:** CSV-Import ausführen und den Fehlerpfad provozieren, der den Dialog im `catch` der
+      ImportView auslöst (z. B. Main-Prozess-Fehler). **Erwartung:** Dialog zeigt die deutsche Meldung
+      "Unerwartete Antwort des Servers." ohne Klammerzusatz; das technische Detail steht klein im Fuß.

@@ -378,6 +378,10 @@ per Konstruktion nicht und kann die Aufräumlogik nicht sehen.
   schritte?: [{ name, status, grund }] }
 ```
 
+`grund` ist eine messageId. Einzige Ausnahme: OCS 107 auf einem passwortsetzenden Schritt
+(`setsPassword`) ergibt `MESSAGES.passwort_policy (Servertext)`; `resolveGrund` reicht Nicht-IDs
+unverändert durch. Die Failure-Form des OCS-Clients trägt `serverText` optional, nur bei 107.
+
 `summary` (DECISIONS „`summary`-Form des Action-Ergebnisses“):
 
 ```js

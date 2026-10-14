@@ -10,9 +10,9 @@ import { buildImportPlan } from '../../shared/importPlan.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import { anzahlAnzulegen, buildCreateUserItems, dateiName, serverUserIds } from '../../shared/importView.js';
 import { plainGroupIds } from '../../shared/groups.js';
-import { describeError } from '../../shared/logSafe.js';
 import { pushJobHistorie } from '../../shared/dashboard.js';
 import { ladeGruppen, ladeUserliste } from '../loaders.js';
+import { unerwartetFooter } from '../jobRunner.js';
 import {
   importDatei, importRows, importPlanRows, importSummary, importOrder,
   importGruppen, importQuota, importFehler, users, usersLadezustand, usersFehler,
@@ -221,8 +221,9 @@ async function onAnlegen() {
     console.error('Import-Job fehlgeschlagen:', error);
     await Swal.fire({
       title: 'Fehler',
-      text: `${MESSAGES.unerwarteter_serverfehler} (${describeError(error)})`,
+      text: MESSAGES.unerwarteter_serverfehler,
       icon: 'error',
+      footer: unerwartetFooter(error),
     });
   } finally {
     jobLaeuft.value = false;

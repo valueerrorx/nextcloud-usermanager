@@ -244,7 +244,7 @@ async function handleActionsRun(args) {
         onProgress: (payload) => broadcast('actions.onProgress', payload),
       });
     } catch (error) {
-      console.error('actions.run failed:', describeError(error));
+      console.error('actions.run failed:', describeError(error, [session.appPassword]));
       // operations.js#getSteps throws for an unknown action id - a programmer error inside main
       // (by design, see operations.js), but this invoke channel must still resolve, never reject
       // (ARCHITECTURE §3: "nie global fehlerhaft").
@@ -259,7 +259,7 @@ async function handleActionsRun(args) {
     return {
       ok: false,
       messageId: 'unerwarteter_serverfehler',
-      message: `${MESSAGES.unerwarteter_serverfehler} (${detail})`,
+      message: MESSAGES.unerwarteter_serverfehler,
     };
   }
 }

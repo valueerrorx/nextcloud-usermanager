@@ -20,7 +20,7 @@ const OPERATIONS = {
     { name: 'quota', run: (client) => setUserField(client, userid, 'quota', params.value) },
   ],
   'user.setPassword': (userid, params) => [
-    { name: 'password', run: (client) => setUserField(client, userid, 'password', params.value) },
+    { name: 'password', setsPassword: true, run: (client) => setUserField(client, userid, 'password', params.value) },
   ],
   'user.addToGroup': (userid, params) => [
     { name: 'addToGroup', run: (client) => addUserToGroup(client, userid, params.groupid) },
@@ -39,7 +39,7 @@ const OPERATIONS = {
   'user.create': (userid, params) => {
     const { password, displayName } = params.byUserid[userid];
     const steps = [
-      { name: 'create', run: (client) => createUser(client, { userid, password, displayName, quota: params.quota }) },
+      { name: 'create', setsPassword: true, run: (client) => createUser(client, { userid, password, displayName, quota: params.quota }) },
     ];
     for (const groupid of params.groups ?? []) {
       steps.push({
