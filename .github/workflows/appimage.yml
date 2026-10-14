@@ -1,0 +1,77 @@
+name: AppImage
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect version increase
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          new=$(jq -r .version package.json)
+          before="${{ github.event.before }}"
+          build=false
+          if [ "$before" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${before}:package.json" 2>/dev/null; then
+            old=$(git show "${before}:package.json" | jq -r .version)
+            lowest=$(printf '%s\n%s\n' "$old" "$new" | sort -V | head -n1)
+            if [ "$new" != "$old" ] && [ "$lowest" = "$old" ]; then
+              build=true
+            fi
+            echo "Previous version: $old"
+          fi
+          echo "Current version: $new"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "version=$new" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        if: steps.version.outputs.build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: steps.version.outputs.build == 'true'
+        run: npm ci
+
+      - name: Build AppImage
+        if: steps.version.outputs.build == 'true'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: npm run build
+
+      - name: Upload AppImage
+        if: steps.version.outputs.build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-usermanager-${{ steps.version.outputs.version }}
+          path: release/*.AppImage
+          if-no-files-found: error
+
+      - name: Publish release
+        if: steps.version.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release/*.AppImage --clobber
+          else
+            gh release create "$tag" release/*.AppImage --title "$tag" --notes "AppImage ${tag}."
+          fi
