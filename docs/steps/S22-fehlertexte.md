@@ -49,7 +49,7 @@ Exception-Text über IPC zurück. Beides verletzt DECISIONS „`message` kommt i
 Kriterien 1-5 laufen **Ende-zu-Ende**: echter `createOcsClient` mit gemocktem `fetchImpl`, echte
 `users.js`/`operations.js`, `runJob`. Kein Stub von `client.request`.
 1. `POST /cloud/users` antwortet `statuscode 107`, `message: "Das Passwort ist zu kurz. Pa55wort"`,
-   Form-Passwort `Pa55wort`: `grund === \`${MESSAGES.passwort_policy} (Das Passwort ist zu kurz.)\``.
+   Form-Passwort `Pa55wort`: `grund` ist exakt `MESSAGES.passwort_policy + ' (Das Passwort ist zu kurz.)'`.
 2. Dasselbe für `user.setPassword` (PUT `key=password`, Wert `Pa55wort`) mit 107.
 3. 102 auf `user.create` und 101 auf `user.setQuota`, jeweils mit Servertext `"geheim: xyz"`:
    `grund` ist exakt die gemappte messageId; das Client-Failure hat **kein** `serverText`
