@@ -78,10 +78,14 @@ Vier API-Fakten sind unverifiziert; der Entwurf ist darauf defensiv ausgelegt. K
 |---|---|
 | Username-Generator: Unit-Tests mit allen Regeln und Beispielen aus dem Referenzprojekt, 100 % grün | erfüllt — 186 Tests, Port codepoint-identisch zum Referenzprojekt verifiziert |
 | Batch-Jobs mit gemockter API inkl. Teilfehlern | erfüllt — Lastfall 50 Items / 7 Fehler / 429 / Abbruch, `teilweise`, Einzelfehler bricht nie ab |
-| `npm test` und `npm run lint` grün | erfüllt — 848 Tests, Lint über alle Dateien inkl. `.vue` |
+| `npm test` und `npm run lint` grün | erfüllt — 1018 Tests / 51 Dateien (Stand 2026-10-14), Lint grün |
 | `npm run build` erzeugt lauffähige App unter Linux | erfüllt — AppImage gebaut; Start mit Display vom Nutzer zu bestätigen |
 | Alle Funktionen gegen eine echte Test-Nextcloud manuell durchgespielt | **offen — beim Nutzer**, Checkliste in `docs/MANUAL-TEST.md` |
 
 Bewusst nicht umgesetzt (Nutzerentscheidungen): Batch-Aktion „Einstellungen ändern" (gestrichen),
 persistente Job-Historie (nur Sitzung), E-Mail beim Einzel-Anlegen (Bearbeiten deckt E-Mail ab).
 
+
+## Stand 2026-10-14
+
+Commits `d8064d3` und `ad5983b` („build first version“) entstanden außerhalb des Build-Loops (u. a. `src/shared/systemInfo.js`, `GroupName.vue`, `.github/workflows/appimage.yml`, Änderungen an pipeline/client/ipc) — ohne Spec-Gate und ohne Senior-Review. Tests und Lint grün.
