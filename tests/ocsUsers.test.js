@@ -94,6 +94,14 @@ describe('createUser', () => {
     expect(options.body).not.toContain('groups');
   });
 
+  it('quota "default" wird unverändert als quota=default im Form-Body gesendet', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, { id: 'alice' }) }));
+    const result = await createUser(makeClient(fetchImpl), { userid: 'alice', password: 'x', displayName: 'Alice', quota: 'default' });
+    expect(result.ok).toBe(true);
+    const [, options] = fetchImpl.mock.calls[0];
+    expect(new URLSearchParams(options.body).get('quota')).toBe('default');
+  });
+
   it('OCS-Code 102 -> messageId benutzer_existiert_bereits', async () => {
     const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(102, null) }));
     const result = await createUser(makeClient(fetchImpl), { userid: 'alice', password: 'x', displayName: 'Alice', quota: null });

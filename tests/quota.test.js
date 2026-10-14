@@ -1,7 +1,7 @@
 // S05 A1: every row of the ARCHITECTURE §4 table, plus the relative-ignore test, plus formatBytes.
 // S08 A2: QUOTA_PRESETS and formatQuotaForApi.
 import { describe, expect, it } from 'vitest';
-import { parseQuota, formatBytes, formatPercent, quotaBalkenBreite, QUOTA_PRESETS, formatQuotaForApi } from '../src/shared/quota.js';
+import { parseQuota, formatBytes, formatPercent, quotaBalkenBreite, QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../src/shared/quota.js';
 
 describe('parseQuota — ARCHITECTURE §4 Tabelle', () => {
   it('Objekt mit quota: -3 -> unlimited, used bleibt erhalten', () => {
@@ -119,7 +119,16 @@ describe('QUOTA_PRESETS / formatQuotaForApi — DECISIONS "Kontingent-Eingabe"',
   });
 
   it('formatQuotaForApi(standard) -> "default"', () => {
-    expect(formatQuotaForApi(QUOTA_PRESETS.find((p) => p.id === 'standard'))).toBe('default');
+    expect(formatQuotaForApi(findQuotaPreset('standard'))).toBe('default');
+  });
+
+  it('kein Preset liefert "undefined" oder "NaN" aus formatQuotaForApi', () => {
+    for (const preset of QUOTA_PRESETS) {
+      const api = formatQuotaForApi(preset);
+      expect(api).toEqual(expect.any(String));
+      expect(api).not.toMatch(/undefined|NaN/);
+      expect(api).not.toBe('');
+    }
   });
 
   it('formatQuotaForApi(unbegrenzt) -> "none"', () => {

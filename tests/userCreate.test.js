@@ -56,6 +56,11 @@ describe('buildSingleCreate', () => {
     expect(r.params.quota).toBeNull();
   });
 
+  it('Preset standard -> quota default', () => {
+    const r = buildSingleCreate({ userid: 'a', password: 'pw', displayName: '', groups: [], quotaId: 'standard' });
+    expect(r.params.quota).toBe('default');
+  });
+
   it('Preset unbegrenzt -> quota none', () => {
     const r = buildSingleCreate({ userid: 'a', password: 'pw', displayName: '', groups: [], quotaId: 'unbegrenzt' });
     expect(r.params.quota).toBe('none');

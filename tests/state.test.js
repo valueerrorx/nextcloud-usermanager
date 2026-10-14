@@ -1,13 +1,21 @@
 // resetOnConnect (REVIEW-NOTES [S13] "kein Reset bei Reconnect") - users/groups/jobHistorie/
 // Importvorschau/Auswahl dürfen eine vorherige Instanz nicht überleben. Reines Setzen von
 // ref.value, kein I/O - deshalb hier direkt testbar ohne Electron-/window.api-Mock.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   auswahl, ausgewaehlteGruppe, groups, groupsFehler, groupsLadezustand, importDatei,
   importFehler, importGruppen, importPlanRows, importQuota, importRows,
   importSummary, jobHistorie, resetOnConnect, users, usersFehler, usersFetchedAt,
   usersLadezustand, usersMode, usersUebersprungen,
 } from '../src/renderer/state.js';
+
+describe('importQuota Startwert', () => {
+  it('ist beim frischen Modul-Import "standard"', async () => {
+    vi.resetModules();
+    const frisch = await import('../src/renderer/state.js');
+    expect(frisch.importQuota.value).toBe('standard');
+  });
+});
 
 describe('resetOnConnect', () => {
   it('setzt Userliste, Gruppen, Job-Historie, Importvorschau und Auswahl auf ihre Startwerte zurück', () => {

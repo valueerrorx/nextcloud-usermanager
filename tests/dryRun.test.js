@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planActions, bestaetigungPasst, planToItems, removeJobParams } from '../src/shared/dryRun.js';
 
+import { parseQuota } from '../src/shared/quota.js';
+
 const ADMIN = 'Admin';
 
 function buildUser(overrides = {}) {
@@ -181,6 +183,26 @@ describe('planActions — vorher/nachher nutzen formatBytes für Kontingente', (
     const user = buildUser({ quota: { kind: 'limited', limitBytes: 1073741824, usedBytes: 0, usagePercent: 0, roh: {} } });
     const result = plan({ users: [user], auswahl: [user.userid], action: 'user.setQuota', params: { value: 'none' } });
     expect(result.auszufuehren[0].nachher).toBe('unbegrenzt');
+  });
+});
+
+describe('planActions — user.setQuota mit "default" (Standard-Kontingent)', () => {
+  it('führt für unbegrenzte, begrenzte und unbekannte (quota 0) User aus, Label ohne NaN', () => {
+    const unbegrenzt = buildUser({ userid: 'u1', quota: { kind: 'unlimited', limitBytes: null, usedBytes: 0, usagePercent: 0, roh: {} } });
+    const begrenzt = buildUser({ userid: 'u2' });
+    const unbekannt = buildUser({ userid: 'u3', quota: parseQuota(0) });
+    const result = plan({
+      users: [unbegrenzt, begrenzt, unbekannt],
+      auswahl: ['u1', 'u2', 'u3'],
+      action: 'user.setQuota',
+      params: { value: 'default' },
+    });
+    expect(result.auszufuehren.map((e) => e.userid)).toEqual(['u1', 'u2', 'u3']);
+    expect(result.keineAenderung).toHaveLength(0);
+    for (const eintrag of result.auszufuehren) {
+      expect(eintrag.nachher).toBe('Standard-Kontingent (Server)');
+      expect(JSON.stringify(eintrag)).not.toMatch(/NaN/);
+    }
   });
 });
 

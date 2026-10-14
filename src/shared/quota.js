@@ -82,7 +82,7 @@ export function quotaBalkenBreite(usagePercent) {
 // GiB base 1073741824 (DECISIONS "Kontingent-Eingabe"), only presets, no free-text quota entry.
 const GIB = 1073741824;
 export const QUOTA_PRESETS = Object.freeze([
-  // Nextcloud editUser accepts quota 'default' (UsersController.php, USER_FIELD_QUOTA case, stable33 L1077)
+  // github.com/nextcloud/server/blob/stable33/apps/provisioning_api/lib/Controller/UsersController.php#L1077
   { id: 'standard', label: 'Standard-Kontingent (Server)', apiValue: 'default' },
   { id: '1gb', label: '1 GB', bytes: 1 * GIB },
   { id: '2gb', label: '2 GB', bytes: 2 * GIB },
@@ -92,7 +92,7 @@ export const QUOTA_PRESETS = Object.freeze([
   { id: 'unbegrenzt', label: 'Unbegrenzt', bytes: null },
 ]);
 
-// Bytes as a string for the OCS PUT quota call, or 'none' for unlimited (DECISIONS: "unbegrenzt als none").
+// Bytes as a string for the OCS PUT quota call, 'none' for unlimited (DECISIONS), 'default' for the server standard (apiValue).
 export function formatQuotaForApi(preset) {
   if (preset.apiValue) return preset.apiValue;
   return preset.bytes === null ? 'none' : String(preset.bytes);
