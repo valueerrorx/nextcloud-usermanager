@@ -1,11 +1,7 @@
 // Import-CSV and username-list parsing, Stufen 1-9 of ARCHITECTURE §6. Pure, no I/O.
-// Birthdate parsing (Stufe 8) blocks the row here with its messageId, but the normalized
-// ddmmyyyy value itself is re-derived in importPlan.js (RawRow only carries the raw string;
-// see the step report for why the same pure parseBirthdate is reused in both places).
-import { parseBirthdate } from './birthdate.js';
-
+// CSV columns are Vorname, Nachname, Passwort. The third value is stored as geburtsdatum.
 const MAX_ROWS = 2000;
-const HEADER_FIELDS = ['vorname', 'nachname', 'geburtsdatum'];
+const HEADER_FIELDS = ['vorname', 'nachname', 'passwort'];
 
 function stripBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
@@ -53,9 +49,6 @@ function parseDataLine(line, zeile, delimiter, seen) {
 
   if (vorname === '') return { zeile, vorname, nachname, geburtsdatum, fehler: 'vorname_leer' };
   if (nachname === '') return { zeile, vorname, nachname, geburtsdatum, fehler: 'nachname_leer' };
-
-  const parsedDate = parseBirthdate(geburtsdatum);
-  if (!parsedDate.ok) return { zeile, vorname, nachname, geburtsdatum, fehler: parsedDate.messageId };
 
   // Stufe 9: raw-text duplicate, trimmed + case-insensitive, '|'-separated key (ARCHITECTURE §6).
   // Deliberately NOT normalizeComponent: that would already merge e.g. 'Anna Maria'/'AnnaMaria'

@@ -52,7 +52,7 @@ describe('theme.css Tokens', () => {
 // Farbtokens oben).
 describe('Dashboard stat-*-Klassen (S13, portiert aus Microsoft365-Manager)', () => {
   const erwarteteSelektoren = [
-    '.dashboard-stat-row', '.stat-card', '.stat-card-kicker', '.stat-value',
+    '.dashboard-stat-row', '.stat-card', '.stat-card-head', '.stat-card-kicker', '.stat-value',
     '.stat-card-metrics', '.stat-card-metrics--stack', '.stat-metric', '.stat-metric--row',
     '.stat-metric-label', '.stat-metric-value',
   ];

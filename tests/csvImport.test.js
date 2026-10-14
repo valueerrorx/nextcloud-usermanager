@@ -29,7 +29,7 @@ describe('parseImportCsv — Dateifehler, je eine Fixture (ARCHITECTURE §6)', (
   });
 
   it('weder ; noch , im Header -> header_fehlt (beide Trennzeichen-Zaehler sind 0)', () => {
-    expect(parseImportCsv('Vorname|Nachname|Geburtsdatum\nMax|Mueller|01.01.2000\n')).toEqual({
+    expect(parseImportCsv('Vorname|Nachname|Passwort\nMax|Mueller|01.01.2000\n')).toEqual({
       ok: false,
       rows: [],
       fileError: 'header_fehlt',
@@ -60,21 +60,23 @@ describe('parseImportCsv — Zeilenfehler, je eine Fixture (ARCHITECTURE §6)', 
     expect(result.rows[1].fehler).toBe('nachname_leer');
   });
 
-  it('import-datum-formate.csv: beide Formate gueltig, nicht parsebares Datum -> datum_format', () => {
+  it('import-datum-formate.csv: auch ein freier Text in der Datumsspalte bleibt eine Datenzeile', () => {
     const result = parseImportCsv(fixture('import-datum-formate.csv'));
-    expect(result.rows[0].fehler).toBeUndefined(); // dd.mm.yyyy
-    expect(result.rows[1].fehler).toBeUndefined(); // yyyy-mm-dd
-    expect(result.rows[2].fehler).toBe('datum_format');
+    expect(result.rows[0].fehler).toBeUndefined();
+    expect(result.rows[1].fehler).toBeUndefined();
+    expect(result.rows[2]).toEqual({ zeile: 3, vorname: 'Lea', nachname: 'Klein', geburtsdatum: 'nichtdatum' });
   });
 
-  it('import-datum-ungueltig.csv: 31.04.2010 -> datum_ungueltig', () => {
+  it('import-datum-ungueltig.csv: 31.04.2010 bleibt Rohtext, kein Zeilenfehler', () => {
     const result = parseImportCsv(fixture('import-datum-ungueltig.csv'));
-    expect(result.rows[1].fehler).toBe('datum_ungueltig');
+    expect(result.rows[1].fehler).toBeUndefined();
+    expect(result.rows[1].geburtsdatum).toBe('31.04.2010');
   });
 
-  it('import-datum-zukunft.csv: Datum in der Zukunft -> datum_zukunft', () => {
+  it('import-datum-zukunft.csv: ein zukuenftiges Datum bleibt Rohtext, kein Zeilenfehler', () => {
     const result = parseImportCsv(fixture('import-datum-zukunft.csv'));
-    expect(result.rows[1].fehler).toBe('datum_zukunft');
+    expect(result.rows[1].fehler).toBeUndefined();
+    expect(result.rows[1].geburtsdatum).toBe('01.01.2099');
   });
 
   it('import-doppelzeile.csv: Zeile 2 ist Dublette von Zeile 1 (roh, getrimmt, case-insensitiv) -> doppelzeile, Zeile 3 bleibt fehlerfrei', () => {
@@ -84,15 +86,15 @@ describe('parseImportCsv — Zeilenfehler, je eine Fixture (ARCHITECTURE §6)', 
     expect(result.rows[2].fehler).toBeUndefined();
   });
 
-  it("Stufe 9 vergleicht den Rohtext, nicht normalizeComponent: 'Anna Maria'/'AnnaMaria' bei gleichem Geburtsdatum ist KEINE Dublette", () => {
-    const text = 'Vorname;Nachname;Geburtsdatum\nAnna Maria;Musterfrau;01.01.2000\nAnnaMaria;Musterfrau;01.01.2000\n';
+  it("Stufe 9 vergleicht den Rohtext, nicht normalizeComponent: 'Anna Maria'/'AnnaMaria' bei gleichem Passwort ist KEINE Dublette", () => {
+    const text = 'Vorname;Nachname;Passwort\nAnna Maria;Musterfrau;01.01.2000\nAnnaMaria;Musterfrau;01.01.2000\n';
     const result = parseImportCsv(text);
     expect(result.rows[0].fehler).toBeUndefined();
     expect(result.rows[1].fehler).toBeUndefined();
   });
 
   it("der '|'-Trenner im Dublettenschluessel verhindert eine falsche Verschmelzung ('Ann'+'Amarie' vs 'Anna'+'Marie')", () => {
-    const text = 'Vorname;Nachname;Geburtsdatum\nAnn;Amarie;01.01.2000\nAnna;Marie;01.01.2000\n';
+    const text = 'Vorname;Nachname;Passwort\nAnn;Amarie;01.01.2000\nAnna;Marie;01.01.2000\n';
     const result = parseImportCsv(text);
     expect(result.rows[0].fehler).toBeUndefined();
     expect(result.rows[1].fehler).toBeUndefined();
@@ -132,11 +134,11 @@ describe('parseImportCsv — BOM, CRLF, Trennzeichenerkennung (S09 Abnahme 3)', 
 
 describe('detectDelimiter — haeufigeres Zeichen gewinnt, Gleichstand -> ; (DECISIONS)', () => {
   it("nur ';' vorhanden -> ';'", () => {
-    expect(detectDelimiter('Vorname;Nachname;Geburtsdatum')).toBe(';');
+    expect(detectDelimiter('Vorname;Nachname;Passwort')).toBe(';');
   });
 
   it("nur ',' vorhanden -> ','", () => {
-    expect(detectDelimiter('Vorname,Nachname,Geburtsdatum')).toBe(',');
+    expect(detectDelimiter('Vorname,Nachname,Passwort')).toBe(',');
   });
 
   it("mehr ',' als ';' -> ','", () => {
@@ -156,7 +158,7 @@ describe('detectDelimiter — haeufigeres Zeichen gewinnt, Gleichstand -> ; (DEC
   });
 
   it('weder ; noch , -> null', () => {
-    expect(detectDelimiter('VornameNachnameGeburtsdatum')).toBeNull();
+    expect(detectDelimiter('VornameNachnamePasswort')).toBeNull();
   });
 });
 

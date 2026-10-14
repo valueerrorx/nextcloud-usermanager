@@ -25,9 +25,12 @@ const OPERATIONS = {
   'user.addToGroup': (userid, params) => [
     { name: 'addToGroup', run: (client) => addUserToGroup(client, userid, params.groupid) },
   ],
-  'user.removeFromGroup': (userid, params) => [
-    { name: 'removeFromGroup', run: (client) => removeUserFromGroup(client, userid, params.groupid) },
-  ],
+  'user.removeFromGroup': (userid, params) => gruppenZumEntfernen(userid, params).map((groupid) => ({
+    name: groupid,
+    independent: true,
+    teilfehlerGrund: `Entfernen aus Gruppe "${groupid}" fehlgeschlagen`,
+    run: (client) => removeUserFromGroup(client, userid, groupid),
+  })),
   // S11 A2: user.create is deliberately two-step - POST /cloud/users without groups[], then one
   // addUserToGroup per target group. params.byUserid carries the per-row password/displayName
   // (every item has its own, unlike every other action's shared params); params.groups and
@@ -47,9 +50,8 @@ const OPERATIONS = {
     }
     return steps;
   },
-  // The only other multi-step action: PUT /cloud/users/{userid} takes exactly one key/value pair
-  // (RESEARCH-OCS §2), so changing both fields is two requests. Only the fields present in
-  // params become a step, so changing one field stays single-step.
+  // PUT /cloud/users/{userid} takes exactly one key/value pair (RESEARCH-OCS §2), so changing
+  // both fields is two requests. Only the fields present in params become a step.
   'user.update': (userid, params) => {
     const steps = [];
     if (params.displayname !== undefined) {
@@ -61,6 +63,13 @@ const OPERATIONS = {
     return steps;
   },
 };
+
+// Per-user list when the dialog picked several memberships; a single groupid stays the group view.
+function gruppenZumEntfernen(userid, params) {
+  const proUser = params.groupidsByUserid?.[userid];
+  if (Array.isArray(proUser)) return proUser;
+  return params.groupid ? [params.groupid] : [];
+}
 
 // Throws for an unknown action id - a programming error (A2), never a runtime case that should
 // be reported per-item.

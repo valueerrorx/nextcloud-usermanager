@@ -1,18 +1,16 @@
 // Group endpoints, each function with its OWN local error-code map (ARCHITECTURE §2, REVIEW-NOTES 3).
 import { mapOcsError } from './errors.js';
+import { gruppenAusDetails } from '../../shared/groups.js';
 import { MESSAGES } from '../../shared/messages.js';
 
 // No endpoint-specific codes documented for a plain group listing (RESEARCH-OCS §5).
 const LIST_GROUPS_ERRORS = {};
 
-// GET /cloud/groups -> data.groups is an array of group ids (RESEARCH-OCS V4, verified).
-// Falls back to [] if data.groups is missing or not an array (S10-Review MINOR 1): ImportView
-// renders serverGruppen.length without a guard, so an `undefined` here would throw during render.
+// GET /cloud/groups/details -> { id, displayname }. /cloud/groups returns only the immutable gid.
 export async function listGroups(client) {
-  const result = await client.request({ method: 'GET', path: '/cloud/groups' });
+  const result = await client.request({ method: 'GET', path: '/cloud/groups/details' });
   if (!result.ok) return mapOcsError(result, LIST_GROUPS_ERRORS, 'gruppenliste_fehlgeschlagen');
-  const groups = Array.isArray(result.data?.groups) ? result.data.groups : [];
-  return { ok: true, data: groups, httpStatus: result.httpStatus, versuche: result.versuche };
+  return { ok: true, data: gruppenAusDetails(result.data?.groups), httpStatus: result.httpStatus, versuche: result.versuche };
 }
 
 // Gruppe anlegen (RESEARCH-OCS §5): 101 ungültige Eingabe, 102 Gruppe existiert schon,
@@ -43,6 +41,22 @@ const DELETE_GROUP_ERRORS = {
 export async function deleteGroup(client, groupid) {
   const result = await client.request({ method: 'DELETE', path: `/cloud/groups/${encodeURIComponent(groupid)}` });
   if (!result.ok) return mapOcsError(result, DELETE_GROUP_ERRORS, 'gruppe_loeschen_fehlgeschlagen');
+  return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
+}
+
+// Rename sets displayname only. 101 backend refused, 404 group id does not exist.
+const RENAME_GROUP_ERRORS = {
+  101: 'gruppe_umbenennen_fehlgeschlagen',
+  404: 'gruppe_existiert_nicht',
+};
+
+export async function renameGroup(client, groupid, displayname) {
+  const result = await client.request({
+    method: 'PUT',
+    path: `/cloud/groups/${encodeURIComponent(groupid)}`,
+    form: { key: 'displayname', value: displayname },
+  });
+  if (!result.ok) return mapOcsError(result, RENAME_GROUP_ERRORS, 'gruppe_umbenennen_fehlgeschlagen');
   return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
 }
 

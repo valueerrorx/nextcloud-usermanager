@@ -7,17 +7,20 @@ import Swal from 'sweetalert2';
 import { MESSAGES } from '../../shared/messages.js';
 import { parseImportCsv } from '../../shared/csvImport.js';
 import { buildImportPlan } from '../../shared/importPlan.js';
-import { validatePrefix, beispielPasswort } from '../../shared/password.js';
+import { beispielPasswort } from '../../shared/password.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import { anzahlAnzulegen, buildCreateUserItems, dateiName, serverUserIds } from '../../shared/importView.js';
+import { plainGroupIds } from '../../shared/groups.js';
+import { describeError } from '../../shared/logSafe.js';
 import { pushJobHistorie } from '../../shared/dashboard.js';
 import { ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
   importDatei, importRows, importPlanRows, importSummary, importPrefix, importOrder,
   importGruppen, importQuota, importFehler, users, usersLadezustand, usersFehler,
   groups, groupsLadezustand, groupsFehler,
-  jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
+  jobId, jobLaeuft, jobQuelle, jobFortschritt, jobResults, jobSummary, jobHistorie,
 } from '../state.js';
+import GroupName from '../components/GroupName.vue';
 import StateBlock from '../components/StateBlock.vue';
 import JobProgress from '../components/JobProgress.vue';
 
@@ -101,12 +104,7 @@ async function onDateiWaehlen() {
 }
 
 // ---- Schritt 2: Optionen ----
-const prefixValidierung = computed(() => validatePrefix(importPrefix.value));
-const prefixFehlertext = computed(() => (
-  prefixValidierung.value.ok ? null : MESSAGES[prefixValidierung.value.messageId]
-));
-// Live-Beispiel über dieselbe Funktion wie das echte Initialpasswort (ARCHITECTURE §4.1) - keine
-// eigene Formatierung hier.
+// Live-Beispiel über dieselbe Funktion wie das echte Initialpasswort (ARCHITECTURE §4.1).
 const passwortBeispiel = computed(() => beispielPasswort(importPrefix.value));
 
 function istGruppeAusgewaehlt(groupId) {
@@ -158,7 +156,7 @@ const serverUserIdListe = computed(() => serverUserIds(users.value));
 // CRITICAL-Fix S10-Review: ohne userlisteBereit würde die Vorschau auch mit einer leeren,
 // nicht nachgeladenen Liste gerechnet - der Kollisionscheck (Stufe 13) wäre damit lautlos aus.
 const vorschauMoeglich = computed(() => (
-  importRows.value.length > 0 && prefixValidierung.value.ok && userlisteBereit.value
+  importRows.value.length > 0 && userlisteBereit.value
 ));
 
 // Einzige Stelle, die buildImportPlan aufruft - keine neue Importlogik (S10 spec).
@@ -184,7 +182,7 @@ function fehlertext(zeile) {
 // ---- Schritt 4: Anlegen ----
 const anzahlAnzulegenWert = computed(() => anzahlAnzulegen(importSummary.value));
 const anlegenDisabled = computed(() => (
-  !prefixValidierung.value.ok || !userlisteBereit.value || anzahlAnzulegenWert.value === 0
+  !userlisteBereit.value || anzahlAnzulegenWert.value === 0
 ));
 
 // S11 B1: erst Bestätigung mit der Anzahl (keine Zahleneingabe, das ist nur beim Löschen), dann
@@ -204,12 +202,13 @@ async function onAnlegen() {
   const quotaPreset = importQuota.value ? findQuotaPreset(importQuota.value) : null;
   const params = {
     byUserid,
-    groups: importGruppen.value,
+    groups: plainGroupIds(importGruppen.value),
     quota: quotaPreset ? formatQuotaForApi(quotaPreset) : null,
   };
 
   const neueJobId = `job-${Date.now()}`;
   jobId.value = neueJobId;
+  jobQuelle.value = 'import';
   jobLaeuft.value = true;
   jobFortschritt.value = { done: 0, total: items.length };
   jobResults.value = [];
@@ -231,7 +230,11 @@ async function onAnlegen() {
     }
   } catch (error) {
     console.error('Import-Job fehlgeschlagen:', error);
-    await Swal.fire({ title: 'Fehler', text: MESSAGES.unerwarteter_serverfehler, icon: 'error' });
+    await Swal.fire({
+      title: 'Fehler',
+      text: `${MESSAGES.unerwarteter_serverfehler} (${describeError(error)})`,
+      icon: 'error',
+    });
   } finally {
     jobLaeuft.value = false;
     // Die angelegten User fehlen sonst in der Tabelle (S11 B3).
@@ -268,6 +271,11 @@ async function onAnlegen() {
         />
         CSV wählen
       </button>
+      <p class="notice">
+        Spalten: <span class="mono">Vorname</span>, <span class="mono">Nachname</span>, <span class="mono">Passwort</span>.
+        Beispiel: <span class="mono">Max;Mueller;01012000</span>
+        (Semikolon oder Komma).
+      </p>
       <p
         v-if="importDatei"
         class="notice"
@@ -305,14 +313,8 @@ async function onAnlegen() {
           v-model="importPrefix"
           type="text"
           class="form-control"
-          placeholder="z. B. Schule"
+          placeholder="optional, z. B. Schule"
         >
-        <p
-          v-if="prefixFehlertext"
-          class="text-danger"
-        >
-          {{ prefixFehlertext }}
-        </p>
         <p class="notice">
           Beispiel: <span class="mono">{{ passwortBeispiel }}</span>
         </p>
@@ -355,16 +357,20 @@ async function onAnlegen() {
         >
           <label
             v-for="gruppe in groups"
-            :key="gruppe"
+            :key="gruppe.id"
             class="form-check gruppen-eintrag"
           >
             <input
               type="checkbox"
               class="form-check-input"
-              :checked="istGruppeAusgewaehlt(gruppe)"
-              @change="onGruppeToggle(gruppe)"
+              :checked="istGruppeAusgewaehlt(gruppe.id)"
+              @change="onGruppeToggle(gruppe.id)"
             >
-            <span class="form-check-label">{{ gruppe }}</span>
+            <GroupName
+              :id="gruppe.id"
+              :name="gruppe.displayname"
+              class="form-check-label"
+            />
           </label>
           <p
             v-if="groups.length === 0"
@@ -433,12 +439,6 @@ async function onAnlegen() {
         :fehlermeldung="usersFehler ?? ''"
         @retry="ladeUserliste"
       />
-      <p
-        v-else-if="!prefixValidierung.ok"
-        class="notice"
-      >
-        Bitte Passwort-Prefix eingeben.
-      </p>
       <div
         v-else
         class="table-usermanager-wrap"
@@ -449,7 +449,7 @@ async function onAnlegen() {
               <th>Zeile</th>
               <th>Vorname</th>
               <th>Nachname</th>
-              <th>Geburtsdatum</th>
+              <th>Passwort</th>
               <th>Username</th>
               <th>Status</th>
               <th>Begründung</th>
@@ -507,7 +507,10 @@ async function onAnlegen() {
     </div>
   </div>
 
-  <JobProgress :import-plan-rows="importPlanRows" />
+  <JobProgress
+    quelle="import"
+    :import-plan-rows="importPlanRows"
+  />
 </template>
 
 <style scoped>

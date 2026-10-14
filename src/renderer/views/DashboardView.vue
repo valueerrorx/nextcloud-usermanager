@@ -9,14 +9,14 @@
 // wenn sie noch leer sind, und blockiert bis dahin mit StateBlock statt mit Null-Kacheln.
 import { computed, onMounted } from 'vue';
 import { MESSAGES } from '../../shared/messages.js';
-import { formatPercent } from '../../shared/quota.js';
 import { formatTimestamp } from '../../shared/time.js';
-import { dashboardCards, fastVollListe, historyCounts } from '../../shared/dashboard.js';
+import { dashboardCards, historyCounts } from '../../shared/dashboard.js';
+import { systemZeilen } from '../../shared/systemInfo.js';
 import { nextcloudLink } from '../../shared/externalUrl.js';
 import { toastError } from '../toast.js';
 import { ladeFreiplatz, ladeGruppen, ladeUserliste } from '../loaders.js';
 import {
-  activeView, connection, filterGruppe, filterQuotaStufe, filterStatus, filterSuche, groups, groupsFehler,
+  activeView, connection, groups, groupsFehler,
   groupsLadezustand, freiplatz, jobHistorie, users, usersFehler, usersFetchedAt, usersLadezustand,
   usersUebersprungen,
 } from '../state.js';
@@ -44,12 +44,8 @@ const kombinierteFehlermeldung = computed(() => usersFehler.value ?? groupsFehle
 
 const karten = computed(() => dashboardCards({ users: users.value, groupCount: groups.value.length, freiplatz: freiplatz.value }));
 const serverLink = computed(() => nextcloudLink(connection.baseUrl));
-const fastVoll = computed(() => fastVollListe(users.value));
+const system = computed(() => systemZeilen(freiplatz.value?.system));
 
-// Optional (Step-Spec: "wenn es ohne Berechnung in der .vue nicht geht, weglassen") - hier geht
-// es ohne Berechnung: einfache Zuweisungen auf bestehende state.js-Felder. Die drei anderen Filter
-// werden zuerst zurückgesetzt (REVIEW-NOTES MINOR, S13-Review) - sonst kann ein stehender Filter
-// (z. B. "nur deaktiviert") den gerade angeklickten User in der Usertabelle unsichtbar machen.
 function zuAnsicht(ansicht) {
   activeView.value = ansicht;
 }
@@ -64,13 +60,6 @@ async function nextcloudOeffnen() {
   }
 }
 
-function zuBenutzerWechseln(userid) {
-  filterGruppe.value = null;
-  filterStatus.value = 'alle';
-  filterQuotaStufe.value = null;
-  filterSuche.value = userid;
-  activeView.value = 'users';
-}
 </script>
 
 <template>
@@ -109,18 +98,20 @@ function zuBenutzerWechseln(userid) {
         class="col"
       >
         <div class="stat-card stat-card-rich">
-          <div
-            class="stat-icon"
-            :style="karte.iconStyle"
-          >
-            <i
-              class="bi"
-              :class="karte.icon"
-              aria-hidden="true"
-            />
-          </div>
-          <div class="stat-card-kicker">
-            {{ karte.kicker }}
+          <div class="stat-card-head">
+            <div
+              class="stat-icon"
+              :style="karte.iconStyle"
+            >
+              <i
+                class="bi"
+                :class="karte.icon"
+                aria-hidden="true"
+              />
+            </div>
+            <div class="stat-card-kicker">
+              {{ karte.kicker }}
+            </div>
           </div>
           <div class="stat-value stat-value-lg">
             {{ karte.wert }}
@@ -130,7 +121,7 @@ function zuBenutzerWechseln(userid) {
           </div>
           <div
             v-if="karte.metrics.length > 0"
-            class="stat-card-metrics stat-card-metrics--stack mt-3"
+            class="stat-card-metrics stat-card-metrics--stack"
           >
             <div
               v-for="metrik in karte.metrics"
@@ -180,7 +171,7 @@ function zuBenutzerWechseln(userid) {
                 class="bi bi-people-fill"
                 aria-hidden="true"
               /></span>
-              Zu Benutzern
+              Benutzer
               <i
                 class="bi bi-chevron-right quick-link-end"
                 aria-hidden="true"
@@ -195,7 +186,7 @@ function zuBenutzerWechseln(userid) {
                 class="bi bi-collection-fill"
                 aria-hidden="true"
               /></span>
-              Zu Gruppen
+              Gruppen
               <i
                 class="bi bi-chevron-right quick-link-end"
                 aria-hidden="true"
@@ -239,53 +230,31 @@ function zuBenutzerWechseln(userid) {
       <div class="col-12 col-xl-8">
         <div class="content-card h-100">
           <div class="content-card-header">
-            <span>Fast voll (&gt; 90 %)</span>
+            <span>System</span>
           </div>
           <div class="content-card-body">
-            <div
-              v-if="fastVoll.eintraege.length === 0"
-              class="empty-state"
-            >
-              <i
-                class="bi bi-check-circle"
-                aria-hidden="true"
-              />
-              Kein Benutzer über 90 % Kontingent
-            </div>
-            <template v-else>
-              <div class="table-usermanager-wrap">
-                <table class="table-usermanager">
-                  <thead>
-                    <tr>
-                      <th>Benutzer</th>
-                      <th>Belegung</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="eintrag in fastVoll.eintraege"
-                      :key="eintrag.userid"
-                      class="fast-voll-zeile"
-                      tabindex="0"
-                      role="button"
-                      :aria-label="`Zu Benutzer ${eintrag.displayname} wechseln`"
-                      @click="zuBenutzerWechseln(eintrag.userid)"
-                      @keydown.enter="zuBenutzerWechseln(eintrag.userid)"
-                      @keydown.space.prevent="zuBenutzerWechseln(eintrag.userid)"
-                    >
-                      <td>{{ eintrag.displayname }} ({{ eintrag.userid }})</td>
-                      <td>{{ formatPercent(eintrag.quota.usagePercent) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p
-                v-if="fastVoll.weitere > 0"
-                class="notice"
+            <div class="system-grid">
+              <div
+                v-for="zeile in system"
+                :key="zeile.label"
+                class="system-row"
               >
-                und {{ fastVoll.weitere }} weitere
-              </p>
-            </template>
+                <span
+                  class="system-icon"
+                  :class="`ton-${zeile.ton}`"
+                >
+                  <i
+                    class="bi"
+                    :class="zeile.icon"
+                    aria-hidden="true"
+                  />
+                </span>
+                <span class="system-copy">
+                  <span class="system-label">{{ zeile.label }}</span>
+                  <span class="system-value">{{ zeile.wert }}</span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -345,12 +314,63 @@ function zuBenutzerWechseln(userid) {
   margin: 0.5rem 0 0;
 }
 
-.fast-voll-zeile {
-  cursor: pointer;
+.system-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
 }
 
-.fast-voll-zeile:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+.system-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.system-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.system-icon.ton-host { background: rgba(88, 166, 255, 0.12); color: #58a6ff; }
+.system-icon.ton-ip { background: rgba(86, 212, 221, 0.12); color: #56d4dd; }
+.system-icon.ton-cpu { background: rgba(163, 113, 247, 0.12); color: #a371f7; }
+.system-icon.ton-ram { background: rgba(210, 153, 34, 0.12); color: #d29922; }
+.system-icon.ton-disk { background: rgba(63, 185, 80, 0.12); color: #3fb950; }
+.system-icon.ton-os { background: rgba(88, 166, 255, 0.12); color: #79c0ff; }
+.system-icon.ton-zeit { background: rgba(248, 81, 73, 0.12); color: #f85149; }
+.system-icon.ton-user { background: rgba(163, 113, 247, 0.12); color: #d2a8ff; }
+
+.system-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.system-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.system-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .system-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>

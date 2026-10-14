@@ -212,6 +212,7 @@ describe('src/preload/index.cjs', () => {
       'groupsList',
       'groupsCreate',
       'groupsDelete',
+      'groupsRename',
       'groupsMembers',
       'serverFreeSpace',
       'filesOpenCsv',
@@ -311,6 +312,13 @@ describe('src/preload/index.cjs', () => {
   });
 
   // S12 A3: groupsDelete fehlte noch im Routing-Test, analog zu groupsCreate oben.
+  it('groupsRename() leitet das Argument unverändert an den Kanal groups.rename weiter', async () => {
+    const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
+    const args = { groupid: '2026-1C', displayname: 'Klasse 1C' };
+    await exposedApi.groupsRename(args);
+    expect(invokeCalls).toEqual([{ channel: 'groups.rename', args: [args] }]);
+  });
+
   it('groupsDelete() leitet das Argument unverändert an den Kanal groups.delete weiter', async () => {
     const { exposedApi, invokeCalls } = loadPreloadWithStubbedElectron();
     const args = { groupid: 'alte-gruppe' };

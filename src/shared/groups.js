@@ -5,16 +5,52 @@
 
 const ADMIN_GROUP = 'admin';
 
-// groupIds in Server-Reihenfolge (aus groups.list), kein eigenes Sortieren hier. Vergleich exakt,
-// nicht case-insensitiv (REVIEW-NOTES [S08]): Gruppennamen sind in Nextcloud eigenständige IDs,
-// ein User in 'Lehrer' zählt nicht für 'lehrer'. Gruppen ohne Mitglieder bleiben mit
-// memberCount: 0 enthalten, werden nicht herausgefiltert.
-export function groupViews(users, groupIds) {
-  return groupIds.map((id) => ({
-    id,
-    memberCount: users.filter((u) => u.groups.includes(id)).length,
-    istAdmin: id === ADMIN_GROUP,
+// Details payload is { id, displayname }; a blank displayname is the gid (Nextcloud getDisplayName).
+export function gruppenAusDetails(eintraege) {
+  if (!Array.isArray(eintraege)) return [];
+  const result = [];
+  for (const eintrag of eintraege) {
+    if (!eintrag || typeof eintrag !== 'object' || typeof eintrag.id !== 'string' || eintrag.id === '') continue;
+    const name = typeof eintrag.displayname === 'string' ? eintrag.displayname.trim() : '';
+    result.push({ id: eintrag.id, displayname: name || eintrag.id });
+  }
+  return result;
+}
+
+// Catalog lookup for user.groups, which stays a list of gids. Unknown id stays the id.
+export function gruppenAnzeigename(katalog, id) {
+  const treffer = (katalog ?? []).find((g) => g.id === id);
+  const name = typeof treffer?.displayname === 'string' ? treffer.displayname.trim() : '';
+  return name || id;
+}
+
+// One-line label for native selects and dry-run text, where a second line cannot be rendered.
+export function gruppenKurztext(katalog, id) {
+  const name = gruppenAnzeigename(katalog, id);
+  return name === id ? name : `${name} (${id})`;
+}
+
+// Server order, no extra sort. Membership matches the gid exactly: 'Lehrer' does not count for 'lehrer'.
+export function groupViews(users, groups) {
+  return groups.map((group) => ({
+    id: group.id,
+    displayname: group.displayname,
+    memberCount: users.filter((u) => u.groups.includes(group.id)).length,
+    istAdmin: group.id === ADMIN_GROUP,
   }));
+}
+
+// Case-insensitive substring on displayname and id. status limits the protected admin group.
+export function filterGroups(gruppen, { suche = '', status = 'alle' } = {}) {
+  const query = String(suche ?? '').trim().toLowerCase();
+  return (gruppen ?? []).filter((g) => {
+    if (query !== '' && ![g.id, g.displayname].some((feld) => String(feld ?? '').toLowerCase().includes(query))) {
+      return false;
+    }
+    if (status === 'geschuetzt' && !g.istAdmin) return false;
+    if (status === 'nichtGeschuetzt' && g.istAdmin) return false;
+    return true;
+  });
 }
 
 // Mitglieder einer Gruppe, alphabetisch (deutsch) nach Anzeigename - leere Gruppe liefert [].
@@ -37,6 +73,11 @@ export function nichtMitgliederVon(users, groupId) {
 // Aufrufer umgehbar. Datensicherheitsgrenze, daher Mutationsbeweis im Schrittbericht.
 export function istGruppeLoeschbar(groupId) {
   return groupId !== ADMIN_GROUP;
+}
+
+// IPC structured clone rejects Vue proxies, so group ids cross the boundary as a plain array.
+export function plainGroupIds(groups) {
+  return Array.from(groups ?? []);
 }
 
 // Plan for deleting a group together with its members (S18). Members whose ONLY group is `gid`

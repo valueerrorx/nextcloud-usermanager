@@ -3,21 +3,21 @@
 // the group itself is deleted only if every user deletion succeeded. Resolves true if the group is gone.
 import Swal from 'sweetalert2';
 import { planActions } from '../shared/dryRun.js';
-import { planGruppeMitMitgliedern, entscheideGruppeLoeschen, gruppeNichtGeloeschtText } from '../shared/groups.js';
+import { gruppenAnzeigename, gruppenKurztext, planGruppeMitMitgliedern, entscheideGruppeLoeschen, gruppeNichtGeloeschtText } from '../shared/groups.js';
 import { MESSAGES } from '../shared/messages.js';
-import { confirmDelete, escapeHtml, listeHtml, startJob, VORSCHAU_DIALOG } from './jobRunner.js';
+import { confirmDelete, escapeHtml, groupNameHtml, listeHtml, startJob, VORSCHAU_DIALOG } from './jobRunner.js';
 import { ladeUserliste } from './loaders.js';
-import { connection, dryRunPlan, jobLaeuft, users } from './state.js';
+import { connection, dryRunPlan, groups, jobLaeuft, users } from './state.js';
 
 function bleibtZeile(eintrag) {
   const grund = eintrag.andereGruppen.length > 0
-    ? `andere Gruppen: ${eintrag.andereGruppen.map(escapeHtml).join(', ')}`
+    ? `andere Gruppen: ${eintrag.andereGruppen.map((id) => escapeHtml(gruppenKurztext(groups.value, id))).join(', ')}`
     : 'verbundener Admin';
   return `${escapeHtml(eintrag.userid)} (${grund})`;
 }
 
 function kontextHtml(gid, bleiben) {
-  return `<p>Gruppe <strong>${escapeHtml(gid)}</strong> wird gelöscht.</p>
+  return `<p>Gruppe ${groupNameHtml(gruppenAnzeigename(groups.value, gid), gid)} wird gelöscht.</p>
     <div class="vorschau"><div class="vorschau-titel">Bleibt <span class="vorschau-anzahl">${bleiben.length}</span></div>${listeHtml(bleiben, bleibtZeile)}</div>`;
 }
 
@@ -78,7 +78,7 @@ export async function loescheGruppeMitMitgliedern(gid) {
     if (!(await confirmDelete(plan, kontextHtml(gid, bleiben)))) return false;
 
     dryRunPlan.value = plan;
-    const results = await startJob(plan, 'user.delete', {});
+    const results = await startJob(plan, 'user.delete', {}, 'groups');
     const entscheidung = entscheideGruppeLoeschen({ erwartet: zuLoeschen.length, results });
     if (!entscheidung.loeschen) {
       await Swal.fire({ title: 'Gruppe nicht gelöscht', text: gruppeNichtGeloeschtText(entscheidung.nichtGeloescht), icon: 'warning' });

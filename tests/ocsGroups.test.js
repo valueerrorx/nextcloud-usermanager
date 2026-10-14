@@ -2,8 +2,8 @@
 // (RESEARCH-OCS §5, V4).
 import { describe, expect, it, vi } from 'vitest';
 import { createOcsClient } from '../src/main/ocs/client.js';
-import { listGroups, createGroup, deleteGroup, getGroupMembers } from '../src/main/ocs/groups.js';
-import { getServerInfo } from '../src/main/ocs/serverInfo.js';
+import { listGroups, createGroup, deleteGroup, renameGroup, getGroupMembers } from '../src/main/ocs/groups.js';
+import { getServerInfo, resolveExternalIp } from '../src/main/ocs/serverInfo.js';
 
 function fakeResponse({ status = 200, body = '' } = {}) {
   return { status, text: async () => body };
@@ -18,11 +18,22 @@ function makeClient(fetchImpl) {
 }
 
 describe('listGroups', () => {
-  it('liefert data.groups als Array (RESEARCH-OCS V4)', async () => {
-    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, { groups: ['admins', '2026-1C'] }) }));
+  it('holt /cloud/groups/details und liefert id plus displayname', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({
+      body: envelope(100, { groups: [
+        { id: '2026-1C', displayname: 'Klasse 1C', usercount: 4 },
+        { id: 'admins', displayname: 'admins' },
+      ] }),
+    }));
     const result = await listGroups(makeClient(fetchImpl));
-    expect(result).toMatchObject({ ok: true, data: ['admins', '2026-1C'] });
-    expect(fetchImpl.mock.calls[0][0]).toContain('/cloud/groups');
+    expect(result).toMatchObject({
+      ok: true,
+      data: [
+        { id: '2026-1C', displayname: 'Klasse 1C' },
+        { id: 'admins', displayname: 'admins' },
+      ],
+    });
+    expect(fetchImpl.mock.calls[0][0]).toContain('/cloud/groups/details');
     expect(fetchImpl.mock.calls[0][1].method).toBe('GET');
   });
 
@@ -123,6 +134,30 @@ describe('deleteGroup', () => {
   });
 });
 
+describe('renameGroup', () => {
+  it('PUT /cloud/groups/{groupid} mit key=displayname', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, null) }));
+    const result = await renameGroup(makeClient(fetchImpl), 'Jahr 2026/1C', 'Klasse 1C');
+    expect(result.ok).toBe(true);
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toContain(`/cloud/groups/${encodeURIComponent('Jahr 2026/1C')}`);
+    expect(options.method).toBe('PUT');
+    expect(options.body).toBe(`key=displayname&value=${encodeURIComponent('Klasse 1C').replace(/%20/g, '+')}`);
+  });
+
+  it('OCS-Code 101 -> messageId gruppe_umbenennen_fehlgeschlagen', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(101, null) }));
+    const result = await renameGroup(makeClient(fetchImpl), 'admins', 'Team');
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_umbenennen_fehlgeschlagen' });
+  });
+
+  it('OCS-Code 404 -> messageId gruppe_existiert_nicht', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(404, null) }));
+    const result = await renameGroup(makeClient(fetchImpl), 'weg', 'Neu');
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_existiert_nicht' });
+  });
+});
+
 describe('getGroupMembers (S18)', () => {
   it('GET /cloud/groups/{gid} (kodiert) -> data.users', async () => {
     const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(100, { users: ['a', 'b'] }) }));
@@ -165,6 +200,55 @@ describe('getServerInfo (S18)', () => {
   it('freespace als String -> freeBytes null', async () => {
     const f = vi.fn(async () => fakeResponse({ body: envelope(100, { nextcloud: { system: { freespace: '42' } } }) }));
     expect((await getServerInfo(makeClient(f))).data.freeBytes).toBeNull();
+  });
+
+  it('liest Betriebszeit, aktive Benutzer und die Systemseite', async () => {
+    const html = `<div class="server-info-wrapper"><h2><img> cloud.example</h2>
+      <table><tr><td class="info">Linux 6.1</td></tr>
+      <tr><td class="info">Intel Xeon</strong> (4 Threads)</td></tr></table>
+      <span id="servertime"></span>
+      <div class="disk-status"><div class="diskinfo-container">
+        <span class="info">/</span><span class="info">ext4</span>
+        <span class="info">10.00 GB</span><span class="info">4.00 GB</span>
+      </div></div>
+      <div class="section network-infos"><h3>lo</h3><span class="info">127.0.0.1</span>
+      <h3>eth0</h3>IPv4: <span class="info">10.0.0.8, 198.51.100.20</span> IPv6: <span class="info">fe80::1</span>
+      <div class="active-users-wrapper"></div></div></div>`;
+    const fetchImpl = vi.fn(async (url) => {
+      if (String(url).includes('/api/v1/basicdata')) {
+        return fakeResponse({ body: envelope(100, { uptime: '2 days, 1 hours, 0 minutes, 9 seconds' }) });
+      }
+      if (String(url).includes('/settings/admin/serverinfo')) return fakeResponse({ body: html });
+      return fakeResponse({ body: envelope(100, {
+        nextcloud: { system: { freespace: 42, mem_total: 1024 * 1024, cpunum: 4 } },
+        activeUsers: { last24hours: 3, last7days: 9 },
+      }) });
+    });
+    const result = await getServerInfo(makeClient(fetchImpl));
+    expect(result.data.freeBytes).toBe(42);
+    expect(result.data.system).toMatchObject({
+      hostname: 'cloud.example',
+      betriebssystem: 'Linux 6.1',
+      prozessor: 'Intel Xeon (4 Threads)',
+      ramBytes: 1024 ** 3,
+      uptime: '2 Tage, 1 Stunde, 0 Minuten',
+      ip: '198.51.100.20',
+      diskMount: '/',
+      diskFreeBytes: Math.round(4 * 1024 ** 3),
+      diskTotalBytes: Math.round(10 * 1024 ** 3),
+      aktiv24h: 3,
+      aktiv7d: 9,
+    });
+    expect(fetchImpl.mock.calls.some((call) => String(call[0]).includes('/index.php/settings/admin/serverinfo'))).toBe(true);
+  });
+
+  it('resolveExternalIp lässt private Antworten und Hostnamen ohne Punkt weg', async () => {
+    const lookupImpl = vi.fn(async () => ({ address: '203.0.113.5' }));
+    expect(await resolveExternalIp('https://cloud.example', lookupImpl)).toBe('203.0.113.5');
+    lookupImpl.mockResolvedValue({ address: '10.1.1.1' });
+    expect(await resolveExternalIp('https://cloud.example', lookupImpl)).toBeNull();
+    expect(await resolveExternalIp('https://host', lookupImpl)).toBeNull();
+    expect(lookupImpl).toHaveBeenCalledTimes(2);
   });
 
   it('HTTP 401 / 404 mit HTML -> Fehlerresult', async () => {

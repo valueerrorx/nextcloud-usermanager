@@ -5,8 +5,8 @@ import { describeError } from '../shared/logSafe.js';
 import { isAllowedExternalUrl } from '../shared/externalUrl.js';
 import { checkConnection } from './ocs/connection.js';
 import { fetchAllUsers } from './ocs/userList.js';
-import { listGroups, createGroup, deleteGroup, getGroupMembers } from './ocs/groups.js';
-import { getServerInfo } from './ocs/serverInfo.js';
+import { listGroups, createGroup, deleteGroup, renameGroup, getGroupMembers } from './ocs/groups.js';
+import { getServerInfo, resolveExternalIp } from './ocs/serverInfo.js';
 import { istGruppeLoeschbar } from '../shared/groups.js';
 import { runJob } from './actions/pipeline.js';
 import { session } from './session.js';
@@ -254,8 +254,13 @@ async function handleActionsRun(args) {
       session.clearStopFlag(jobId);
     }
   } catch (error) {
-    console.error('actions.run failed:', describeError(error));
-    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+    const detail = describeError(error, [session.appPassword]);
+    console.error('actions.run failed:', detail);
+    return {
+      ok: false,
+      messageId: 'unerwarteter_serverfehler',
+      message: `${MESSAGES.unerwarteter_serverfehler} (${detail})`,
+    };
   }
 }
 
@@ -323,6 +328,26 @@ async function handleGroupsDelete(args) {
   }
 }
 
+// groups.rename changes the display name. The gid in the path stays the membership key.
+async function handleGroupsRename(args) {
+  try {
+    const { groupid, displayname } = args;
+    if (!session.connected) {
+      return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
+    }
+    const name = typeof displayname === 'string' ? displayname.trim() : '';
+    if (!groupid || groupid.trim() === '' || name === '') {
+      return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
+    }
+    const result = await renameGroup(session.client, groupid, name);
+    if (!result.ok) return result;
+    return { ok: true };
+  } catch (error) {
+    console.error('groups.rename failed:', describeError(error));
+    return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
+  }
+}
+
 // groups.members (S18): fresh member list of one group; never throws (destructuring inside try).
 async function handleGroupsMembers(args) {
   try {
@@ -350,7 +375,8 @@ async function handleServerFreeSpace() {
     }
     const result = await getServerInfo(session.client);
     if (!result.ok) return result;
-    return { ok: true, freeBytes: result.data.freeBytes };
+    const ip = await resolveExternalIp(session.baseUrl) ?? result.data.system.ip;
+    return { ok: true, freeBytes: result.data.freeBytes, system: { ...result.data.system, ip } };
   } catch (error) {
     console.error('server.freeSpace failed:', describeError(error));
     return { ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler };
@@ -390,6 +416,7 @@ export function registerIpcHandlers() {
   ipcMain.handle('groups.list', () => handleGroupsList());
   ipcMain.handle('groups.create', (event, args) => handleGroupsCreate(args));
   ipcMain.handle('groups.delete', (event, args) => handleGroupsDelete(args));
+  ipcMain.handle('groups.rename', (event, args) => handleGroupsRename(args));
   ipcMain.handle('groups.members', (event, args) => handleGroupsMembers(args));
   ipcMain.handle('server.freeSpace', () => handleServerFreeSpace());
   ipcMain.handle('files.saveCsv', (event, args) => saveCsv(args));

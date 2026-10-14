@@ -2,6 +2,7 @@
 // issues no request at all. Self-protection and no-op detection live here so batch and single-user
 // actions inherit the same rules.
 import { formatBytes } from './quota.js';
+import { gruppenKurztext } from './groups.js';
 
 // Self-protection applies only to delete and disable (DECISIONS "Selbstschutz") - user.enable
 // may still target the connected admin.
@@ -22,8 +23,8 @@ function enabledLabel(enabled) {
   return enabled ? 'aktiv' : 'deaktiviert';
 }
 
-function groupsLabel(groups) {
-  return groups.length > 0 ? groups.join(', ') : 'keine Gruppen';
+function groupsLabel(groupIds, katalog) {
+  return groupIds.length > 0 ? groupIds.map((id) => gruppenKurztext(katalog, id)).join(', ') : 'keine Gruppen';
 }
 
 function quotaLabel(quota) {
@@ -46,6 +47,11 @@ function isUpdateNoOp(user, params) {
   return !displaynameChanged && !emailChanged;
 }
 
+function zielGruppen(params) {
+  if (Array.isArray(params.groupids)) return params.groupids;
+  return params.groupid ? [params.groupid] : [];
+}
+
 function isNoOp(action, user, params) {
   switch (action) {
     case 'user.enable':
@@ -55,7 +61,7 @@ function isNoOp(action, user, params) {
     case 'user.addToGroup':
       return user.groups.includes(params.groupid);
     case 'user.removeFromGroup':
-      return !user.groups.includes(params.groupid);
+      return !zielGruppen(params).some((id) => user.groups.includes(id));
     case 'user.setQuota':
       return isQuotaNoOp(user, params.value);
     case 'user.update':
@@ -65,16 +71,18 @@ function isNoOp(action, user, params) {
   }
 }
 
-function buildDisplay(action, user, params) {
+function buildDisplay(action, user, params, katalog) {
   switch (action) {
     case 'user.enable':
       return { vorher: enabledLabel(user.enabled), nachher: enabledLabel(true) };
     case 'user.disable':
       return { vorher: enabledLabel(user.enabled), nachher: enabledLabel(false) };
     case 'user.addToGroup':
-      return { vorher: groupsLabel(user.groups), nachher: groupsLabel([...user.groups, params.groupid]) };
-    case 'user.removeFromGroup':
-      return { vorher: groupsLabel(user.groups), nachher: groupsLabel(user.groups.filter((g) => g !== params.groupid)) };
+      return { vorher: groupsLabel(user.groups, katalog), nachher: groupsLabel([...user.groups, params.groupid], katalog) };
+    case 'user.removeFromGroup': {
+      const weg = new Set(zielGruppen(params));
+      return { vorher: groupsLabel(user.groups, katalog), nachher: groupsLabel(user.groups.filter((g) => !weg.has(g)), katalog) };
+    }
     case 'user.setQuota':
       return { vorher: quotaLabel(user.quota), nachher: quotaLabelFromValue(params.value) };
     case 'user.update': {
@@ -99,7 +107,7 @@ function buildDisplay(action, user, params) {
   }
 }
 
-export function planActions({ users, auswahl, action, params, adminUserId }) {
+export function planActions({ users, auswahl, action, params, adminUserId, gruppen = [] }) {
   const auszufuehren = [];
   const keineAenderung = [];
   const ausgeschlossen = [];
@@ -127,7 +135,7 @@ export function planActions({ users, auswahl, action, params, adminUserId }) {
       continue;
     }
 
-    const { vorher, nachher } = buildDisplay(action, user, params);
+    const { vorher, nachher } = buildDisplay(action, user, params, gruppen);
 
     if (isNoOp(action, user, params)) {
       keineAenderung.push({ userid: user.userid, vorher, nachher, grund: NO_OP_REASONS[action] });
@@ -150,4 +158,14 @@ export function bestaetigungPasst(eingabe, anzahl) {
 // selection - No-Ops and Ausgeschlossene are excluded by construction.
 export function planToItems(plan) {
   return plan.auszufuehren.map((eintrag) => eintrag.userid);
+}
+
+// Job params for a multi-group remove: each user only loses groups they actually belong to.
+export function removeJobParams(users, userids, groupids) {
+  const groupidsByUserid = {};
+  for (const userid of userids) {
+    const mitglied = users.find((u) => u.userid === userid)?.groups ?? [];
+    groupidsByUserid[userid] = groupids.filter((id) => mitglied.includes(id));
+  }
+  return { groupidsByUserid };
 }

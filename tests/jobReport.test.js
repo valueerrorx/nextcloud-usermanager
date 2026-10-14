@@ -1,6 +1,6 @@
 // S08 B: resolveGrund and summaryAnzeige, the two pure display helpers the action report needs.
 import { describe, expect, it } from 'vitest';
-import { resolveGrund, summaryAnzeige } from '../src/shared/jobReport.js';
+import { resolveGrund, summaryAnzeige, zeigtJobBericht } from '../src/shared/jobReport.js';
 import { MESSAGES } from '../src/shared/messages.js';
 
 describe('resolveGrund', () => {
@@ -20,6 +20,21 @@ describe('resolveGrund', () => {
   // noch deutscher Satz) - MESSAGES[grund] ?? grund lässt es unverändert durch.
   it('ein unbekanntes, nicht-deutsches Token bleibt unverändert', () => {
     expect(resolveGrund('some_unmapped_token_xyz')).toBe('some_unmapped_token_xyz');
+  });
+});
+
+describe('zeigtJobBericht', () => {
+  const summary = { ok: 1, fehler: 0, nichtAusgefuehrt: 0, teilweise: 0 };
+
+  it('zeigt den Bericht nur in der View, die den Job gestartet hat', () => {
+    expect(zeigtJobBericht('import', 'import', false, summary)).toBe(true);
+    expect(zeigtJobBericht('users', 'import', false, summary)).toBe(false);
+    expect(zeigtJobBericht('groups', 'import', false, summary)).toBe(false);
+  });
+
+  it('ohne laufenden Job und ohne Summary bleibt die View leer', () => {
+    expect(zeigtJobBericht('users', 'users', false, null)).toBe(false);
+    expect(zeigtJobBericht('users', 'users', true, null)).toBe(true);
   });
 });
 

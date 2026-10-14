@@ -355,3 +355,47 @@ describe('runJob - Fortschritt feuert live, nicht erst nach Jobende', () => {
     expect(results.map((r) => r.userid)).toEqual(items);
   });
 });
+
+describe('runJob - Serverhinweis statt messageId', () => {
+  it('user.enable reicht den Hinweis als Begründung durch', async () => {
+    const client = {
+      request: vi.fn(async () => ({
+        ok: false,
+        kind: 'ocs',
+        httpStatus: 200,
+        ocsCode: 107,
+        messageId: 'ocs_fehler',
+        hinweis: 'Das Passwort muss mindestens 10 Zeichen lang sein.',
+        versuche: 1,
+      })),
+    };
+    const { results } = await runJob({
+      jobId: 'hinweis', action: 'user.enable', items: ['alice'], params: {}, client,
+    });
+    expect(results[0].grund).toBe('Das Passwort muss mindestens 10 Zeichen lang sein.');
+  });
+});
+
+describe('runJob - user.removeFromGroup mit mehreren Gruppen', () => {
+  it('eine scheiternde Gruppe bricht die übrigen Entfernungen nicht ab', async () => {
+    const client = {
+      request: vi.fn(async ({ form }) => {
+        if (form?.groupid === 'lehrer') {
+          return { ok: false, kind: 'ocs', httpStatus: 200, ocsCode: 103, messageId: 'kein_recht_fuer_gruppe', versuche: 1 };
+        }
+        return { ok: true, data: null, httpStatus: 200, versuche: 1 };
+      }),
+    };
+    const { results } = await runJob({
+      jobId: 'remove-mehrere',
+      action: 'user.removeFromGroup',
+      items: ['alice'],
+      params: { groupidsByUserid: { alice: ['lehrer', 'schueler'] } },
+      client,
+      shouldStop: () => false,
+    });
+    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(results[0].status).toBe('teilweise');
+    expect(results[0].grund).toBe('Entfernen aus Gruppe "lehrer" fehlgeschlagen');
+  });
+});

@@ -18,8 +18,33 @@ const CERT_CODES = new Set([
 // Kinds that are never retried, regardless of HTTP status (a false password must not be retried).
 const NEVER_RETRY_KINDS = new Set(['auth', 'forbidden', 'notOcs', 'timeout', 'cert']);
 
-function makeFailure(kind, httpStatus, ocsCode, messageId) {
-  return { ok: false, kind, httpStatus, ocsCode, messageId, message: MESSAGES[messageId] };
+const USELESS_HINWEIS = new Set(['failure', 'error', 'bad request', 'forbidden', 'ok']);
+
+// Drops secrets the server may echo, then keeps a short reason for the UI.
+function sanitizeHinweis(text, secrets) {
+  if (typeof text !== 'string') return null;
+  let out = text;
+  for (const secret of secrets) {
+    if (typeof secret !== 'string' || secret.length < 4) continue;
+    if (out.includes(secret)) out = out.split(secret).join('');
+  }
+  out = out.replace(/\s+/g, ' ').trim();
+  if (out === '' || USELESS_HINWEIS.has(out.toLowerCase())) return null;
+  if (out.length > 240) out = `${out.slice(0, 240)}…`;
+  return out;
+}
+
+function collectSecrets(form, appPassword, adminUser) {
+  const secrets = [appPassword, Buffer.from(`${adminUser}:${appPassword}`, 'utf8').toString('base64')];
+  if (typeof form?.password === 'string') secrets.push(form.password);
+  if (form?.key === 'password' && typeof form.value === 'string') secrets.push(form.value);
+  return secrets;
+}
+
+function makeFailure(kind, httpStatus, ocsCode, messageId, hinweis = null) {
+  const failure = { ok: false, kind, httpStatus, ocsCode, messageId, message: MESSAGES[messageId] };
+  if (typeof hinweis === 'string') failure.hinweis = hinweis;
+  return failure;
 }
 
 // Classifies a thrown error (fetchImpl itself, or the body read - undici's timeout-while-reading
@@ -167,11 +192,17 @@ export function createOcsClient({
     }
 
     if (meta.statuscode !== 100) {
-      return makeFailure('ocs', httpStatus, meta.statuscode, 'ocs_fehler');
+      const secrets = collectSecrets(form, appPassword, adminUser);
+      const hinweis = sanitizeHinweis(meta.message, secrets)
+        ?? sanitizeHinweis(ocs.data?.message, secrets);
+      return makeFailure('ocs', httpStatus, meta.statuscode, 'ocs_fehler', hinweis);
     }
 
     if (httpStatus < 200 || httpStatus >= 300) {
-      return makeFailure('http', httpStatus, meta.statuscode, 'unerwarteter_serverfehler');
+      const secrets = collectSecrets(form, appPassword, adminUser);
+      const serverText = sanitizeHinweis(meta.message, secrets)
+        ?? sanitizeHinweis(ocs.data?.message, secrets);
+      return makeFailure('http', httpStatus, meta.statuscode, 'unerwarteter_serverfehler', serverText ?? `HTTP ${httpStatus}`);
     }
 
     return { ok: true, data: ocs.data ?? null, httpStatus };
@@ -204,5 +235,21 @@ export function createOcsClient({
     return { ...result, versuche };
   }
 
-  return { request };
+  // Same credentials as OCS. Used for the admin system page, which is not an OCS route.
+  async function fetchText(path) {
+    const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    const headers = { ...buildHeaders(adminUser, appPassword, false), Accept: 'text/html' };
+    try {
+      const response = await fetchImpl(url, {
+        method: 'GET', headers, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs),
+      });
+      const text = await response.text();
+      if (response.status < 200 || response.status >= 300) return { ok: false, status: response.status };
+      return { ok: true, status: response.status, text };
+    } catch {
+      return { ok: false, status: null };
+    }
+  }
+
+  return { request, fetchText };
 }

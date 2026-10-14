@@ -46,6 +46,14 @@ export function sortUsers(users, { feld, richtung }) {
     return [...vergleichbar, ...rest];
   }
 
+  if (feld === 'lastSeen') {
+    const wert = (u) => (typeof u.lastSeenMs === 'number' ? u.lastSeenMs : null);
+    const vergleichbar = users.filter((u) => wert(u) !== null);
+    const rest = users.filter((u) => wert(u) === null);
+    vergleichbar.sort((a, b) => vorzeichen * (wert(a) - wert(b)));
+    return [...vergleichbar, ...rest];
+  }
+
   return [...users].sort(
     (a, b) => vorzeichen * String(a[feld] ?? '').localeCompare(String(b[feld] ?? ''), 'de'),
   );
@@ -80,6 +88,12 @@ export function gruppenOptionen(users) {
   return [...alle].sort((a, b) => a.localeCompare(b, 'de'));
 }
 
+// Memberships of exactly these users — the remove-from-group dialog must not list every group.
+export function gruppenDerUser(users, userids) {
+  const ids = new Set(userids);
+  return gruppenOptionen((users ?? []).filter((u) => ids.has(u.userid)));
+}
+
 // Eine Wahrheit für den Header-Checkbox-Zustand, von UserTable.vue und UsersView.vue gemeinsam
 // genutzt - zwei unabhängige Kopien derselben Prüfung dürfen nicht auseinanderlaufen, weil die
 // Auswahlgröße später die beim Batch-Löschen einzutippende Zahl ist. Ein leeres Filterergebnis
@@ -87,4 +101,26 @@ export function gruppenOptionen(users) {
 // dass eine Zeile sichtbar ist.
 export function alleAusgewaehlt(auswahl, gefilterte) {
   return gefilterte.length > 0 && gefilterte.every((u) => auswahl.has(u.userid));
+}
+
+// Page sizes for the user table. The full filtered list stays loaded; only the slice is rendered.
+export const SEITEN_GROESSEN = [100, 150, 200, 400];
+
+export function seitenAusschnitt(liste, seite, groesse) {
+  const quelle = Array.isArray(liste) ? liste : [];
+  const gesamt = quelle.length;
+  const groesseNorm = SEITEN_GROESSEN.includes(groesse) ? groesse : SEITEN_GROESSEN[0];
+  const seiten = Math.max(1, Math.ceil(gesamt / groesseNorm));
+  const nummer = Number.isFinite(seite) ? Math.trunc(seite) : 1;
+  const seiteNorm = Math.min(Math.max(1, nummer), seiten);
+  const start = (seiteNorm - 1) * groesseNorm;
+  const eintraege = quelle.slice(start, start + groesseNorm);
+  return {
+    eintraege,
+    seite: seiteNorm,
+    seiten,
+    von: gesamt === 0 ? 0 : start + 1,
+    bis: start + eintraege.length,
+    gesamt,
+  };
 }

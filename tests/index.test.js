@@ -56,6 +56,7 @@ describe('src/main/index.js second-instance guard', () => {
         return browserWindowInstance;
       }),
       ipcMain: { handle: vi.fn() },
+      Menu: { setApplicationMenu: vi.fn() },
       session: { defaultSession },
     }));
 
@@ -66,7 +67,8 @@ describe('src/main/index.js second-instance guard', () => {
       expect(browserWindowInstance.loadFile).toHaveBeenCalled();
     });
 
-    return { appListeners, defaultSession };
+    const { Menu } = await import('electron');
+    return { appListeners, defaultSession, Menu };
   }
 
   it('fokussiert und stellt ein minimiertes Fenster bei second-instance wieder her', async () => {
@@ -107,5 +109,15 @@ describe('src/main/index.js second-instance guard', () => {
 
     expect(defaultSession.setCertificateVerifyProc).toHaveBeenCalledOnce();
     expect(typeof defaultSession.setCertificateVerifyProc.mock.calls[0][0]).toBe('function');
+  });
+
+  it('entfernt das Standardmenü File/Edit/View/Window vor dem Fenster', async () => {
+    const browserWindowInstance = fakeBrowserWindow();
+    const { Menu } = await bootWithMockedElectron(browserWindowInstance);
+
+    expect(Menu.setApplicationMenu).toHaveBeenCalledOnce();
+    expect(Menu.setApplicationMenu).toHaveBeenCalledWith(null);
+    expect(Menu.setApplicationMenu.mock.invocationCallOrder[0])
+      .toBeLessThan(browserWindowInstance.loadFile.mock.invocationCallOrder[0]);
   });
 });

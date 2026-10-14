@@ -1,12 +1,15 @@
 <script setup>
 // Rendert ausschliesslich QuotaInfo (shared/quota.js#parseQuota) plus formatBytes/formatPercent -
 // rechnet und formatiert nichts selbst (ARCHITECTURE §2/§4.1, DECISIONS "Berechnungen gehören nie
-// in Vue-Komponenten"). formatPercent liefert bereits das deutsche Komma und eine Dezimalstelle.
-import { formatBytes, formatPercent } from '../../shared/quota.js';
+// in Vue-Komponenten"). Die Balkenbreite kommt aus quotaBalkenBreite.
+import { computed } from 'vue';
+import { formatBytes, formatPercent, quotaBalkenBreite } from '../../shared/quota.js';
 
-defineProps({
+const props = defineProps({
   quota: { type: Object, required: true },
 });
+
+const balkenBreite = computed(() => quotaBalkenBreite(props.quota.usagePercent));
 </script>
 
 <template>
@@ -20,9 +23,45 @@ defineProps({
   >unbekannt</span>
   <span
     v-else
-    class="mono"
+    class="quota-zelle"
   >
-    {{ formatBytes(quota.usedBytes) }} / {{ formatBytes(quota.limitBytes) }}
-    ({{ formatPercent(quota.usagePercent) }})
+    <span class="mono">{{ formatBytes(quota.usedBytes) }} / {{ formatBytes(quota.limitBytes) }}</span>
+    <span
+      v-if="balkenBreite !== null"
+      class="quota-balken"
+      role="img"
+      :aria-label="`${formatPercent(quota.usagePercent)} belegt`"
+    >
+      <span
+        class="quota-balken-fuellung"
+        :style="{ width: `${balkenBreite}%` }"
+      />
+    </span>
   </span>
 </template>
+
+<style scoped>
+.quota-zelle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.quota-balken {
+  display: inline-block;
+  width: 2.25rem;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.quota-balken-fuellung {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #3fb950;
+  opacity: 0.8;
+}
+</style>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { reactive } from 'vue';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildSingleCreate, einzelErgebnis, kannAnlegen, useridHinweis } from '../src/shared/userCreate.js';
@@ -63,6 +64,14 @@ describe('buildSingleCreate', () => {
   it('Passwort wird getrimmt gesendet', () => {
     const r = buildSingleCreate({ userid: 'a', password: ' pw ', displayName: '', groups: [], quotaId: null });
     expect(r.params.byUserid.a.password).toBe('pw');
+  });
+
+  it('Gruppen aus einem Vue-Proxy werden als klonbares Array gesendet', () => {
+    const r = buildSingleCreate({
+      userid: 'a', password: 'pw', displayName: '', groups: reactive(['Lehrer']), quotaId: null,
+    });
+    expect(r.params.groups).toEqual(['Lehrer']);
+    expect(structuredClone(r.params).groups).toEqual(['Lehrer']);
   });
 });
 

@@ -3,17 +3,20 @@
 // Filter- oder Sortierlogik (ARCHITECTURE §4.1 - die liegt in shared/filters.js und wird vom
 // Elternteil UsersView.vue aufgerufen).
 import { alleAusgewaehlt } from '../../shared/filters.js';
+import { formatTimestamp } from '../../shared/time.js';
+import { gruppenAnzeigename } from '../../shared/groups.js';
 import { rowActions, userInitials } from '../../shared/userRows.js';
 import QuotaCell from './QuotaCell.vue';
 
 const props = defineProps({
-  users: { type: Array, required: true }, // bereits gefiltert und sortiert
+  users: { type: Array, required: true }, // aktuelle Seite, bereits gefiltert und sortiert
+  auswahlListe: { type: Array, required: true }, // ganzes Filterergebnis für die Kopf-Checkbox
   sortFeld: { type: String, required: true },
   sortRichtung: { type: String, required: true },
   auswahl: { type: Set, required: true },
-  ausgewaehlteAnzahl: { type: Number, required: true },
   adminUserId: { type: String, default: null },
   gesperrt: { type: Boolean, default: false },
+  gruppen: { type: Array, default: () => [] },
 });
 defineEmits(['sort', 'toggle', 'toggle-alle', 'row-action']);
 
@@ -33,12 +36,11 @@ function sortPfeil(feld) {
             <input
               type="checkbox"
               class="form-check-input"
-              title="Alle sichtbaren Benutzer auswählen"
-              aria-label="Alle sichtbaren Benutzer auswählen"
-              :checked="alleAusgewaehlt(auswahl, users)"
+              title="Alle Treffer auswählen"
+              aria-label="Alle Treffer auswählen"
+              :checked="alleAusgewaehlt(auswahl, auswahlListe)"
               @change="$emit('toggle-alle')"
             >
-            <span class="auswahl-anzahl">{{ ausgewaehlteAnzahl }}</span>
           </th>
           <th
             class="sortable"
@@ -68,6 +70,19 @@ function sortPfeil(feld) {
           </th>
           <th>E-Mail</th>
           <th>Status</th>
+          <th
+            class="sortable"
+            :class="{ active: sortFeld === 'lastSeen' }"
+            @click="$emit('sort', 'lastSeen')"
+          >
+            Zuletzt gesehen
+            <i
+              v-if="sortPfeil('lastSeen')"
+              class="bi"
+              :class="sortPfeil('lastSeen')"
+              aria-hidden="true"
+            />
+          </th>
           <th>Gruppen</th>
           <th
             class="sortable"
@@ -110,20 +125,24 @@ function sortPfeil(feld) {
             </div>
           </td>
           <td>{{ user.displayname }}</td>
-          <td>{{ user.email ?? '—' }}</td>
+          <td>
+            <span
+              class="email-text"
+              :title="user.email || undefined"
+            >{{ user.email ?? '—' }}</span>
+          </td>
           <td>
             <span :class="user.enabled ? 'badge-active' : 'badge-inactive'">
               {{ user.enabled ? 'aktiv' : 'deaktiviert' }}
             </span>
           </td>
+          <td>{{ user.lastSeenMs ? formatTimestamp(user.lastSeenMs, { sekunden: false }) : '—' }}</td>
           <td>
             <span
               v-for="gruppe in user.groups"
               :key="gruppe"
               class="chip-group"
-            >
-              {{ gruppe }}
-            </span>
+            >{{ gruppenAnzeigename(gruppen, gruppe) }}</span>
           </td>
           <td><QuotaCell :quota="user.quota" /></td>
           <td>
@@ -159,8 +178,12 @@ function sortPfeil(feld) {
   user-select: none;
 }
 
-.auswahl-anzahl {
-  margin-left: 6px;
-  color: var(--text-secondary);
+.email-text {
+  display: inline-block;
+  max-width: 25ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 </style>

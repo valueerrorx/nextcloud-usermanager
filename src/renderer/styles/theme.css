@@ -41,8 +41,11 @@ body {
 
 .main-area {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   min-width: 0;
+  min-height: 0;
   padding: 1.5rem;
 }
 
@@ -249,7 +252,7 @@ body {
 }
 
 .chip-group {
-  display: inline-block;
+  display: inline-flex;
   background: rgba(88, 166, 255, 0.12);
   color: var(--accent);
   border: 1px solid rgba(88, 166, 255, 0.2);
@@ -257,6 +260,20 @@ body {
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
   margin: 0 3px 3px 0;
+  vertical-align: top;
+}
+
+.group-name {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.group-name-id {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 
 /* ---- Form Controls (Bootstrap-Overrides) ---- */
@@ -294,6 +311,41 @@ body {
 .form-check-input:checked {
   background-color: var(--accent);
   border-color: var(--accent);
+}
+
+.gruppen-eintrag.form-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-left: 0;
+}
+
+.gruppen-eintrag .form-check-input {
+  position: static;
+  margin: 0.15rem 0 0;
+  float: none;
+}
+
+.swal2-popup .gruppen-auswahl {
+  text-align: left;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin-top: 0.25rem;
+}
+
+.swal2-popup .gruppen-auswahl .gruppen-eintrag {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.35rem 0.25rem;
+}
+
+.swal2-popup .gruppen-auswahl .form-check-input {
+  position: static;
+  margin: 0.2rem 0 0;
+  float: none;
+  flex-shrink: 0;
 }
 
 /* ---- Verbindungsstatus-Punkt ---- */
@@ -391,9 +443,9 @@ body {
 
 .stat-card-metrics--stack {
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.2rem;
   flex-wrap: nowrap;
-  margin-top: 0;
+  margin-top: 0.55rem;
   padding-top: 0;
   border-top: none;
 }
@@ -788,23 +840,36 @@ body {
 }
 
 /* ---- Dashboard cards (S17) ---- */
+.stat-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.35rem;
+}
+
+.stat-card-head .stat-card-kicker {
+  margin-bottom: 0;
+}
+
 .stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  font-size: 1.2rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 0.95rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+  margin-bottom: 0;
 }
 
 .stat-card-rich {
   height: 100%;
+  padding: 0.75rem 0.9rem;
 }
 
 .stat-value-lg {
-  font-size: 2rem;
+  font-size: 1.45rem;
 }
 
 .stat-label {

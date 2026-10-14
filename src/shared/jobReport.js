@@ -15,6 +15,11 @@ export function resolveGrund(grund) {
 // summary carries the four raw counts (ARCHITECTURE §5 "summary-Form"). The report additionally
 // folds 'teilweise' into the error column while keeping it visible on its own
 // (DECISIONS "summary-Form des Action-Ergebnisses").
+// One job slot is shared; the report belongs only to the view that started it.
+export function zeigtJobBericht(quelle, jobQuelle, laeuft, summary) {
+  return quelle === jobQuelle && (laeuft || summary != null);
+}
+
 export function summaryAnzeige(summary) {
   return {
     ok: summary.ok,

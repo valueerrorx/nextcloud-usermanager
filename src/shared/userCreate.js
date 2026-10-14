@@ -1,5 +1,6 @@
 // S14: Einzel-User anlegen über die bestehende user.create-Pipeline. Pure, kein I/O.
 import { validateUserid } from './username.js';
+import { plainGroupIds } from './groups.js';
 import { findQuotaPreset, formatQuotaForApi } from './quota.js';
 import { resolveGrund } from './jobReport.js';
 import { MESSAGES } from './messages.js';
@@ -22,7 +23,7 @@ export function buildSingleCreate({ userid, password, displayName, groups, quota
     items: [userid],
     params: {
       byUserid: { [userid]: { password: password.trim(), displayName: displayName.trim() === '' ? undefined : displayName.trim() } },
-      groups,
+      groups: plainGroupIds(groups),
       quota: preset ? formatQuotaForApi(preset) : null,
     },
   };

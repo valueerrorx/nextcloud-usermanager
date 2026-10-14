@@ -28,4 +28,13 @@ describe('toUserView', () => {
     const result = toUserView({ id: 'bob', enabled: true, groups: [] }, { adminUserId: 'admin' });
     expect(result.displayname).toBe('bob');
   });
+
+  it('lastLogin in Millisekunden, Sekunden und 0', () => {
+    const ms = toUserView({ id: 'bob', enabled: true, lastLogin: 1_700_000_000_000 }, { adminUserId: 'admin' });
+    const sekunden = toUserView({ id: 'bob', enabled: true, lastLoginTimestamp: 1_700_000_000 }, { adminUserId: 'admin' });
+    const nie = toUserView({ id: 'bob', enabled: true, lastLogin: 0 }, { adminUserId: 'admin' });
+    expect(ms.lastSeenMs).toBe(1_700_000_000_000);
+    expect(sekunden.lastSeenMs).toBe(1_700_000_000_000);
+    expect(nie.lastSeenMs).toBeNull();
+  });
 });

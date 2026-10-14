@@ -2,7 +2,8 @@
 // Immutabilität), pruneAuswahl.
 import { describe, expect, it } from 'vitest';
 import {
-  alleAusgewaehlt, filterUsers, gruppenOptionen, matchesSuche, pruneAuswahl, quotaStufe, sortUsers,
+  alleAusgewaehlt, filterUsers, gruppenDerUser, gruppenOptionen, matchesSuche, pruneAuswahl, quotaStufe,
+  SEITEN_GROESSEN, seitenAusschnitt, sortUsers,
 } from '../src/shared/filters.js';
 
 function quota(kind, usagePercent = null) {
@@ -153,6 +154,18 @@ describe('sortUsers', () => {
     expect(result.map((u) => u.userid)).toEqual(['b', 'a']);
   });
 
+  it('Zuletzt gesehen: ohne Login immer am Ende, sonst nach Zeitstempel', () => {
+    const users = [
+      user({ userid: 'neu', lastSeenMs: 300 }),
+      user({ userid: 'nie', lastSeenMs: null }),
+      user({ userid: 'alt', lastSeenMs: 100 }),
+    ];
+    expect(sortUsers(users, { feld: 'lastSeen', richtung: 'aufsteigend' }).map((u) => u.userid))
+      .toEqual(['alt', 'neu', 'nie']);
+    expect(sortUsers(users, { feld: 'lastSeen', richtung: 'absteigend' }).map((u) => u.userid))
+      .toEqual(['neu', 'alt', 'nie']);
+  });
+
   it('rest-Gruppe (unbegrenzt/unbekannt) behält die Eingabereihenfolge', () => {
     const result = sortUsers(
       [
@@ -261,6 +274,25 @@ describe('gruppenOptionen', () => {
   });
 });
 
+describe('gruppenDerUser', () => {
+  const liste = [
+    user({ userid: 'alice', groups: ['lehrer', 'schueler'] }),
+    user({ userid: 'bob', groups: ['eltern'] }),
+  ];
+
+  it('liefert nur die Gruppen des einen Users, nicht die der übrigen Liste', () => {
+    expect(gruppenDerUser(liste, ['alice'])).toEqual(['lehrer', 'schueler']);
+  });
+
+  it('vereinigt bei mehreren Usern nur deren Mitgliedschaften', () => {
+    expect(gruppenDerUser(liste, ['alice', 'bob'])).toEqual(['eltern', 'lehrer', 'schueler']);
+  });
+
+  it('User ohne Gruppen liefert eine leere Liste', () => {
+    expect(gruppenDerUser([user({ userid: 'carl', groups: [] })], ['carl'])).toEqual([]);
+  });
+});
+
 describe('alleAusgewaehlt', () => {
   it('true, wenn jeder sichtbare User ausgewählt ist', () => {
     const gefilterte = [user({ userid: 'a' }), user({ userid: 'b' })];
@@ -275,5 +307,47 @@ describe('alleAusgewaehlt', () => {
   it('leeres Filterergebnis gilt nicht als "alle ausgewählt"', () => {
     expect(alleAusgewaehlt(new Set(), [])).toBe(false);
     expect(alleAusgewaehlt(new Set(['a']), [])).toBe(false);
+  });
+});
+
+describe('seitenAusschnitt', () => {
+  const liste = Array.from({ length: 250 }, (_, i) => i);
+
+  it('erlaubt genau 100, 150, 200 und 400', () => {
+    expect(SEITEN_GROESSEN).toEqual([100, 150, 200, 400]);
+  });
+
+  it('erste Seite mit 100 liefert die ersten 100 Einträge', () => {
+    const seite = seitenAusschnitt(liste, 1, 100);
+    expect(seite.eintraege).toEqual(liste.slice(0, 100));
+    expect(seite).toMatchObject({ seite: 1, seiten: 3, von: 1, bis: 100, gesamt: 250 });
+  });
+
+  it('letzte unvollständige Seite liefert den Rest', () => {
+    const seite = seitenAusschnitt(liste, 2, 150);
+    expect(seite.eintraege).toEqual(liste.slice(150));
+    expect(seite).toMatchObject({ seite: 2, seiten: 2, von: 151, bis: 250, gesamt: 250 });
+  });
+
+  it('eine Seite hinter der letzten wird auf die letzte gezogen', () => {
+    const seite = seitenAusschnitt(liste, 9, 100);
+    expect(seite.eintraege).toEqual(liste.slice(200));
+    expect(seite.seite).toBe(3);
+  });
+
+  it('leere Liste bleibt eine leere Seite', () => {
+    expect(seitenAusschnitt([], 4, 100)).toEqual({
+      eintraege: [], seite: 1, seiten: 1, von: 0, bis: 0, gesamt: 0,
+    });
+  });
+
+  it('unbekannte Seitengröße fällt auf 100 zurück', () => {
+    expect(seitenAusschnitt(liste, 1, 80).bis).toBe(100);
+  });
+
+  it('verändert die Eingabeliste nicht', () => {
+    const vorher = [...liste];
+    seitenAusschnitt(liste, 1, 100);
+    expect(liste).toEqual(vorher);
   });
 });

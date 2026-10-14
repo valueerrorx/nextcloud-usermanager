@@ -1,6 +1,6 @@
 // S08 A1: no-ops per action, self-protection, count semantics, no-request proof.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { planActions, bestaetigungPasst, planToItems } from '../src/shared/dryRun.js';
+import { planActions, bestaetigungPasst, planToItems, removeJobParams } from '../src/shared/dryRun.js';
 
 const ADMIN = 'Admin';
 
@@ -242,6 +242,73 @@ describe('bestaetigungPasst — Löschbestätigungs-Prädikat (Review: Extraktio
 
   it('leere Eingabe -> false', () => {
     expect(bestaetigungPasst('', 5)).toBe(false);
+  });
+});
+
+describe('planActions — Gruppenanzeige', () => {
+  it('nennt den aktuellen Anzeigenamen und die id, wenn sie abweichen', () => {
+    const result = planActions({
+      users: [buildUser({ groups: [] })],
+      auswahl: ['alice'],
+      action: 'user.addToGroup',
+      params: { groupid: '2026-1C' },
+      adminUserId: ADMIN,
+      gruppen: [{ id: '2026-1C', displayname: 'Klasse 1C' }],
+    });
+    expect(result.auszufuehren[0].nachher).toBe('Klasse 1C (2026-1C)');
+  });
+});
+
+describe('planActions — user.removeFromGroup mit mehreren Gruppen', () => {
+  it('entfernt nur die gewählten Mitgliedschaften und lässt die übrigen stehen', () => {
+    const result = plan({
+      users: [buildUser({ groups: ['gruppe-a', 'gruppe-b', 'gruppe-c'] })],
+      auswahl: ['alice'],
+      action: 'user.removeFromGroup',
+      params: { groupids: ['gruppe-a', 'gruppe-c'] },
+    });
+    expect(result.auszufuehren).toEqual([
+      { userid: 'alice', vorher: 'gruppe-a, gruppe-b, gruppe-c', nachher: 'gruppe-b' },
+    ]);
+    expect(result.keineAenderung).toEqual([]);
+  });
+
+  it('User, der in keiner gewählten Gruppe ist, bleibt eine No-Op', () => {
+    const result = plan({
+      users: [buildUser({ groups: ['gruppe-a'] })],
+      auswahl: ['alice'],
+      action: 'user.removeFromGroup',
+      params: { groupids: ['gruppe-c'] },
+    });
+    expect(result.auszufuehren).toEqual([]);
+    expect(result.keineAenderung[0].grund).toBe('nicht_in_gruppe');
+  });
+
+  it('im Batch führt nur aus, wer mindestens eine gewählte Gruppe hat', () => {
+    const users = [
+      buildUser({ userid: 'alice', groups: ['gruppe-a', 'gruppe-b'] }),
+      buildUser({ userid: 'bob', groups: ['gruppe-c'] }),
+    ];
+    const result = plan({
+      users,
+      auswahl: ['alice', 'bob'],
+      action: 'user.removeFromGroup',
+      params: { groupids: ['gruppe-a'] },
+    });
+    expect(result.auszufuehren.map((e) => e.userid)).toEqual(['alice']);
+    expect(result.keineAenderung.map((e) => e.userid)).toEqual(['bob']);
+  });
+});
+
+describe('removeJobParams', () => {
+  it('gibt pro User nur die gewählten Gruppen, in denen er wirklich ist', () => {
+    const users = [
+      buildUser({ userid: 'alice', groups: ['gruppe-a', 'gruppe-b'] }),
+      buildUser({ userid: 'bob', groups: ['gruppe-c'] }),
+    ];
+    expect(removeJobParams(users, ['alice', 'bob'], ['gruppe-a', 'gruppe-c'])).toEqual({
+      groupidsByUserid: { alice: ['gruppe-a'], bob: ['gruppe-c'] },
+    });
   });
 });
 

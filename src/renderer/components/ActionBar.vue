@@ -3,8 +3,9 @@
 // (swal2), actions.run. Rechnet nicht selbst: Dry-Run aus shared/dryRun.js, Begründungstexte aus
 // shared/jobReport.js, Helfer aus shared/userRows.js (ARCHITECTURE §4.1, REVIEW-NOTES [S06]).
 import Swal from 'sweetalert2';
-import { planActions } from '../../shared/dryRun.js';
-import { gruppenOptionen } from '../../shared/filters.js';
+import { planActions, planToItems, removeJobParams } from '../../shared/dryRun.js';
+import { gruppenDerUser, gruppenOptionen } from '../../shared/filters.js';
+import { gruppenAnzeigename, gruppenKurztext } from '../../shared/groups.js';
 import { QUOTA_PRESETS, formatQuotaForApi, findQuotaPreset } from '../../shared/quota.js';
 import {
   ACTION_LABELS, BATCH_ACTIONS, batchBarVisible, buildUpdateParams, optionenObjekt,
@@ -12,8 +13,8 @@ import {
 import { MESSAGES } from '../../shared/messages.js';
 import { describeError } from '../../shared/logSafe.js';
 import { toastError } from '../toast.js';
-import { escapeHtml, vorschauHtml, confirmDelete, startJob, VORSCHAU_DIALOG } from '../jobRunner.js';
-import { dryRunPlan, jobLaeuft } from '../state.js';
+import { escapeHtml, groupNameHtml, vorschauHtml, confirmDelete, startJob, VORSCHAU_DIALOG } from '../jobRunner.js';
+import { dryRunPlan, groups, jobLaeuft } from '../state.js';
 
 const props = defineProps({
   users: { type: Array, required: true },
@@ -24,14 +25,16 @@ const props = defineProps({
 const emit = defineEmits(['finished', 'clear']);
 
 // Asks for the action's parameters; resolves null when the dialog is cancelled.
-async function frageParams(action, user) {
+async function frageParams(action, user, userids) {
   switch (action) {
-    case 'user.addToGroup':
-    case 'user.removeFromGroup': {
+    case 'user.addToGroup': {
       const result = await Swal.fire({
         title: ACTION_LABELS[action],
         input: 'select',
-        inputOptions: optionenObjekt(gruppenOptionen(props.users).map((g) => ({ value: g, label: g }))),
+        inputOptions: optionenObjekt(gruppenOptionen(props.users).map((id) => ({
+          value: id,
+          label: gruppenKurztext(groups.value, id),
+        }))),
         inputPlaceholder: 'Gruppe wählen',
         inputValidator: (wert) => (wert ? undefined : 'Bitte eine Gruppe wählen'),
         showCancelButton: true,
@@ -39,6 +42,38 @@ async function frageParams(action, user) {
         cancelButtonText: 'Abbrechen',
       });
       return result.isConfirmed ? { groupid: result.value } : null;
+    }
+    case 'user.removeFromGroup': {
+      const ids = gruppenDerUser(props.users, userids);
+      if (ids.length === 0) {
+        const text = userids.length === 1
+          ? 'Dieser Benutzer ist in keiner Gruppe.'
+          : 'Keiner der ausgewählten Benutzer ist in einer Gruppe.';
+        await Swal.fire({ title: ACTION_LABELS[action], text, icon: 'info' });
+        return null;
+      }
+      const result = await Swal.fire({
+        title: ACTION_LABELS[action],
+        html: `<div class="gruppen-auswahl">${ids.map((id) => `
+          <label class="form-check gruppen-eintrag">
+            <input type="checkbox" class="form-check-input gruppen-entfernen" value="${escapeHtml(id)}">
+            ${groupNameHtml(gruppenAnzeigename(groups.value, id), id)}
+          </label>`).join('')}</div>`,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Vorschau',
+        cancelButtonText: 'Abbrechen',
+        preConfirm: () => {
+          const gewaehlt = [...Swal.getHtmlContainer().querySelectorAll('.gruppen-entfernen:checked')]
+            .map((el) => el.value);
+          if (gewaehlt.length === 0) {
+            Swal.showValidationMessage('Bitte mindestens eine Gruppe wählen');
+            return false;
+          }
+          return gewaehlt;
+        },
+      });
+      return result.isConfirmed ? { groupids: result.value } : null;
     }
     case 'user.setQuota': {
       const result = await Swal.fire({
@@ -114,6 +149,7 @@ async function onVorschau(action, paramsObj, userids) {
     action,
     params: paramsObj,
     adminUserId: props.adminUserId,
+    gruppen: groups.value,
   });
 
   if (plan.anzahl === 0) {
@@ -130,8 +166,11 @@ async function onVorschau(action, paramsObj, userids) {
   if (!bestaetigt) return;
 
   dryRunPlan.value = plan;
+  const jobParams = action === 'user.removeFromGroup' && paramsObj.groupids
+    ? removeJobParams(props.users, planToItems(plan), paramsObj.groupids)
+    : paramsObj;
   try {
-    await startJob(plan, action, paramsObj);
+    await startJob(plan, action, jobParams, 'users');
   } finally {
     // Die Daten sind jetzt veraltet (B4) - der Elternteil lädt die Userliste neu.
     emit('finished');
@@ -146,7 +185,7 @@ function blockiert() {
 async function fuehreAus(action, user, userids) {
   if (blockiert()) return;
   try {
-    const paramsObj = await frageParams(action, user);
+    const paramsObj = await frageParams(action, user, userids);
     if (paramsObj === null) return;
     await onVorschau(action, paramsObj, userids);
   } catch (error) {

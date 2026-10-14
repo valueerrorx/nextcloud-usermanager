@@ -15,17 +15,54 @@ function teilfehlerGrund(step) {
 // never fire the group-assignment requests). Steps after the first are independent of each other
 // (S11 A2: no rollback, each addUserToGroup is its own request) and all run regardless of an
 // earlier one failing; the FIRST failure among them names the 'teilweise' reason.
+// Removals do not depend on each other: one failed group must not skip the remaining ones.
+async function runIndependent(client, steps) {
+  let okCount = 0;
+  let failure = null;
+  let lastHttpStatus = null;
+  for (const step of steps) {
+    const result = await step.run(client);
+    if (result.ok) {
+      okCount += 1;
+      lastHttpStatus = result.httpStatus;
+    } else if (!failure) {
+      failure = { step, result };
+    }
+  }
+  if (!failure) return { status: 'ok', grund: null, httpStatus: lastHttpStatus, ocsCode: null };
+  if (okCount === 0) {
+    return {
+      status: 'fehler',
+      grund: failure.result.hinweis || failure.result.messageId,
+      httpStatus: failure.result.httpStatus,
+      ocsCode: failure.result.ocsCode,
+    };
+  }
+  return {
+    status: 'teilweise',
+    grund: teilfehlerGrund(failure.step),
+    httpStatus: failure.result.httpStatus,
+    ocsCode: failure.result.ocsCode,
+  };
+}
+
 async function runSteps(client, steps) {
   if (steps.length === 0) {
     return { status: 'ok', grund: null, httpStatus: null, ocsCode: null };
   }
+  if (steps.every((step) => step.independent)) return runIndependent(client, steps);
 
   const first = await steps[0].run(client);
   if (!first.ok) {
     // Single-step failure: grund is the step's own messageId (A3), not a custom sentence -
     // 429-after-retries lands here too, with its own messageId server_blockt_vorerst, and the
     // job keeps going because a single item's result never aborts the pool.
-    return { status: 'fehler', grund: first.messageId, httpStatus: first.httpStatus, ocsCode: first.ocsCode };
+    return {
+      status: 'fehler',
+      grund: first.hinweis || first.messageId,
+      httpStatus: first.httpStatus,
+      ocsCode: first.ocsCode,
+    };
   }
   if (steps.length === 1) {
     return { status: 'ok', grund: null, httpStatus: first.httpStatus, ocsCode: null };

@@ -508,13 +508,15 @@ describe('groups.list / groups.create / files.openCsv', () => {
 
   it('groups.list verbunden liefert { ok: true, groups }', async () => {
     net.fetch.mockImplementation(async (url) => {
-      if (url.includes('/cloud/groups')) return fakeResponse({ status: 200, body: envelope(100, { groups: ['admins'] }) });
+      if (url.includes('/cloud/groups/details')) {
+        return fakeResponse({ status: 200, body: envelope(100, { groups: [{ id: 'admins', displayname: 'Administratoren' }] }) });
+      }
       return okResponse();
     });
     await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
 
     const result = await handlers.get('groups.list')();
-    expect(result).toEqual({ ok: true, groups: ['admins'] });
+    expect(result).toEqual({ ok: true, groups: [{ id: 'admins', displayname: 'Administratoren' }] });
   });
 
   it('groups.create verbunden ruft POST /cloud/groups und liefert { ok: true }', async () => {
@@ -546,6 +548,46 @@ describe('groups.list / groups.create / files.openCsv', () => {
 
     expect(result).toMatchObject({ ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen' });
     expect(net.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('groups.rename', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+  });
+
+  it('ohne Verbindung -> nicht_verbunden', async () => {
+    const result = await handlers.get('groups.rename')(null, { groupid: 'lehrer', displayname: 'Lehrer' });
+    expect(result).toMatchObject({ ok: false, messageId: 'nicht_verbunden' });
+  });
+
+  it('leerer Anzeigename -> gruppenname_leer, kein Request', async () => {
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    net.fetch.mockClear();
+    const result = await handlers.get('groups.rename')(null, { groupid: 'lehrer', displayname: '   ' });
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppenname_leer' });
+    expect(net.fetch).not.toHaveBeenCalled();
+  });
+
+  it('verbunden ruft PUT /cloud/groups/{groupid} mit displayname', async () => {
+    net.fetch.mockImplementation(async (url, options) => {
+      if (url.includes('/cloud/groups/lehrer') && options.method === 'PUT') {
+        return fakeResponse({ status: 200, body: envelope(100, null) });
+      }
+      return okResponse();
+    });
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    const result = await handlers.get('groups.rename')(null, { groupid: 'lehrer', displayname: ' Lehrkräfte ' });
+    expect(result).toEqual({ ok: true });
+    const put = net.fetch.mock.calls.find((call) => call[1]?.method === 'PUT');
+    expect(put[0]).toContain('/cloud/groups/lehrer');
+    expect(put[1].body).toBe('key=displayname&value=Lehrkr%C3%A4fte');
   });
 });
 
@@ -649,8 +691,12 @@ describe('groups.members / server.freeSpace', () => {
     await verbinden();
     net.fetch.mockResolvedValue(fakeResponse({ status: 200, body: envelope(100, { nextcloud: { system: { freespace: 12345 } } }) }));
     const ok = await handlers.get('server.freeSpace')();
-    expect(ok).toEqual({ ok: true, freeBytes: 12345 });
-    expect(net.fetch.mock.calls.at(-1)[0]).toContain('/ocs/v1.php/apps/serverinfo/api/v1/info');
+    expect(ok.freeBytes).toBe(12345);
+    expect(ok.system).toEqual({
+      hostname: null, betriebssystem: null, prozessor: null, ramBytes: null, uptime: null,
+      ip: null, diskMount: null, diskFreeBytes: null, diskTotalBytes: null, aktiv24h: null, aktiv7d: null,
+    });
+    expect(net.fetch.mock.calls.map((call) => call[0]).join('\n')).toContain('/ocs/v1.php/apps/serverinfo/api/v1/info');
     net.fetch.mockResolvedValue(fakeResponse({ status: 401 }));
     expect(await handlers.get('server.freeSpace')()).toMatchObject({ ok: false, messageId: 'falsche_zugangsdaten' });
   });
@@ -686,7 +732,7 @@ describe('registerIpcHandlers — jeder Kanal löst auch ohne Argument auf (nie 
   for (const channel of [
     'app.version', 'connection.connect', 'connection.connectSaved', 'connection.status',
     'connection.logout', 'app.openExternal', 'users.list', 'actions.run', 'actions.stop', 'groups.list',
-    'groups.create', 'groups.delete', 'groups.members', 'server.freeSpace', 'files.saveCsv', 'files.openCsv', 'tls.respondCertificate',
+    'groups.create', 'groups.delete', 'groups.rename', 'groups.members', 'server.freeSpace', 'files.saveCsv', 'files.openCsv', 'tls.respondCertificate',
   ]) {
     // Kanalnamen oben nur zur lesbaren Testbezeichnung je Kanal - geprüft wird unten über die
     // tatsächliche Registrierungs-Map, nicht über diese Liste (siehe Test darunter für den Teil,

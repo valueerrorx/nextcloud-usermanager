@@ -74,6 +74,25 @@ describe('getSteps', () => {
     });
   });
 
+  it('user.removeFromGroup mit mehreren Mitgliedschaften -> ein DELETE je Gruppe, nur die des Users', async () => {
+    const client = fakeClient();
+    const steps = getSteps('user.removeFromGroup', 'alice', {
+      groupidsByUserid: { alice: ['lehrer', 'schueler'] },
+    });
+    expect(steps.map((step) => step.independent)).toEqual([true, true]);
+    for (const step of steps) await step.run(client);
+    expect(client.request).toHaveBeenNthCalledWith(1, {
+      method: 'DELETE',
+      path: '/cloud/users/alice/groups',
+      form: { groupid: 'lehrer' },
+    });
+    expect(client.request).toHaveBeenNthCalledWith(2, {
+      method: 'DELETE',
+      path: '/cloud/users/alice/groups',
+      form: { groupid: 'schueler' },
+    });
+  });
+
   it('user.update mit nur displayname -> genau ein Schritt', async () => {
     const client = fakeClient();
     const steps = getSteps('user.update', 'alice', { displayname: 'Alice A.' });

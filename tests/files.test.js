@@ -82,11 +82,11 @@ describe('openCsv', () => {
 
   it('Erfolg -> { ok: true, path, text }, liest UTF-8', async () => {
     dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/home/user/import.csv'] });
-    readFile.mockResolvedValue('Vorname;Nachname;Geburtsdatum\n');
+    readFile.mockResolvedValue('Vorname;Nachname;Passwort\n');
 
     const result = await openCsv({ zweck: 'import' });
 
-    expect(result).toEqual({ ok: true, path: '/home/user/import.csv', text: 'Vorname;Nachname;Geburtsdatum\n' });
+    expect(result).toEqual({ ok: true, path: '/home/user/import.csv', text: 'Vorname;Nachname;Passwort\n' });
     expect(readFile).toHaveBeenCalledWith('/home/user/import.csv', 'utf8');
   });
 

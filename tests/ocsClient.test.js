@@ -428,6 +428,43 @@ describe('11. Kein Secret-Leak', () => {
     expect(JSON.stringify(result)).not.toContain(basic);
     expect(result.message).not.toContain(basic);
     expect(result.messageId).not.toContain(basic);
+    expect(result.hinweis ?? '').not.toContain(secretPassword);
+  });
+
+  it('OCS-Hinweis ohne Geheimnis wird als hinweis durchgereicht', async () => {
+    const body = envelope(107, null, { message: 'Das Passwort muss mindestens 10 Zeichen lang sein.' });
+    const fetchImpl = singleFetch(fakeResponse({ status: 200, body }));
+    const client = createOcsClient({ ...baseOpts, fetchImpl, sleep: vi.fn() });
+    const result = await client.request({ method: 'POST', path: '/cloud/users', form: { userid: 'a', password: 'kurz' } });
+    expect(result.hinweis).toBe('Das Passwort muss mindestens 10 Zeichen lang sein.');
+    expect(result.messageId).toBe('ocs_fehler');
+  });
+
+  it('HTTP-Fehler mit gültigem Envelope behält den Servertext, OK wird verworfen', async () => {
+    const body = envelope(100, { message: 'User creation failed' }, { message: 'OK' });
+    const fetchImpl = singleFetch(fakeResponse({ status: 500, body }));
+    const client = createOcsClient({ ...baseOpts, fetchImpl, sleep: vi.fn() });
+    const result = await client.request({ method: 'POST', path: '/cloud/users', form: { userid: 'a', password: 'x' } });
+    expect(result.messageId).toBe('unerwarteter_serverfehler');
+    expect(result.hinweis).toBe('User creation failed');
+  });
+
+  it('HTTP-Fehler ohne Servertext nennt den Statuscode', async () => {
+    const fetchImpl = singleFetch(fakeResponse({ status: 500, body: envelope(100, null) }));
+    const client = createOcsClient({ ...baseOpts, fetchImpl, sleep: vi.fn() });
+    const result = await client.request({ method: 'POST', path: '/cloud/users' });
+    expect(result.hinweis).toBe('HTTP 500');
+  });
+
+  it('das angelegte Passwort wird aus dem Hinweis entfernt', async () => {
+    const body = envelope(107, { message: 'Abgelehnt: kurz1234 ist zu kurz' }, { message: 'Failure' });
+    const fetchImpl = singleFetch(fakeResponse({ status: 200, body }));
+    const client = createOcsClient({ ...baseOpts, fetchImpl, sleep: vi.fn() });
+    const result = await client.request({
+      method: 'POST', path: '/cloud/users', form: { userid: 'a', password: 'kurz1234' },
+    });
+    expect(result.hinweis).toBe('Abgelehnt: ist zu kurz');
+    expect(JSON.stringify(result)).not.toContain('kurz1234');
   });
 });
 

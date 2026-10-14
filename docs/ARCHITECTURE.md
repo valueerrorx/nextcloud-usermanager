@@ -192,6 +192,7 @@ auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 | `groups.list` | invoke | – | `{ ok, groups: GroupView[] }` | 401, 429, Netz |
 | `groups.create` | invoke | `{ groupid }` | `{ ok }` | 101/103 -> `gruppe_anlegen_fehlgeschlagen`, 102 -> `gruppe_existiert`, `gruppenname_leer` |
 | `groups.delete` | invoke | `{ groupid }` | `{ ok }` | 101 -> `gruppe_existiert_nicht`, 102 -> `gruppe_loeschen_fehlgeschlagen`, `gruppe_admin_geschuetzt` |
+| `groups.rename` | invoke | `{ groupid, displayname }` | `{ ok }` | 101 -> `gruppe_umbenennen_fehlgeschlagen`, 404 -> `gruppe_existiert_nicht`, `gruppenname_leer`; ändert nur den Anzeigenamen, die ID bleibt |
 | `groups.members` | invoke | `{ groupid }` | `{ ok, members: string[] }` | `nicht_verbunden`, `gruppenname_leer`, `gruppenmitglieder_fehlgeschlagen` (S18, `GET /cloud/groups/{gid}`) |
 | `server.freeSpace` | invoke | – | `{ ok, freeBytes: number\|null }` | `nicht_verbunden`, jeder OCS-/Netzfehler; `serverinfo`-App, kein Fehlerpopup (S18) |
 | `actions.run` | invoke | `{ jobId, action, items, params }` | `{ ok, results: ItemResult[], summary }` | nie global fehlerhaft; Fehler stehen je Item |

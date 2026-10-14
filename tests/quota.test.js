@@ -1,7 +1,7 @@
 // S05 A1: every row of the ARCHITECTURE §4 table, plus the relative-ignore test, plus formatBytes.
 // S08 A2: QUOTA_PRESETS and formatQuotaForApi.
 import { describe, expect, it } from 'vitest';
-import { parseQuota, formatBytes, formatPercent, QUOTA_PRESETS, formatQuotaForApi } from '../src/shared/quota.js';
+import { parseQuota, formatBytes, formatPercent, quotaBalkenBreite, QUOTA_PRESETS, formatQuotaForApi } from '../src/shared/quota.js';
 
 describe('parseQuota — ARCHITECTURE §4 Tabelle', () => {
   it('Objekt mit quota: -3 -> unlimited, used bleibt erhalten', () => {
@@ -121,5 +121,21 @@ describe('QUOTA_PRESETS / formatQuotaForApi — DECISIONS "Kontingent-Eingabe"',
   it('formatQuotaForApi(unbegrenzt) -> "none"', () => {
     const unbegrenzt = QUOTA_PRESETS.find((p) => p.id === 'unbegrenzt');
     expect(formatQuotaForApi(unbegrenzt)).toBe('none');
+  });
+});
+
+describe('quotaBalkenBreite', () => {
+  it('liefert die Belegung als Prozent zwischen 0 und 100', () => {
+    expect(quotaBalkenBreite(43.5)).toBe(43.5);
+    expect(quotaBalkenBreite(0)).toBe(0);
+  });
+
+  it('kappt Werte über 100', () => {
+    expect(quotaBalkenBreite(140)).toBe(100);
+  });
+
+  it('ohne Zahl kein Balken', () => {
+    expect(quotaBalkenBreite(null)).toBeNull();
+    expect(quotaBalkenBreite(undefined)).toBeNull();
   });
 });

@@ -73,6 +73,12 @@ export function formatPercent(percent) {
   return `${percent.toFixed(1).replace('.', ',')} %`;
 }
 
+// Width of the quota bar in percent, capped at a full bar. Null means no bar.
+export function quotaBalkenBreite(usagePercent) {
+  if (typeof usagePercent !== 'number' || Number.isNaN(usagePercent)) return null;
+  return Math.min(100, Math.max(0, usagePercent));
+}
+
 // GiB base 1073741824 (DECISIONS "Kontingent-Eingabe"), only presets, no free-text quota entry.
 const GIB = 1073741824;
 export const QUOTA_PRESETS = Object.freeze([

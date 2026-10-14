@@ -1,10 +1,8 @@
 // Import plan, Stufen 10-18 of ARCHITECTURE §6. Pure, no I/O.
-// Birthdate parsing is re-run here (same pure parseBirthdate as csvImport.js, see the step
-// report): RawRow only carries the raw geburtsdatum string, and rows can also be constructed
-// directly for tests without going through parseImportCsv at all, so this is the only place
-// ddmmyyyy is guaranteed to be derived.
+// A recognized date becomes ddmmyyyy. Any other cell text is used as written, because the
+// column only feeds the initial password and, on a name clash, the username suffix.
 import { parseBirthdate } from './birthdate.js';
-import { buildInitialPassword, checkMinLength } from './password.js';
+import { buildInitialPassword } from './password.js';
 import {
   MAX_USERID,
   normalizeComponent,
@@ -15,6 +13,20 @@ import {
 } from './username.js';
 
 const ONLY_DOTS = /^\.+$/;
+const USERNAME_TOKEN = /^[a-z0-9.]+$/;
+
+// Recognized dates stay in ddmmyyyy. Everything else is the trimmed cell, not a row error.
+function geburtsdatumAnteil(geburtsdatum, heute) {
+  const parsed = parseBirthdate(geburtsdatum, { heute });
+  if (parsed.ok) return parsed.ddmmyyyy;
+  return String(geburtsdatum ?? '').trim();
+}
+
+// Suffix must survive the username charset. Slashes and spaces are stripped, not rejected.
+function kollisionsSuffix(anteil) {
+  const sicher = USERNAME_TOKEN.test(anteil) ? anteil : normalizeComponent(anteil);
+  return sicher === '' ? '' : `.${sicher}`;
+}
 
 function isUnmappable(normalized) {
   return normalized === '' || ONLY_DOTS.test(normalized);
@@ -59,9 +71,7 @@ function processRow(row, ctx) {
   // Stufe 1-9 Zeilenfehler verlassen die Pipeline sofort, ohne Kandidaten.
   if (row.fehler) return { preview: fehlerZeile(row, row.fehler), identitaet: null };
 
-  const parsedDate = parseBirthdate(row.geburtsdatum, { heute: ctx.heute });
-  if (!parsedDate.ok) return { preview: fehlerZeile(row, parsedDate.messageId), identitaet: null };
-  const { ddmmyyyy } = parsedDate;
+  const ddmmyyyy = geburtsdatumAnteil(row.geburtsdatum, ctx.heute);
 
   // Stufe 10
   const normVorname = normalizeComponent(row.vorname);
@@ -108,7 +118,7 @@ function processRow(row, ctx) {
   }
 
   // Stufe 14c: verschiedene identitaet -> Suffix anhaengen, Stufe 12 erneut mit diesem Suffix.
-  const suffix = `.${ddmmyyyy}`;
+  const suffix = kollisionsSuffix(ddmmyyyy);
   const trunc2 = truncateToFit({ first: normVorname, second: normNachname, suffix, max: ctx.max });
   if (!trunc2.passt) {
     return {
@@ -157,9 +167,6 @@ function finalizeKandidat(row, ctx, { kandidat, ddmmyyyy, gekuerzt, status, iden
   const validation = validateUserid(kandidat, { quelle: 'generator' });
   if (!validation.ok) {
     return { preview: fehlerZeile(row, validation.messageId, { ddmmyyyy, username: kandidat, gekuerzt }), identitaet: null };
-  }
-  if (!checkMinLength(buildInitialPassword(ctx.prefix, ddmmyyyy))) {
-    return { preview: fehlerZeile(row, 'passwort_zu_kurz', { ddmmyyyy, username: kandidat, gekuerzt }), identitaet: null };
   }
   return {
     preview: erfolgsZeile(row, { ddmmyyyy, username: kandidat, status, gekuerzt, prefix: ctx.prefix }),

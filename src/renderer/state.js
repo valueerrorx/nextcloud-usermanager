@@ -47,8 +47,10 @@ export const filterSuche = ref('');
 export const filterGruppe = ref(null); // null = alle Gruppen
 export const filterStatus = ref('alle'); // 'alle' | 'aktiv' | 'deaktiviert'
 export const filterQuotaStufe = ref(null); // null = alle Stufen
-export const sortFeld = ref('userid'); // 'userid' | 'displayname' | 'quota'
+export const sortFeld = ref('userid'); // 'userid' | 'displayname' | 'quota' | 'lastSeen'
 export const sortRichtung = ref('aufsteigend'); // 'aufsteigend' | 'absteigend'
+export const seitenGroesse = ref(100); // 100 | 150 | 200 | 400, display only
+export const seitenNummer = ref(1);
 // Set von userid-Strings, keine Objektreferenzen - nach "Neu laden" sind die User-Objekte neu.
 export const auswahl = ref(new Set());
 
@@ -56,6 +58,7 @@ export const auswahl = ref(new Set());
 // Job über actions.run) und JobProgress.vue (zeigt Fortschritt und Bericht). Kein Store, nur
 // reaktive refs wie der Rest dieser Datei.
 export const jobLaeuft = ref(false);
+export const jobQuelle = ref(null); // 'users' | 'groups' | 'import' | null — which view owns the report
 export const jobId = ref(null);
 export const jobFortschritt = ref(null); // { done, total } | null
 export const jobResults = ref([]); // ItemResult[] aus actions.run
@@ -71,7 +74,7 @@ export const jobHistorie = ref([]);
 
 // Gruppenliste (S12, ARCHITECTURE §4) - Mitglieder und memberCount werden clientseitig aus
 // `users` abgeleitet (shared/groups.js), nicht hier und nicht per eigenem Request.
-export const groups = ref([]); // string[] aus groups.list, Server-Reihenfolge
+export const groups = ref([]); // { id, displayname }[] aus groups.list, Server-Reihenfolge
 export const groupsLadezustand = ref('laedt'); // 'laedt' | 'leer' | 'fehler' | 'bereit'
 export const groupsFehler = ref(null);
 export const freiplatz = ref(null); // server.freeSpace result | null (S18), independent of the dashboard load state

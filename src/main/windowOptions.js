@@ -4,8 +4,8 @@ const preloadPath = path.join(import.meta.dirname, '..', 'preload', 'index.cjs')
 
 // Security flags are fixed, never disabled (REVIEW-NOTES 10, ARCHITECTURE §9).
 export const BROWSER_WINDOW_OPTIONS = {
-  width: 1200,
-  height: 800,
+  width: 1800,
+  height: 1000,
   backgroundColor: '#0d1117',
   show: false,
   webPreferences: {

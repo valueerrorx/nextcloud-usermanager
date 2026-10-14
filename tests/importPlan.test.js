@@ -167,13 +167,13 @@ describe('username_nach_kuerzung_nicht_eindeutig ≠ benutzer_existiert_bereits 
 });
 
 describe('Stufe-18-Beweis: eine Fehlerzeile belegt keinen Namen (S09 Abnahme 7)', () => {
-  it('Zeile 1 scheitert vor jeder Kandidatenbildung (datum_ungueltig) — Zeile 2 mit demselben erzeugbaren Namen wird neu, nicht kollision_aufgeloest', () => {
+  it('Zeile 1 scheitert vor jeder Kandidatenbildung (vorname_leer) — Zeile 2 mit demselben erzeugbaren Namen wird neu, nicht kollision_aufgeloest', () => {
     const rows = [
-      { zeile: 1, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '32.01.2000' },
+      { zeile: 1, vorname: '', nachname: 'Mueller', geburtsdatum: '01.01.2000', fehler: 'vorname_leer' },
       { zeile: 2, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '01.01.2000' },
     ];
     const plan = buildImportPlan({ ...BASIS, rows, max: 64 });
-    expect(plan.rows[0]).toMatchObject({ status: 'fehler', fehlerId: 'datum_ungueltig', username: null });
+    expect(plan.rows[0]).toMatchObject({ status: 'fehler', fehlerId: 'vorname_leer', username: null });
     expect(plan.rows[1]).toMatchObject({ status: 'neu', username: 'max.mueller' });
   });
 
@@ -275,12 +275,18 @@ describe('buildImportPlan — Passwort und displayname', () => {
     expect(plan.rows[0].passwort).toBe('Schule01012000!');
   });
 
-  it('zu kurzes Initialpasswort (9 Zeichen) wird zur Fehlerzeile passwort_zu_kurz, 10 Zeichen bleiben gültig', () => {
+  it('nicht erkanntes Geburtsdatum bleibt eine gueltige Zeile und steht roh im Passwort', () => {
+    const rows = [{ zeile: 1, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '1.1.2000' }];
+    const plan = buildImportPlan({ ...BASIS, rows, prefix: 'Schule', max: 64 });
+    expect(plan.rows[0]).toMatchObject({
+      status: 'neu', username: 'max.mueller', ddmmyyyy: '1.1.2000', passwort: 'Schule1.1.2000!',
+    });
+  });
+
+  it('leeres Prefix bleibt eine gueltige Zeile, das Passwort ist Geburtsdatum plus Ausrufezeichen', () => {
     const rows = [{ zeile: 1, vorname: 'Max', nachname: 'Mueller', geburtsdatum: '01.01.2000' }];
-    const kurz = buildImportPlan({ ...BASIS, rows, prefix: '', max: 64 });
-    expect(kurz.rows[0]).toMatchObject({ status: 'fehler', fehlerId: 'passwort_zu_kurz', passwort: null });
-    const ok = buildImportPlan({ ...BASIS, rows, prefix: 'A', max: 64 });
-    expect(ok.rows[0].status).toBe('neu');
+    const plan = buildImportPlan({ ...BASIS, rows, prefix: '', max: 64 });
+    expect(plan.rows[0]).toMatchObject({ status: 'neu', passwort: '01012000!' });
   });
 
   it('eine Fehlerzeile hat passwort: null', () => {

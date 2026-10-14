@@ -58,7 +58,7 @@ export const MESSAGES = Object.freeze({
   // S09: CSV-Import, Datei- und Zeilenfehler, exakte Texte aus ARCHITECTURE §6.2 Fehlertabelle.
   datei_leer: 'Die Datei ist leer.',
   nur_header: 'Die Datei enthält nur die Kopfzeile.',
-  header_fehlt: 'Kopfzeile fehlt oder Spalten heißen nicht Vorname, Nachname, Geburtsdatum.',
+  header_fehlt: 'Kopfzeile fehlt oder Spalten heißen nicht Vorname, Nachname, Passwort.',
   zeilenlimit: 'Mehr als 2000 Zeilen. Bitte die Datei aufteilen.',
   spaltenzahl: 'Zeile hat nicht genau 3 Spalten.',
   quote_unbalanciert: 'Unvollständiges Anführungszeichen. Anführungszeichen werden nicht unterstützt.',
@@ -72,11 +72,6 @@ export const MESSAGES = Object.freeze({
   username_nach_kuerzung_nicht_eindeutig:
     'Zwei verschiedene Namen werden durch das Kürzen zum gleichen Username. Bitte einen der beiden manuell anlegen.',
   benutzer_existiert_bereits: 'Benutzer existiert bereits.',
-  // S09: Initialpasswort-Prefix (DECISIONS "Prefix-Validierung Initialpasswort"), eigene messageId je Verstoß.
-  prefix_leer: 'Bitte ein Passwort-Prefix eingeben.',
-  prefix_laenge: 'Das Prefix muss zwischen 3 und 20 Zeichen lang sein.',
-  prefix_zeichen: 'Das Prefix darf nur Buchstaben und Ziffern enthalten.',
-  prefix_grossbuchstabe: 'Das Prefix muss mit einem Großbuchstaben beginnen.',
   // S10: Importvorschau - Datei- und Gruppen-Fehler jenseits der Zeilenfehler aus S09.
   datei_lesen_fehlgeschlagen: 'Die Datei konnte nicht gelesen werden.',
   gruppe_existiert: 'Diese Gruppe existiert schon.',
@@ -88,12 +83,12 @@ export const MESSAGES = Object.freeze({
     'Die exportierte Datei enthält die Initialpasswörter im Klartext. Bitte sicher aufbewahren und nach Gebrauch löschen.',
   // S12: Gruppenverwaltung - Löschen, Admin-Schutz, Validierung des Gruppennamens.
   gruppe_loeschen_fehlgeschlagen: 'Die Gruppe konnte nicht gelöscht werden.',
+  gruppe_umbenennen_fehlgeschlagen: 'Der Anzeigename der Gruppe konnte nicht geändert werden.',
   gruppe_admin_geschuetzt: 'Die Gruppe "admin" ist geschützt und kann nicht gelöscht werden.',
   gruppenname_leer: 'Bitte einen Gruppennamen eingeben.',
   // S14: Einzel-User anlegen.
   benutzer_angelegt: 'Der Benutzer wurde angelegt.',
   benutzer_anlegen_fehlgeschlagen: 'Der Benutzer konnte nicht angelegt werden.',
-  passwort_zu_kurz: 'Das Initialpasswort ist kürzer als 10 Zeichen.',
   // S18: freier Speicher, Gruppe mit Mitgliedern löschen.
   freiplatz_nicht_verfuegbar: 'Der freie Speicherplatz konnte nicht ermittelt werden.',
   gruppenmitglieder_fehlgeschlagen: 'Die Mitglieder der Gruppe konnten nicht geladen werden.',

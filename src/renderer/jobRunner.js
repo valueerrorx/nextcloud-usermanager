@@ -10,10 +10,14 @@ import { MESSAGES } from '../shared/messages.js';
 import { describeError } from '../shared/logSafe.js';
 import { toastError, toastSuccess } from './toast.js';
 import {
-  jobId, jobLaeuft, jobFortschritt, jobResults, jobSummary, jobHistorie,
+  jobId, jobLaeuft, jobQuelle, jobFortschritt, jobResults, jobSummary, jobHistorie,
 } from './state.js';
 
 // Only for swal2 HTML output - no Vue component possible inside swal2.
+export function groupNameHtml(name, id) {
+  return `<span class="group-name"><span class="group-name-current">${escapeHtml(name)}</span><span class="group-name-id">${escapeHtml(id)}</span></span>`;
+}
+
 export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -96,13 +100,14 @@ export async function confirmDelete(plan, vorHtml = '') {
 
 // Runs the confirmed plan through actions.run. Resolves with the ItemResult[] (null if the job
 // did not run or failed globally); errors end in a dialog, never a rejection.
-export async function startJob(plan, action, params) {
+export async function startJob(plan, action, params, quelle) {
   if (jobLaeuft.value) {
     await Swal.fire({ title: 'Auftrag läuft', text: MESSAGES.job_laeuft_bereits, icon: 'warning' });
     return null;
   }
   const neueJobId = `job-${Date.now()}`;
   jobId.value = neueJobId;
+  jobQuelle.value = quelle;
   jobLaeuft.value = true;
   jobFortschritt.value = { done: 0, total: plan.anzahl };
   jobResults.value = [];
