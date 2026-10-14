@@ -14,40 +14,61 @@ Exception-Text über IPC zurück. Beides verletzt DECISIONS „`message` kommt i
 - Renderer-Dialoge: deutsche Meldung + Detail klein im Fuß (`unerwartetFooter`) — bleibt.
 
 ## Umsetzung
-- `src/main/ocs/client.js`: `makeFailure` setzt `hinweis` **nicht** mehr pauschal. Stattdessen
-  wird der bereinigte Servertext nur bei `meta.statuscode === 107` als Feld `serverText`
-  an das Failure gehängt; alle anderen Fälle haben kein Textfeld. Der `'http'`-Zweig verliert den
-  `HTTP <status>`-Fallback (Status steht bereits in `httpStatus`).
-  `sanitizeHinweis` bleibt für den 107-Fall (Secrets inkl. `form.password`/`form.value` werden
-  entfernt; Länge gekappt) und wird in `sanitizeServerText` umbenannt.
-- `src/main/actions/pipeline.js`: `grund` ist immer die `messageId`, außer: Schritt ist
-  passwortsetzend (`create` bzw. `password`), `ocsCode === 107` und `serverText` vorhanden ->
-  `grund = \`${MESSAGES.passwort_policy} (${serverText})\``. Welche Schritte passwortsetzend sind,
-  steht als benannte Menge der Step-Namen in `pipeline.js` oder `operations.js` (eine Stelle).
-- `src/main/ipc.js` `actions.run`-Catch (~Z. 257-262): Rückgabe nur
-  `MESSAGES.unerwarteter_serverfehler`, `detail` nur ins `console.error`.
-- `src/renderer/views/ImportView.vue` ~Z. 224: Detail nicht im `text`, sondern über
-  `footer: unerwartetFooter(error)` wie in `jobRunner.js`.
-- `jobReport.js`/`resultCsv.js` unverändert (`resolveGrund` löst messageId oder Text auf).
-- docs/ARCHITECTURE.md: Fehlerfluss-Abschnitt (Failure-Form, `grund`) nachziehen.
+- `src/main/ocs/client.js`: `makeFailure` setzt kein pauschales Textfeld mehr. Nur bei
+  `meta.statuscode === 107` hängt der Client den bereinigten Servertext als `serverText` an.
+  Ist das zu setzende Passwort (`form.password` bzw. `form.value` bei `key=password`) kürzer als
+  4 Zeichen, gibt es **kein** `serverText` (die Bereinigung kann so kurze Secrets nicht sicher
+  entfernen). Der `'http'`-Zweig verliert den `HTTP <status>`-Fallback und jedes Textfeld.
+  Umbenennen: `sanitizeHinweis` -> `sanitizeServerText`, `USELESS_HINWEIS` -> `USELESS_SERVER_TEXT`.
+- `src/main/ocs/errors.js` (`mapOcsError`) bleibt; es reicht Zusatzfelder per Spread durch.
+- `src/main/actions/operations.js`: Flag `setsPassword: true` am `create`-Schritt von
+  `user.create` und am Schritt von `user.setPassword` (die einzige Stelle, die festlegt, welche
+  Schritte passwortsetzend sind; nie über Step-Namen, die können Gruppen-IDs sein).
+- `src/main/actions/pipeline.js`: Helper `fehlerGrund(step, result)`, genutzt in beiden
+  Fehlerzweigen (~Z. 36 und ~Z. 62): `step.setsPassword && result.ocsCode === 107 &&
+  result.serverText` -> `` `${MESSAGES.passwort_policy} (${result.serverText})` ``, sonst
+  `result.messageId`.
+- `src/main/ipc.js` äußerer `actions.run`-Catch (~Z. 256-263): Rückgabe exakt
+  `{ ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler }`;
+  `detail` nur ins `console.error` (geschwärzt wie heute).
+- `src/renderer/views/ImportView.vue` ~Z. 224: `text: MESSAGES.unerwarteter_serverfehler`,
+  Detail über `footer: unerwartetFooter(error)` wie in `jobRunner.js`.
+- `UsersView.vue:188` (Inline-Meldung) und `ActionBar.vue:193` (Toast): **unverändert** — reine
+  Renderer-Fehler, Renderer hält keine Secrets (DECISIONS „Technisches Detail in Fehlerdialogen“).
+- `jobReport.js`/`resultCsv.js` unverändert: `resolveGrund` reicht Nicht-IDs unverändert durch.
+- `docs/ARCHITECTURE.md` §5 (~Z. 377): ItemResult `grund` = messageId, oder bei 107 auf einem
+  passwortsetzenden Schritt `MESSAGES.passwort_policy (Servertext)`; `resolveGrund` reicht Nicht-IDs
+  durch. Failure-Form: optionales `serverText` nur bei 107.
+- Bestehende Tests, die **angepasst** (nicht abgeschwächt) werden:
+  `tests/ocsClient.test.js` ~:431, ~:434-441, ~:459-468 (`hinweis` -> `serverText`, nur 107),
+  ~:443-450 (HTTP 500 ohne Textfeld), ~:452-457 (`HTTP 500`-Fallback-Test invertieren);
+  `tests/pipeline.test.js` ~:359-377 (`user.enable` mit Servertext: `grund` ist die messageId);
+  `tests/ipc.test.js` ~:840 (exakter MESSAGES-Text statt `expect.any(String)`).
 
 ## Akzeptanz
-1. Gemockter Server antwortet auf `POST /cloud/users` mit `statuscode 107` und
-   `message: "Das Passwort ist zu kurz. Pa55wort"` (Form-Passwort `Pa55wort`): Item-`grund`
-   beginnt mit dem deutschen `passwort_policy`-Text, enthält „Das Passwort ist zu kurz.“ und
-   **nicht** `Pa55wort`.
-2. Dasselbe für `user.setPassword` (PUT `key=password`) mit 107.
-3. Ein anderer OCS-Fehler (z. B. 102 auf `user.create`, 101 auf `user.setQuota`) mit Servertext
-   `"geheim: xyz"`: `grund` ist exakt die gemappte `messageId`, Servertext taucht in keinem
-   ItemResult-Feld auf.
-4. 107 auf einem **nicht** passwortsetzenden Schritt (z. B. `user.setQuota`): kein Servertext.
-5. HTTP-5xx-Antwort mit OCS-Envelope und Text: `grund` = `unerwarteter_serverfehler`
-   (bzw. die bestehende messageId), kein `HTTP 500`-String, kein Servertext.
-6. `actions.run`, dessen Pipeline eine Exception wirft, deren Message das App-Passwort und
-   `TypeError: boom` enthält: IPC-Rückgabe `message === MESSAGES.unerwarteter_serverfehler`
-   exakt; `console.error` wurde aufgerufen.
-7. `grep -rn "hinweis" src/main` leer (Feld umbenannt/entfernt).
-8. `npm test`, `npm run lint`, `npm run build` grün.
+Kriterien 1-5 laufen **Ende-zu-Ende**: echter `createOcsClient` mit gemocktem `fetchImpl`, echte
+`users.js`/`operations.js`, `runJob`. Kein Stub von `client.request`.
+1. `POST /cloud/users` antwortet `statuscode 107`, `message: "Das Passwort ist zu kurz. Pa55wort"`,
+   Form-Passwort `Pa55wort`: `grund === \`${MESSAGES.passwort_policy} (Das Passwort ist zu kurz.)\``.
+2. Dasselbe für `user.setPassword` (PUT `key=password`, Wert `Pa55wort`) mit 107.
+3. 102 auf `user.create` und 101 auf `user.setQuota`, jeweils mit Servertext `"geheim: xyz"`:
+   `grund` ist exakt die gemappte messageId; das Client-Failure hat **kein** `serverText`
+   (`not.toHaveProperty('serverText')`); `JSON.stringify(item)` enthält `geheim` nicht.
+4. 107 auf `user.setQuota` (nicht passwortsetzend) und auf einem Gruppenschritt mit Gruppe
+   `password`: `grund` ist die messageId, kein Servertext.
+5. HTTP 500 mit Envelope `statuscode 100`, `meta.message: "interner Text"`:
+   `grund === 'unerwarteter_serverfehler'`; `JSON.stringify(item)` enthält weder `interner Text`
+   noch `HTTP 500`.
+6. Passwort `abc`, 107 mit `"abc zu kurz"`: `grund === MESSAGES.passwort_policy` exakt
+   (ohne Klammer), kein `serverText`.
+7. Äußerer `actions.run`-Catch (Auslösung wie tests/ipc.test.js ~:835-844 per werfendem
+   `args`-Getter), Exception-Message enthält das Session-App-Passwort (`geheim`) und `boom`:
+   Ergebnis `toEqual({ ok: false, messageId: 'unerwarteter_serverfehler', message: MESSAGES.unerwarteter_serverfehler })`;
+   `console.error` aufgerufen, kein Argument enthält `geheim`.
+8. `grep -rni "hinweis" src/main` leer.
+9. ImportView-Fehlerdialog: manueller Check in docs/MANUAL-TEST.md (neuer Fall mit
+   Buchstabensuffix) — kein Quelltext-Regex-Test.
+10. `npm test`, `npm run lint`, `npm run build` grün.
 
 ## Nicht im Scope
 - Batch/IPC-Robustheit (S23), Systeminfo (S24), CI (S25).
