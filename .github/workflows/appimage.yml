@@ -5,15 +5,25 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: appimage-release
+  cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Detect version increase
@@ -21,6 +31,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           new=$(jq -r .version package.json)
@@ -58,7 +69,7 @@ jobs:
 
       - name: Setup Node
         if: steps.version.outputs.publish == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -67,23 +78,53 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         run: npm ci
 
+      - name: Lint
+        if: steps.version.outputs.publish == 'true'
+        run: npm run lint
+
+      - name: Test
+        if: steps.version.outputs.publish == 'true'
+        run: npm test
+
       - name: Build AppImage
         if: steps.version.outputs.publish == 'true'
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         # On GitHub Actions electron-builder publishes by itself and then demands GH_TOKEN.
-        # The release is created in the next step, so this build only writes the AppImage.
+        # The release is created in the release job, so this build only writes the AppImage.
         run: npm run build -- --publish never
 
-      - name: Create GitHub Release
+      - name: Upload AppImage
         if: steps.version.outputs.publish == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: appimage
+          path: release/*.AppImage
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download AppImage
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: appimage
+          path: release
+
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
           tag="v${VERSION}"
           gh release create "$tag" release/*.AppImage \
+            --repo "$GITHUB_REPOSITORY" \
             --target "${GITHUB_SHA}" \
             --title "$tag" \
             --notes "AppImage ${tag}."

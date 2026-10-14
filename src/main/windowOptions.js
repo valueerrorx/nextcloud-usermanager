@@ -17,6 +17,19 @@ export const BROWSER_WINDOW_OPTIONS = {
   },
 };
 
+// Clamps the preferred size to the display work area; invalid input keeps the preferred size.
+export function fitWindowSize(workArea) {
+  const preferred = { width: BROWSER_WINDOW_OPTIONS.width, height: BROWSER_WINDOW_OPTIONS.height };
+  const isValid = (value) => Number.isFinite(value) && value > 0;
+  if (!workArea || !isValid(workArea.width) || !isValid(workArea.height)) {
+    return preferred;
+  }
+  return {
+    width: Math.min(preferred.width, workArea.width),
+    height: Math.min(preferred.height, workArea.height),
+  };
+}
+
 // Denies all new windows and blocks navigation away from the loaded URL (electron-free, unit-testable).
 export function applyNavigationGuards(webContents) {
   webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

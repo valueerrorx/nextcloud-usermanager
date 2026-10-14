@@ -40,7 +40,7 @@ src/main/
                                   und tls.js; re-exportiert BROWSER_WINDOW_OPTIONS
                                   KEIN top-level await vor app.whenReady() — ESM-Main wird
                                   asynchron geladen, sonst wird 'ready' verpasst
-  windowOptions.js                BROWSER_WINDOW_OPTIONS als eigenes Modul, damit
+  windowOptions.js                BROWSER_WINDOW_OPTIONS + fitWindowSize als eigenes Modul, damit
                                   tests/mainWindow.test.js es ohne electron-Mock importieren kann
   ipc.js                          EINZIGER Ort mit ipcMain.handle/on; registriert die Kanäle aus §3
   session.js                      Sitzungszustand im Speicher: Credentials, adminUserId (aus dem
@@ -141,7 +141,7 @@ tests/                            je getestetes Modul genau eine Datei (Abgleich
   index.test.js                   second-instance: Fenster wiederherstellen/fokussieren,
                                   zerstoertes Fenster wird nicht dereferenziert
   theme.test.js                   genau die sechs Theme-Tokens mit festen Hex-Werten
-  mainWindow.test.js              BROWSER_WINDOW_OPTIONS: contextIsolation/sandbox/nodeIntegration
+  mainWindow.test.js              BROWSER_WINDOW_OPTIONS, fitWindowSize: contextIsolation/sandbox/nodeIntegration
   ocsClient.test.js               gemockte fetch: 100/401/403/429/HTML/Netzfehler, Header-Pflicht
   ocsUsers.test.js                endpunktspezifische Codes -> messageId, user.update 1-2 Schritte
   ocsGroups.test.js               102/103/101 je Endpunkt
@@ -824,8 +824,9 @@ Die frühere `ConnectView`-Seite und der Kanal `connection.forgetSaved` existier
   `preload` die einzige Brücke. `setWindowOpenHandler` verweigert alles,
   `will-navigate` blockt externe Navigation.
 - **Verifikation der Flags:** Das Optionsobjekt liegt in **`src/main/windowOptions.js`** als
-  `BROWSER_WINDOW_OPTIONS`; `src/main/index.js` re-exportiert es und übergibt genau dieses an
-  `new BrowserWindow(...)`. `applyNavigationGuards(webContents)` liegt ebenfalls in `windowOptions.js` und ist damit ohne
+  `BROWSER_WINDOW_OPTIONS`; `src/main/index.js` re-exportiert es und übergibt eine Kopie davon an
+  `new BrowserWindow(...)`, deren Breite/Höhe `fitWindowSize(screen.getPrimaryDisplay().workAreaSize)`
+  auf die Arbeitsfläche klemmt (Security-Flags unverändert). `applyNavigationGuards(webContents)` liegt ebenfalls in `windowOptions.js` und ist damit ohne
   Electron testbar (`tests/mainWindow.test.js` prüft Deny-All und `will-navigate`).
   `tests/mainWindow.test.js` importiert **`windowOptions.js` direkt** —
   dadurch **kein `electron`-Mock** und keine Bootstrap-Seiteneffekte beim Import. Der Test behauptet

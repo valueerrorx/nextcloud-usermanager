@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { existsSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { BROWSER_WINDOW_OPTIONS, applyNavigationGuards } from '../src/main/windowOptions.js';
+import { BROWSER_WINDOW_OPTIONS, applyNavigationGuards, fitWindowSize } from '../src/main/windowOptions.js';
 
 describe('BROWSER_WINDOW_OPTIONS', () => {
   it('setzt die Security-Flags fest', () => {
@@ -25,6 +25,23 @@ describe('BROWSER_WINDOW_OPTIONS', () => {
 
   it('bleibt unsichtbar bis ready-to-show (show: false, verhindert weißes Aufblitzen zusammen mit backgroundColor)', () => {
     expect(BROWSER_WINDOW_OPTIONS.show).toBe(false);
+  });
+});
+
+describe('fitWindowSize', () => {
+  const preferred = { width: 1800, height: 1000 };
+  it.each([
+    [{ width: 1366, height: 728 }, { width: 1366, height: 728 }],
+    [{ width: 2560, height: 1400 }, preferred],
+    [{ width: 1600, height: 860 }, { width: 1600, height: 860 }],
+    [undefined, preferred],
+    [{ width: 0, height: 0 }, preferred],
+    [{ width: NaN, height: 900 }, preferred],
+    [{ width: 1366 }, preferred],
+    [{ width: 3000, height: 700 }, { width: 1800, height: 700 }],
+    [{ width: 1000, height: 2000 }, { width: 1000, height: 1000 }],
+  ])('fitWindowSize(%j) -> %j', (workArea, expected) => {
+    expect(fitWindowSize(workArea)).toEqual(expected);
   });
 });
 

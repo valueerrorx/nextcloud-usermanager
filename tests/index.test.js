@@ -57,6 +57,7 @@ describe('src/main/index.js second-instance guard', () => {
       }),
       ipcMain: { handle: vi.fn() },
       Menu: { setApplicationMenu: vi.fn() },
+      screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1366, height: 728 } }) },
       session: { defaultSession },
     }));
 
@@ -67,8 +68,8 @@ describe('src/main/index.js second-instance guard', () => {
       expect(browserWindowInstance.loadFile).toHaveBeenCalled();
     });
 
-    const { Menu } = await import('electron');
-    return { appListeners, defaultSession, Menu };
+    const { Menu, BrowserWindow } = await import('electron');
+    return { appListeners, defaultSession, Menu, BrowserWindow };
   }
 
   it('fokussiert und stellt ein minimiertes Fenster bei second-instance wieder her', async () => {
@@ -119,5 +120,21 @@ describe('src/main/index.js second-instance guard', () => {
     expect(Menu.setApplicationMenu).toHaveBeenCalledWith(null);
     expect(Menu.setApplicationMenu.mock.invocationCallOrder[0])
       .toBeLessThan(browserWindowInstance.loadFile.mock.invocationCallOrder[0]);
+  });
+
+  it('übergibt die auf die Arbeitsfläche geklemmte Größe samt Security-Flags an new BrowserWindow', async () => {
+    const browserWindowInstance = fakeBrowserWindow();
+    const { BrowserWindow } = await bootWithMockedElectron(browserWindowInstance);
+
+    expect(BrowserWindow).toHaveBeenCalledOnce();
+    const options = BrowserWindow.mock.calls[0][0];
+    expect(options.width).toBe(1366);
+    expect(options.height).toBe(728);
+    expect(options.webPreferences).toMatchObject({
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    });
   });
 });

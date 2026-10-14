@@ -1,6 +1,6 @@
-import { app, BrowserWindow, Menu, session } from 'electron';
+import { app, BrowserWindow, Menu, screen, session } from 'electron';
 import path from 'node:path';
-import { BROWSER_WINDOW_OPTIONS, applyNavigationGuards } from './windowOptions.js';
+import { BROWSER_WINDOW_OPTIONS, applyNavigationGuards, fitWindowSize } from './windowOptions.js';
 import { registerIpcHandlers, tlsController } from './ipc.js';
 import { installCertificateVerifier } from './tls.js';
 
@@ -13,7 +13,10 @@ if (!gotLock) {
   let mainWindow = null;
 
   async function createWindow() {
-    mainWindow = new BrowserWindow(BROWSER_WINDOW_OPTIONS);
+    mainWindow = new BrowserWindow({
+      ...BROWSER_WINDOW_OPTIONS,
+      ...fitWindowSize(screen.getPrimaryDisplay().workAreaSize),
+    });
 
     mainWindow.once('ready-to-show', () => {
       mainWindow.show();
