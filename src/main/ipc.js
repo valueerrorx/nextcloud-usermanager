@@ -290,7 +290,7 @@ async function handleGroupsCreate(args) {
     if (!session.connected) {
       return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
     }
-    if (!groupid || groupid.trim() === '') {
+    if (typeof groupid !== 'string' || groupid.trim() === '') {
       return { ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen', message: MESSAGES.gruppe_anlegen_fehlgeschlagen };
     }
     const result = await createGroup(session.client, groupid);
@@ -313,7 +313,7 @@ async function handleGroupsDelete(args) {
     if (!session.connected) {
       return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
     }
-    if (!groupid || groupid.trim() === '') {
+    if (typeof groupid !== 'string' || groupid.trim() === '') {
       return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
     }
     if (!istGruppeLoeschbar(groupid)) {
@@ -336,7 +336,7 @@ async function handleGroupsRename(args) {
       return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
     }
     const name = typeof displayname === 'string' ? displayname.trim() : '';
-    if (!groupid || groupid.trim() === '' || name === '') {
+    if (typeof groupid !== 'string' || groupid.trim() === '' || name === '') {
       return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
     }
     const result = await renameGroup(session.client, groupid, name);
@@ -355,7 +355,7 @@ async function handleGroupsMembers(args) {
     if (!session.connected) {
       return { ok: false, messageId: 'nicht_verbunden', message: MESSAGES.nicht_verbunden };
     }
-    if (!groupid || groupid.trim() === '') {
+    if (typeof groupid !== 'string' || groupid.trim() === '') {
       return { ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer };
     }
     const result = await getGroupMembers(session.client, groupid);

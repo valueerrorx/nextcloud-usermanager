@@ -89,4 +89,11 @@ export const MESSAGES = Object.freeze({
   freiplatz_nicht_verfuegbar: 'Der freie Speicherplatz konnte nicht ermittelt werden.',
   gruppenmitglieder_fehlgeschlagen: 'Die Mitglieder der Gruppe konnten nicht geladen werden.',
   userliste_nicht_aktuell: 'Benutzerliste ist nicht aktuell — bitte neu laden.',
+  // S23: item without any step.
+  nichts_auszufuehren: 'Für diesen Benutzer gab es nichts auszuführen.',
 });
+
+// Partial-failure sentences with an interpolated value; kept outside the frozen MESSAGES map.
+export const teilfehlerGruppeZuweisen = (groupid) => `Gruppe "${groupid}" konnte nicht zugewiesen werden`;
+export const teilfehlerGruppeEntfernen = (groupid) => `Entfernen aus Gruppe "${groupid}" fehlgeschlagen`;
+export const teilfehlerSchritt = (name) => `${name} konnte nicht gesetzt werden`;

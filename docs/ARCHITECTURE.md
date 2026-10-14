@@ -188,7 +188,7 @@ auch nicht maskiert.** Es fließt ausschließlich Renderer -> Main, nie zurück.
 | `groups.list` | invoke | – | `{ ok, groups: GroupView[] }` | 401, 429, Netz |
 | `groups.create` | invoke | `{ groupid }` | `{ ok }` | 101/103 -> `gruppe_anlegen_fehlgeschlagen`, 102 -> `gruppe_existiert`, `gruppenname_leer` |
 | `groups.delete` | invoke | `{ groupid }` | `{ ok }` | 101 -> `gruppe_existiert_nicht`, 102 -> `gruppe_loeschen_fehlgeschlagen`, `gruppe_admin_geschuetzt` |
-| `groups.rename` | invoke | `{ groupid, displayname }` | `{ ok }` | 101 -> `gruppe_umbenennen_fehlgeschlagen`, 404 -> `gruppe_existiert_nicht`, `gruppenname_leer`; ändert nur den Anzeigenamen, die ID bleibt |
+| `groups.rename` | invoke | `{ groupid, displayname }` | `{ ok }` | 101 -> `gruppe_umbenennen_fehlgeschlagen`, 998 -> `gruppe_existiert_nicht`, `gruppenname_leer`; ändert nur den Anzeigenamen, die ID bleibt |
 | `groups.members` | invoke | `{ groupid }` | `{ ok, members: string[] }` | `nicht_verbunden`, `gruppenname_leer`, `gruppenmitglieder_fehlgeschlagen` (S18, `GET /cloud/groups/{gid}`) |
 | `server.freeSpace` | invoke | – | `{ ok, freeBytes: number\|null }` | `nicht_verbunden`, jeder OCS-/Netzfehler; `serverinfo`-App, kein Fehlerpopup (S18) |
 | `actions.run` | invoke | `{ jobId, action, items, params }` | `{ ok, results: ItemResult[], summary }` | nie global fehlerhaft; Fehler stehen je Item |
@@ -378,9 +378,10 @@ per Konstruktion nicht und kann die Aufräumlogik nicht sehen.
   schritte?: [{ name, status, grund }] }
 ```
 
-`grund` ist eine messageId. Einzige Ausnahme: OCS 107 auf einem passwortsetzenden Schritt
-(`setsPassword`) ergibt `MESSAGES.passwort_policy (Servertext)`; `resolveGrund` reicht Nicht-IDs
-unverändert durch. Die Failure-Form des OCS-Clients trägt `serverText` optional, nur bei 107.
+`grund` ist eine messageId (bei 'ok' und bei 'nicht ausgeführt' durch Abbruch `null`; bei leerer
+Schrittliste `nichts_auszufuehren`, ohne Request). Ausnahmen: OCS 107 auf einem passwortsetzenden
+Schritt (`setsPassword`) ergibt `MESSAGES.passwort_policy (Servertext)`, und `teilweise` trägt die
+`teilfehler*`-Sätze aus `messages.js`; `resolveGrund` reicht Nicht-IDs unverändert durch. Die Failure-Form des OCS-Clients trägt `serverText` optional, nur bei 107.
 
 `summary` (DECISIONS „`summary`-Form des Action-Ergebnisses“):
 
@@ -390,7 +391,7 @@ unverändert durch. Die Failure-Form des OCS-Clients trägt `serverText` optiona
 
 Die Summe der vier Zähler ist immer `items.length`. `teilweise` **widerspricht** den drei
 entschiedenen Zuständen aus „Abbruch-Semantik im Batch“ nicht, sondern verfeinert sie: es
-entsteht nur bei mehrschrittigen Actions (`user.create`, `user.update`) und nur, wenn
+entsteht nur bei mehrschrittigen Actions (`user.create`, `user.update`, `user.removeFromGroup`) und nur, wenn
 mindestens ein Schritt `ok` und mindestens einer `fehler` ist. Kein Rollback, keine Kompensation.
 Die Jobverlauf-Kachel zählt `teilweise` **in die Fehlerspalte** und weist es **zusätzlich
 separat** aus („3 Fehler, davon 1 teilweise“) — berechnet von `dashboard.js#historyCounts`,

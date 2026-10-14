@@ -8,7 +8,7 @@ import {
   addUserToGroup,
   removeUserFromGroup,
 } from '../ocs/users.js';
-import { MESSAGES } from '../../shared/messages.js';
+import { MESSAGES, teilfehlerGruppeZuweisen, teilfehlerGruppeEntfernen } from '../../shared/messages.js';
 
 // Each step runs against a single client and names itself - the name feeds ItemResult.grund
 // when a later step in the same action fails (user.update's 'teilweise' case).
@@ -28,7 +28,7 @@ const OPERATIONS = {
   'user.removeFromGroup': (userid, params) => gruppenZumEntfernen(userid, params).map((groupid) => ({
     name: groupid,
     independent: true,
-    teilfehlerGrund: `Entfernen aus Gruppe "${groupid}" fehlgeschlagen`,
+    teilfehlerGrund: teilfehlerGruppeEntfernen(groupid),
     run: (client) => removeUserFromGroup(client, userid, groupid),
   })),
   // S11 A2: user.create is deliberately two-step - POST /cloud/users without groups[], then one
@@ -44,7 +44,7 @@ const OPERATIONS = {
     for (const groupid of params.groups ?? []) {
       steps.push({
         name: groupid,
-        teilfehlerGrund: `Gruppe "${groupid}" konnte nicht zugewiesen werden`,
+        teilfehlerGrund: teilfehlerGruppeZuweisen(groupid),
         run: (client) => addUserToGroup(client, userid, groupid),
       });
     }
@@ -67,8 +67,10 @@ const OPERATIONS = {
 // Per-user list when the dialog picked several memberships; a single groupid stays the group view.
 function gruppenZumEntfernen(userid, params) {
   const proUser = params.groupidsByUserid?.[userid];
-  if (Array.isArray(proUser)) return proUser;
-  return params.groupid ? [params.groupid] : [];
+  const gueltig = (id) => typeof id === 'string' && id.trim() !== '';
+  // A per-user array wins even when it filters down to nothing; ids are sent unchanged.
+  if (Array.isArray(proUser)) return [...new Set(proUser.filter(gueltig))];
+  return gueltig(params.groupid) ? [params.groupid] : [];
 }
 
 // Throws for an unknown action id - a programming error (A2), never a runtime case that should

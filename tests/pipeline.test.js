@@ -534,3 +534,79 @@ describe('runJob - S22 Servertext nur bei OCS 107 auf passwortsetzenden Schritte
     expect(JSON.stringify(results[0])).not.toContain('abc zu kurz');
   });
 });
+
+// S23 Abnahme 1-3: echter createOcsClient, gezählt wird am injizierten fetchImpl.
+describe('runJob - S23 Item ohne Schritte gilt nie als ok (Ende-zu-Ende)', () => {
+  function countingClient() {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, options) => {
+      calls.push({ url, method: options.method, body: String(options.body ?? ''), form: new URLSearchParams(String(options.body ?? '')) });
+      const text = JSON.stringify({ ocs: { meta: { status: 'ok', statuscode: 100 }, data: null } });
+      return { status: 200, headers: { get: () => null }, text: async () => text };
+    });
+    const client = createOcsClient({
+      baseUrl: 'https://h', adminUser: 'admin', appPassword: 'app-secret-pw', fetchImpl, sleep: vi.fn(),
+    });
+    return { client, calls, fetchImpl };
+  }
+
+  const NICHTS = { status: 'nicht ausgeführt', grund: 'nichts_auszufuehren', httpStatus: null, ocsCode: null };
+
+  it('1. removeFromGroup mit leerem/fehlendem groupidsByUserid-Eintrag und ohne groupid: 0 Requests, nichtAusgefuehrt 3', async () => {
+    const { client, fetchImpl } = countingClient();
+    const { results, summary } = await runJob({
+      jobId: 's23-1', action: 'user.removeFromGroup', items: ['a', 'b', 'c'],
+      params: { groupidsByUserid: { a: [], b: undefined } }, client, shouldStop: () => false,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(0);
+    expect(results).toHaveLength(3);
+    for (const r of results) expect(r).toMatchObject(NICHTS);
+    expect(summary).toEqual({ ok: 0, fehler: 0, nichtAusgefuehrt: 3, teilweise: 0 });
+  });
+
+  it('2. user.update ohne displayname/email: 0 Requests, nichts_auszufuehren', async () => {
+    const { client, fetchImpl } = countingClient();
+    const { results, summary } = await runJob({
+      jobId: 's23-2', action: 'user.update', items: ['a', 'b'], params: {}, client, shouldStop: () => false,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(0);
+    for (const r of results) expect(r).toMatchObject(NICHTS);
+    expect(summary).toEqual({ ok: 0, fehler: 0, nichtAusgefuehrt: 2, teilweise: 0 });
+  });
+
+  it('3a. ungültige/doppelte Einträge: genau zwei DELETE, unveränderte IDs, Item ok', async () => {
+    const { client, calls, fetchImpl } = countingClient();
+    const { results, summary } = await runJob({
+      jobId: 's23-3a', action: 'user.removeFromGroup', items: ['a'],
+      params: { groupidsByUserid: { a: ['', '  ', 42, null, ' lehrer ', 'lehrer', 'lehrer'] } },
+      client, shouldStop: () => false,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(calls.map((c) => c.method)).toEqual(['DELETE', 'DELETE']);
+    expect(calls.map((c) => c.form.get('groupid'))).toEqual([' lehrer ', 'lehrer']);
+    expect(results[0].status).toBe('ok');
+    expect(summary).toEqual({ ok: 1, fehler: 0, nichtAusgefuehrt: 0, teilweise: 0 });
+    expect(calls.map((c) => c.body)).toEqual(['groupid=+lehrer+', 'groupid=lehrer']);
+  });
+
+  it('3b. Array ohne gültigen Eintrag fällt nicht auf groupid zurück: 0 Requests', async () => {
+    const { client, fetchImpl } = countingClient();
+    const { results } = await runJob({
+      jobId: 's23-3b', action: 'user.removeFromGroup', items: ['a'],
+      params: { groupid: 'x', groupidsByUserid: { a: ['', null] } }, client, shouldStop: () => false,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(0);
+    expect(results[0]).toMatchObject(NICHTS);
+  });
+
+  it('3c. ohne Array: leere/nicht-String groupid -> 0 Requests, nichts_auszufuehren', async () => {
+    for (const groupid of ['  ', 42]) {
+      const { client, fetchImpl } = countingClient();
+      const { results } = await runJob({
+        jobId: 's23-3c', action: 'user.removeFromGroup', items: ['a'], params: { groupid }, client, shouldStop: () => false,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(0);
+      expect(results[0]).toMatchObject(NICHTS);
+    }
+  });
+});

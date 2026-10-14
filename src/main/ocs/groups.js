@@ -44,10 +44,10 @@ export async function deleteGroup(client, groupid) {
   return { ok: true, data: result.data, httpStatus: result.httpStatus, versuche: result.versuche };
 }
 
-// Rename sets displayname only. 101 backend refused, 404 group id does not exist.
+// Rename sets displayname only. 101 backend refused, 998 group does not exist (OCSController::RESPOND_NOT_FOUND, v1 keeps the code).
 const RENAME_GROUP_ERRORS = {
   101: 'gruppe_umbenennen_fehlgeschlagen',
-  404: 'gruppe_existiert_nicht',
+  998: 'gruppe_existiert_nicht',
 };
 
 export async function renameGroup(client, groupid, displayname) {

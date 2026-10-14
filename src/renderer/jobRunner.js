@@ -8,7 +8,7 @@ import { pushJobHistorie } from '../shared/dashboard.js';
 import { ACTION_LABELS, jobToast } from '../shared/userRows.js';
 import { MESSAGES } from '../shared/messages.js';
 import { describeError } from '../shared/logSafe.js';
-import { toastError, toastSuccess } from './toast.js';
+import { toastError, toastInfo, toastSuccess } from './toast.js';
 import {
   jobId, jobLaeuft, jobQuelle, jobFortschritt, jobResults, jobSummary, jobHistorie,
 } from './state.js';
@@ -127,7 +127,8 @@ export async function startJob(plan, action, params, quelle) {
         zeitpunkt: Date.now(), aktion: ACTION_LABELS[action], summary: result.summary,
       });
       const feedback = jobToast(ACTION_LABELS[action], result.summary);
-      (feedback.kind === 'error' ? toastError : toastSuccess)(feedback.text);
+      if (feedback.kind === 'info') toastInfo(feedback.text);
+      else (feedback.kind === 'error' ? toastError : toastSuccess)(feedback.text);
     } else {
       await Swal.fire({ title: 'Fehler', text: result.message ?? MESSAGES.aktion_fehlgeschlagen, icon: 'error' });
     }

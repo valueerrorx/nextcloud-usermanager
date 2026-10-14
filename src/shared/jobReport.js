@@ -5,8 +5,8 @@ import { MESSAGES } from './messages.js';
 
 // ItemResult.grund (ARCHITECTURE §5) is a messageId for 'fehler' (set from ocs/client.js),
 // an already-German sentence for 'teilweise' (pipeline.js names the failed sub-step itself),
-// or null for 'ok'/'nicht ausgeführt'. MESSAGES[grund] ?? grund resolves the first case and
-// passes the second through unchanged, because it simply matches no key.
+// or null for 'ok' and for a stopped 'nicht ausgeführt' ('nichts_auszufuehren' for an empty step
+// list). MESSAGES[grund] ?? grund resolves the first case and passes the second through unchanged.
 export function resolveGrund(grund) {
   if (grund === null || grund === undefined) return null;
   return MESSAGES[grund] ?? grund;

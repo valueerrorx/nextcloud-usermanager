@@ -151,8 +151,8 @@ describe('renameGroup', () => {
     expect(result).toMatchObject({ ok: false, messageId: 'gruppe_umbenennen_fehlgeschlagen' });
   });
 
-  it('OCS-Code 404 -> messageId gruppe_existiert_nicht', async () => {
-    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(404, null) }));
+  it('OCS-Code 998 -> messageId gruppe_existiert_nicht', async () => {
+    const fetchImpl = vi.fn(async () => fakeResponse({ body: envelope(998, null) }));
     const result = await renameGroup(makeClient(fetchImpl), 'weg', 'Neu');
     expect(result).toMatchObject({ ok: false, messageId: 'gruppe_existiert_nicht' });
   });

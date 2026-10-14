@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MESSAGES } from '../src/shared/messages.js';
 
 const handlers = new Map();
@@ -650,6 +650,45 @@ describe('groups.delete', () => {
   });
 });
 
+// S23 Abnahme 4: Nicht-String-groupid im verbundenen Zustand ist ein Validierungsfehler, kein Wurf.
+describe('groups.* - S23 Nicht-String-groupid im verbundenen Zustand', () => {
+  beforeEach(async () => {
+    handlers.clear();
+    session.resetForTests();
+    vi.clearAllMocks();
+    net.fetch.mockResolvedValue(okResponse());
+    readFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const { registerIpcHandlers } = await import('../src/main/ipc.js');
+    registerIpcHandlers();
+    await handlers.get('connection.connect')(null, { baseUrl: 'https://host', adminUser: 'admin', appPassword: 'geheim' });
+    net.fetch.mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  for (const channel of ['groups.rename', 'groups.delete', 'groups.members']) {
+    for (const groupid of [42, null, '  ']) {
+      it(`${channel} mit groupid ${JSON.stringify(groupid)} -> gruppenname_leer, kein console.error, kein Request`, async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const result = await handlers.get(channel)(null, { groupid, displayname: 'Neu' });
+        expect(result).toMatchObject({ ok: false, messageId: 'gruppenname_leer', message: MESSAGES.gruppenname_leer });
+        expect(errorSpy).not.toHaveBeenCalled();
+        expect(net.fetch).not.toHaveBeenCalled();
+      });
+    }
+  }
+
+  it('groups.create mit groupid 42 -> gruppe_anlegen_fehlgeschlagen, kein console.error, kein Request', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await handlers.get('groups.create')(null, { groupid: 42 });
+    expect(result).toMatchObject({ ok: false, messageId: 'gruppe_anlegen_fehlgeschlagen' });
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(net.fetch).not.toHaveBeenCalled();
+  });
+});
+
 // S18: groups.members und server.freeSpace.
 describe('groups.members / server.freeSpace', () => {
   beforeEach(async () => {
@@ -830,7 +869,6 @@ describe('actions.run — webContents.send wirft / Catch-alls loggen', () => {
     expect(result.summary).toEqual({ ok: 1, fehler: 0, nichtAusgefuehrt: 0, teilweise: 0 });
     expect(result.results[0].status).toBe('ok');
     expect(errorSpy).toHaveBeenCalledWith('actions.onProgress send failed:', expect.stringContaining('Object has been destroyed'));
-    errorSpy.mockRestore();
   });
 
   it('äußerer Catch von actions.run loggt die Exception ohne Argumente und Passwort', async () => {
@@ -843,7 +881,6 @@ describe('actions.run — webContents.send wirft / Catch-alls loggen', () => {
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('geheim');
     expect(JSON.stringify(result)).not.toContain('geheim');
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('TopSecretPw');
-    errorSpy.mockRestore();
   });
 
   it('users.list und groups.list lösen bei einer Exception auf und loggen', async () => {
@@ -856,6 +893,5 @@ describe('actions.run — webContents.send wirft / Catch-alls loggen', () => {
     expect(groups).toMatchObject({ ok: false, messageId: 'unerwarteter_serverfehler' });
     expect(errorSpy).toHaveBeenCalledWith('users.list failed:', 'Error: kaputt');
     expect(errorSpy).toHaveBeenCalledWith('groups.list failed:', 'Error: kaputt');
-    errorSpy.mockRestore();
   });
 });

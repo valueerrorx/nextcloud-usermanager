@@ -91,6 +91,10 @@ describe('jobToast', () => {
   it('Erfolg ohne Fehler', () => {
     expect(jobToast('Löschen', { ok: 5, fehler: 0, teilweise: 0 })).toEqual({ kind: 'success', text: 'Löschen: 5 OK' });
   });
+  it('nur nicht ausgeführte Items: kein Erfolgs-Toast', () => {
+    expect(jobToast('Gruppe entfernen', { ok: 0, fehler: 0, teilweise: 0, nichtAusgefuehrt: 3 }))
+      .toEqual({ kind: 'info', text: 'Gruppe entfernen: 3 nicht ausgeführt' });
+  });
   it('Fehler inklusive teilweise zählen als fehlgeschlagen', () => {
     expect(jobToast('Löschen', { ok: 5, fehler: 1, teilweise: 1 })).toEqual({ kind: 'error', text: 'Löschen: 5 OK, 2 fehlgeschlagen' });
   });

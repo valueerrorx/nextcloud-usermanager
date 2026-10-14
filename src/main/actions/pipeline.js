@@ -1,14 +1,14 @@
 // Action pipeline: runJob (ARCHITECTURE §5, S07-batch-kern.md A3). shouldStop is injected, same
 // as ocs/client.js's credentials - this module never reads the session singleton.
 import { runPool } from '../../shared/pool.js';
-import { MESSAGES } from '../../shared/messages.js';
+import { MESSAGES, teilfehlerSchritt } from '../../shared/messages.js';
 import { getSteps } from './operations.js';
 
 // Default wording for a failed non-first step, same sentence S07 already shipped for
 // user.update's email step. A step can override it (S11: user.create's group steps name the
 // group, not "gruppe-x", and use "zugewiesen" instead of "gesetzt").
 function teilfehlerGrund(step) {
-  return step.teilfehlerGrund ?? `${step.name} konnte nicht gesetzt werden`;
+  return step.teilfehlerGrund ?? teilfehlerSchritt(step.name);
 }
 
 // Server text reaches the result only for OCS 107 on a password-setting step; else the messageId.
@@ -57,7 +57,7 @@ async function runIndependent(client, steps) {
 
 async function runSteps(client, steps) {
   if (steps.length === 0) {
-    return { status: 'ok', grund: null, httpStatus: null, ocsCode: null };
+    return { status: 'nicht ausgeführt', grund: 'nichts_auszufuehren', httpStatus: null, ocsCode: null };
   }
   if (steps.every((step) => step.independent)) return runIndependent(client, steps);
 
@@ -89,7 +89,7 @@ async function runSteps(client, steps) {
   }
 
   if (failure) {
-    // 'teilweise': grund names which sub-step failed (A3 example: "email konnte nicht gesetzt werden").
+    // 'teilweise': grund names which sub-step failed (A3, text from messages.js).
     return {
       status: 'teilweise',
       grund: teilfehlerGrund(failure.step),

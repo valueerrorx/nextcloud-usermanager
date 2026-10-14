@@ -2,7 +2,7 @@
 // resolves to the exact German text pinned in ARCHITECTURE.md §6.2.
 // No allowlist of unused ids (REVIEW-NOTES [S01]).
 import { describe, it, expect, vi } from 'vitest';
-import { MESSAGES } from '../src/shared/messages.js';
+import { MESSAGES, teilfehlerGruppeZuweisen, teilfehlerGruppeEntfernen, teilfehlerSchritt } from '../src/shared/messages.js';
 import { validateUserid } from '../src/shared/username.js';
 import { createOcsClient } from '../src/main/ocs/client.js';
 
@@ -100,4 +100,19 @@ describe('messages.js — die 9 neuen S03-OCS-IDs über request treiben (Vorwär
       expect(result.message).toBe(MESSAGES[messageId]);
     });
   }
+});
+
+describe('messages.js - S23 Teilfehler-Sätze und nichts_auszufuehren', () => {
+  it('teilfehlerGruppeZuweisen', () => {
+    expect(teilfehlerGruppeZuweisen('x')).toBe('Gruppe "x" konnte nicht zugewiesen werden');
+  });
+  it('teilfehlerGruppeEntfernen', () => {
+    expect(teilfehlerGruppeEntfernen('x')).toBe('Entfernen aus Gruppe "x" fehlgeschlagen');
+  });
+  it('teilfehlerSchritt', () => {
+    expect(teilfehlerSchritt('email')).toBe('email konnte nicht gesetzt werden');
+  });
+  it('MESSAGES.nichts_auszufuehren', () => {
+    expect(MESSAGES.nichts_auszufuehren).toBe('Für diesen Benutzer gab es nichts auszuführen.');
+  });
 });

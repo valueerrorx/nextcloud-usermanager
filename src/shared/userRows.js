@@ -86,6 +86,9 @@ export function logoutState(jobLaeuft) {
 // Toast after a finished job, e.g. "Löschen: 5 OK, 1 fehlgeschlagen"; partial results count as failed.
 export function jobToast(label, summary) {
   const fehler = summary.fehler + summary.teilweise;
+  if (fehler === 0 && summary.ok === 0 && summary.nichtAusgefuehrt > 0) {
+    return { kind: 'info', text: `${label}: ${summary.nichtAusgefuehrt} nicht ausgeführt` };
+  }
   const text = fehler > 0 ? `${label}: ${summary.ok} OK, ${fehler} fehlgeschlagen` : `${label}: ${summary.ok} OK`;
   return { kind: fehler > 0 ? 'error' : 'success', text };
 }
