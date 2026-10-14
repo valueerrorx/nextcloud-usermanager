@@ -371,15 +371,12 @@ async function onAnlegen() {
         <label
           class="form-label"
           for="import-quota"
-        >Kontingent (optional)</label>
+        >Kontingent</label>
         <select
           id="import-quota"
           v-model="importQuota"
           class="form-select"
         >
-          <option :value="null">
-            Kein Kontingent
-          </option>
           <option
             v-for="preset in QUOTA_PRESETS"
             :key="preset.id"

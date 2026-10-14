@@ -99,23 +99,27 @@ describe('formatBytes', () => {
 });
 
 describe('QUOTA_PRESETS / formatQuotaForApi — DECISIONS "Kontingent-Eingabe"', () => {
-  it('enthält genau die sechs Presets 1/2/5/10/20 GB und unbegrenzt', () => {
-    expect(QUOTA_PRESETS.map((p) => p.id)).toEqual(['1gb', '2gb', '5gb', '10gb', '20gb', 'unbegrenzt']);
+  it('enthält Standard als erstes Preset, dann 1/2/5/10/20 GB und unbegrenzt', () => {
+    expect(QUOTA_PRESETS.map((p) => p.id)).toEqual(['standard', '1gb', '2gb', '5gb', '10gb', '20gb', 'unbegrenzt']);
   });
 
   it('jedes begrenzte Preset benutzt die GiB-Basis 1073741824', () => {
     const erwartet = { '1gb': 1073741824, '2gb': 2147483648, '5gb': 5368709120, '10gb': 10737418240, '20gb': 21474836480 };
     for (const preset of QUOTA_PRESETS) {
-      if (preset.id === 'unbegrenzt') continue;
+      if (preset.id === 'unbegrenzt' || preset.id === 'standard') continue;
       expect(preset.bytes).toBe(erwartet[preset.id]);
     }
   });
 
   it('formatQuotaForApi gibt für jedes begrenzte Preset die Bytes als String', () => {
     for (const preset of QUOTA_PRESETS) {
-      if (preset.bytes === null) continue;
+      if (preset.bytes === null || preset.id === 'standard') continue;
       expect(formatQuotaForApi(preset)).toBe(String(preset.bytes));
     }
+  });
+
+  it('formatQuotaForApi(standard) -> "default"', () => {
+    expect(formatQuotaForApi(QUOTA_PRESETS.find((p) => p.id === 'standard'))).toBe('default');
   });
 
   it('formatQuotaForApi(unbegrenzt) -> "none"', () => {

@@ -142,7 +142,7 @@ const formOffen = ref(false);
 const neuUserid = ref('');
 const neuAnzeigename = ref('');
 const neuPasswort = ref('');
-const neuQuota = ref(null);
+const neuQuota = ref('standard');
 const neuGruppen = ref([]);
 const anlegenMeldung = ref(null); // { erfolg, text } | null
 const anlegenLaeuft = ref(false);
@@ -156,7 +156,7 @@ function formularLeeren() {
   neuUserid.value = '';
   neuAnzeigename.value = '';
   neuPasswort.value = '';
-  neuQuota.value = null;
+  neuQuota.value = 'standard';
   neuGruppen.value = [];
 }
 
@@ -337,9 +337,6 @@ onUnmounted(() => {
             v-model="neuQuota"
             class="form-select"
           >
-            <option :value="null">
-              Server-Standard
-            </option>
             <option
               v-for="preset in QUOTA_PRESETS"
               :key="preset.id"

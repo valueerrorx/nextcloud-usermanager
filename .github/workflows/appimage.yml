@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,59 +19,69 @@ jobs:
       - name: Detect version increase
         id: version
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           new=$(jq -r .version package.json)
           before="${{ github.event.before }}"
-          build=false
+          remote_old=""
           if [ "$before" != "0000000000000000000000000000000000000000" ] \
             && git cat-file -e "${before}:package.json" 2>/dev/null; then
-            old=$(git show "${before}:package.json" | jq -r .version)
-            lowest=$(printf '%s\n%s\n' "$old" "$new" | sort -V | head -n1)
-            if [ "$new" != "$old" ] && [ "$lowest" = "$old" ]; then
-              build=true
-            fi
-            echo "Previous version: $old"
+            remote_old=$(git show "${before}:package.json" | jq -r .version)
           fi
-          echo "Current version: $new"
-          echo "build=$build" >> "$GITHUB_OUTPUT"
+          # Newest ancestor whose version differs from HEAD. Needed when the branch arrives in one push.
+          history_old=""
+          while read -r commit; do
+            candidate=$(git show "${commit}:package.json" 2>/dev/null | jq -r .version || true)
+            if [ -n "$candidate" ] && [ "$candidate" != "$new" ]; then
+              history_old=$candidate
+              break
+            fi
+          done < <(git rev-list HEAD)
+          version_gt() {
+            [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+          }
+          publish=false
+          if [ -n "$remote_old" ] && version_gt "$new" "$remote_old"; then
+            publish=true
+            echo "Version raised on the remote: $remote_old -> $new"
+          elif [ -n "$history_old" ] && version_gt "$new" "$history_old" \
+            && ! gh release view "v${new}" >/dev/null 2>&1; then
+            publish=true
+            echo "Version $new is higher than $history_old and has no GitHub release yet"
+          else
+            echo "No version increase for $new. Skipping build and release."
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "version=$new" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
-        if: steps.version.outputs.build == 'true'
+        if: steps.version.outputs.publish == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - name: Install
-        if: steps.version.outputs.build == 'true'
+        if: steps.version.outputs.publish == 'true'
         run: npm ci
 
       - name: Build AppImage
-        if: steps.version.outputs.build == 'true'
+        if: steps.version.outputs.publish == 'true'
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: npm run build
 
-      - name: Upload AppImage
-        if: steps.version.outputs.build == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextcloud-usermanager-${{ steps.version.outputs.version }}
-          path: release/*.AppImage
-          if-no-files-found: error
-
-      - name: Publish release
-        if: steps.version.outputs.build == 'true'
+      - name: Create GitHub Release
+        if: steps.version.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           tag="v${VERSION}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" release/*.AppImage --clobber
-          else
-            gh release create "$tag" release/*.AppImage --title "$tag" --notes "AppImage ${tag}."
-          fi
+          gh release create "$tag" release/*.AppImage \
+            --target "${GITHUB_SHA}" \
+            --title "$tag" \
+            --notes "AppImage ${tag}."

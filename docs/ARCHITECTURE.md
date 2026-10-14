@@ -71,6 +71,7 @@ src/shared/                       PURE MODULE: kein import von node:*, electron,
                                   Username-Liste (ein Name je Zeile, optionaler Header)
   importPlan.js                   Stufen 10-18 aus §6: Zeilen -> Vorschauzeilen mit Status
   quota.js                        defensiver Quota-Reader + Presets + formatQuotaForApi + formatBytes
+                                  (Preset `standard` -> API-Wert `default`, erstes Element, Vorbelegung bei Import/Anlegen)
   pool.js                         runPool(items, worker, { concurrency, shouldStop })
   dryRun.js                       planActions(): Änderungen / keine Änderung / ausgeschlossen
   time.js                         formatTimestamp (S13) — eine Stelle statt drei Kopien

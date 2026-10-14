@@ -80,7 +80,7 @@ async function frageParams(action, user, userids) {
         title: ACTION_LABELS[action],
         input: 'select',
         inputOptions: optionenObjekt(QUOTA_PRESETS.map((p) => ({ value: p.id, label: p.label }))),
-        inputValue: QUOTA_PRESETS[0].id,
+        inputValue: '1gb',
         showCancelButton: true,
         confirmButtonText: 'Vorschau',
         cancelButtonText: 'Abbrechen',

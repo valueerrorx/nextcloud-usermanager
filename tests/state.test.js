@@ -57,7 +57,7 @@ describe('resetOnConnect', () => {
     expect(importPlanRows.value).toEqual([]);
     expect(importSummary.value).toBeNull();
     expect(importGruppen.value).toEqual([]);
-    expect(importQuota.value).toBeNull();
+    expect(importQuota.value).toBe('standard');
     expect(importFehler.value).toBeNull();
   });
 });

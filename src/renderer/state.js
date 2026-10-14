@@ -88,7 +88,7 @@ export const importPlanRows = ref([]); // PreviewRow[] aus buildImportPlan
 export const importSummary = ref(null); // { neu, kollisionAufgeloest, fehler } | null
 export const importOrder = ref('givenFirst'); // 'givenFirst' | 'surnameFirst'
 export const importGruppen = ref([]); // ausgewählte Zielgruppen, groupId-Strings
-export const importQuota = ref(null); // QUOTA_PRESETS-id | null, Kontingent für neue User
+export const importQuota = ref('standard'); // QUOTA_PRESETS-id, Kontingent für neue User
 export const importFehler = ref(null); // deutscher Dateifehlertext, nur bei ungültiger Datei gesetzt
 
 // Ein erfolgreicher (re)connect kann eine ANDERE Instanz sein (REVIEW-NOTES [S13] CRITICAL: ohne
@@ -119,6 +119,6 @@ export function resetOnConnect() {
   importPlanRows.value = [];
   importSummary.value = null;
   importGruppen.value = [];
-  importQuota.value = null;
+  importQuota.value = 'standard';
   importFehler.value = null;
 }

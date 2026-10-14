@@ -31,12 +31,14 @@ function quotaLabel(quota) {
   return quota.kind === 'unlimited' ? 'unbegrenzt' : formatBytes(quota.limitBytes);
 }
 
-// value is the API-ready string from formatQuotaForApi() (A2): 'none' or bytes as a string.
+// value is the API-ready string from formatQuotaForApi() (A2): 'none', 'default' or bytes as a string.
 function quotaLabelFromValue(value) {
+  if (value === 'default') return 'Standard-Kontingent (Server)';
   return value === 'none' ? 'unbegrenzt' : formatBytes(Number(value));
 }
 
 function isQuotaNoOp(user, value) {
+  if (value === 'default') return false;
   if (value === 'none') return user.quota.kind === 'unlimited';
   return user.quota.kind === 'limited' && String(user.quota.limitBytes) === value;
 }

@@ -637,3 +637,13 @@ der Nachfolgefall steht als #113a.
      der Weboberfläche vorher löschen). **Erwartung:** Gruppe bleibt, Meldung "Gruppe nicht gelöscht,
      weil n Benutzer nicht gelöscht werden konnten"; Fortschritt und Ergebnis-CSV wie bei Batch.
 221. **Tun:** die Gruppe `admin` betrachten. **Erwartung:** Löschen bleibt deaktiviert.
+
+## S21 - Standard-Kontingent
+
+221a. **Tun:** CSV-Import mit unveränderter Kontingent-Auswahl ("Standard-Kontingent (Server)") ausführen.
+      **Erwartung:** die angelegten User haben in Nextcloud das Standard-Kontingent des Servers.
+221b. **Tun:** einen User über "Benutzer anlegen" mit unveränderter Kontingent-Auswahl anlegen.
+      **Erwartung:** der User hat in Nextcloud das Standard-Kontingent des Servers.
+221c. **Tun:** mehrere User auswählen, "Kontingent setzen" -> "Standard-Kontingent (Server)". **Erwartung:**
+      Vorschau führt alle aus (Label "Standard-Kontingent (Server)"), danach gilt in Nextcloud das Server-Standardkontingent.
+221d. **Tun:** Dialog "Kontingent setzen" öffnen. **Erwartung:** vorbelegt ist "1 GB", "Standard-Kontingent (Server)" steht als erster Eintrag in der Liste.
