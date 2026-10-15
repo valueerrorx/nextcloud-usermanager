@@ -61,21 +61,11 @@ body {
 }
 
 .sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   padding: 1rem 1rem 0.875rem;
   border-bottom: 1px solid var(--sidebar-border);
   font-weight: 700;
   font-size: 0.95rem;
   color: var(--text-primary);
-}
-
-.sidebar-brand-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  flex-shrink: 0;
 }
 
 .nav-link-custom {

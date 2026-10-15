@@ -158,3 +158,4 @@ Eine Zeile pro Entscheidung. Quelle der Wahrheit für Architekt, Coder und Teste
 | 2026-10-14 | Technisches Detail in Fehlerdialogen (Nutzerentscheidung) | Renderer-Dialoge bei unerwarteten Fehlern zeigen die deutsche Meldung plus klein im Fuß das Detail aus `describeError` (Renderer hält keine Secrets) |
 | 2026-10-14 | Kein Exception-Text über IPC (Tech-Lead, Folge von CLAUDE.md Secrets-Regel) | Main-Prozess gibt bei unerwarteten Fehlern nur `messageId`/`MESSAGES`-Text zurück, das Detail bleibt im Main-Log. Der Fuß-Detail-Text im Renderer stammt daher nur aus Renderer-Fehlern |
 | 2026-10-15 | App-Icon im UI (Nutzerentscheidung) | Nur in der Sidebar: 28px-Icon links neben dem App-Namen wie im Microsoft365-Manager. Nicht in About-Karte oder Verbindungs-Popup |
+| 2026-10-15 | App-Icon im UI (Nutzerentscheidung, ersetzt Sidebar-Platzierung vom selben Tag) | Nicht in der Sidebar. Im Dashboard oben rechts in der Kopfzeile, etwas größer (48px) |

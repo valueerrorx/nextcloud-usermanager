@@ -21,6 +21,7 @@ import {
   usersUebersprungen,
 } from '../state.js';
 import StateBlock from '../components/StateBlock.vue';
+import appIcon from '../../../icons/128x128.png?inline';
 
 async function ladeAlles() {
   await Promise.all([ladeUserliste(), ladeGruppen(), ladeFreiplatz()]);
@@ -63,20 +64,27 @@ async function nextcloudOeffnen() {
 </script>
 
 <template>
-  <div class="page-header">
-    <h1 class="page-title">
-      <i
-        class="bi bi-speedometer2"
-        aria-hidden="true"
-      />
-      Dashboard
-    </h1>
-    <p
-      v-if="usersFetchedAt"
-      class="page-subtitle"
+  <div class="page-header d-flex align-items-start justify-content-between gap-2">
+    <div>
+      <h1 class="page-title">
+        <i
+          class="bi bi-speedometer2"
+          aria-hidden="true"
+        />
+        Dashboard
+      </h1>
+      <p
+        v-if="usersFetchedAt"
+        class="page-subtitle"
+      >
+        Stand: {{ formatTimestamp(usersFetchedAt) }}
+      </p>
+    </div>
+    <img
+      class="dashboard-app-icon"
+      :src="appIcon"
+      alt=""
     >
-      Stand: {{ formatTimestamp(usersFetchedAt) }}
-    </p>
   </div>
 
   <p
@@ -309,6 +317,13 @@ async function nextcloudOeffnen() {
 </template>
 
 <style scoped>
+.dashboard-app-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
 .notice {
   color: var(--text-secondary);
   margin: 0.5rem 0 0;

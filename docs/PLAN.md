@@ -43,7 +43,8 @@ größte Korrektheitsverpflichtung des Ziels ist und vollständig spezifiziert v
 - [x] S25 CI + Fenstergröße | acceptance: appimage.yml SHA-gepinnt, `persist-credentials: false`, Publish-Job mit `contents: write`, Test+Lint-Gate, `--target`, `concurrency`; Startfenster auf Arbeitsfläche geklemmt | status: **done** (1058 Tests; Build-Job nur lesend mit Lint+Test-Gate, Release-Job schreibend ohne Checkout/npm, Actions SHA-gepinnt; Fenster auf Arbeitsfläche geklemmt)
 - [x] S26 Packaging-Guard-Test | acceptance: siehe docs/steps/S26-packaging-guard.md | status: **done** (1080 Tests; Test wird rot, wenn Main/Preload etwas importiert, das electron-builder nicht packt; 2 Review-Runden wegen Regex-Lücken bei zusammengesetzten Pfaden)
 - [x] S27 App-Icon | acceptance: siehe docs/steps/S27-app-icon.md | status: **done** (1083 Tests; AppImage-Icons byte-gleich zu `icons/`, Fenster-Icon `icons/256x256.png` im asar)
-- [x] S28 App-Icon in der Sidebar | acceptance: siehe docs/steps/S28-icon-sidebar.md | status: **done** (1083 Tests; 28px-Icon links vom App-Namen wie M365, als data-URL inlined; Sichtprüfung beim Nutzer)
+- [x] S28 App-Icon in der Sidebar | acceptance: siehe docs/steps/S28-icon-sidebar.md | status: **done, durch S29 ersetzt** (Nutzer: Sidebar-Platzierung gefällt nicht)
+- [x] S29 App-Icon ins Dashboard | acceptance: siehe docs/steps/S29-icon-dashboard.md | status: **done** (1083 Tests; Sidebar-Icon entfernt, 48px oben rechts im Dashboard, 128px-PNG per `?inline` als data-URL; Sichtprüfung beim Nutzer)
 
 ## Hinweise zur Umsetzung
 
