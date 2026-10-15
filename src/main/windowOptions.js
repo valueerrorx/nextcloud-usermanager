@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 const preloadPath = path.join(import.meta.dirname, '..', 'preload', 'index.cjs');
+const iconPath = path.join(import.meta.dirname, '..', '..', 'icons', '256x256.png');
 
 // Security flags are fixed, never disabled (REVIEW-NOTES 10, ARCHITECTURE §9).
 export const BROWSER_WINDOW_OPTIONS = {
@@ -8,6 +9,7 @@ export const BROWSER_WINDOW_OPTIONS = {
   height: 1000,
   backgroundColor: '#0d1117',
   show: false,
+  icon: iconPath,
   webPreferences: {
     preload: preloadPath,
     contextIsolation: true,

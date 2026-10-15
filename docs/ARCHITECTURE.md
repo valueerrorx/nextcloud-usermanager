@@ -26,7 +26,9 @@ Neue Laufzeit-Abhängigkeiten gegenüber `CLAUDE.md`: **keine**.
 package.json                      "type": "module"; scripts: dev, test, lint, build
                                   (Namen exakt wie CLAUDE.md); devDependency electron >= 28
 vite.config.js                    Renderer-Build, root = src/renderer, out = dist/renderer
-electron-builder.yml              Linux-Target (AppImage) für npm run build
+electron-builder.yml              Linux-Target (AppImage) für npm run build; linux.icon = icons/
+icons/                            App-Icon vom Nutzer (<N>x<N>.png, ico, icns, svg); zur Laufzeit
+                                  nur 256x256.png (Fenster-Icon), Rest Build-Eingabe
 eslint.config.js                  Flat config, ESM + Override sourceType commonjs für
                                   src/preload/index.cjs
 vitest.config.js                  Umgebung node, Tests aus tests/

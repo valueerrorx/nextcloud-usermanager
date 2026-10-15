@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { BROWSER_WINDOW_OPTIONS, applyNavigationGuards, fitWindowSize } from '../src/main/windowOptions.js';
 
@@ -17,6 +18,15 @@ describe('BROWSER_WINDOW_OPTIONS', () => {
 
   it('der Preload-Pfad löst tatsächlich auf eine existierende Datei auf', () => {
     expect(existsSync(BROWSER_WINDOW_OPTIONS.webPreferences.preload)).toBe(true);
+  });
+
+  it('hat ein absolutes, existierendes PNG als Icon', () => {
+    const icon = BROWSER_WINDOW_OPTIONS.icon;
+    expect(typeof icon).toBe('string');
+    expect(path.isAbsolute(icon)).toBe(true);
+    expect(existsSync(icon)).toBe(true);
+    const head = readFileSync(icon).subarray(0, 8);
+    expect([...head]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   });
 
   it('ist dunkel hinterlegt', () => {

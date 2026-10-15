@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="cl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4aa8ff"/>
+      <stop offset="1" stop-color="#0b5cc4"/>
+    </linearGradient>
+  </defs>
+  <!-- background -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="#f2f6fb"/>
+  <!-- classic cloud -->
+  <path fill="url(#cl)" d="M150 380a86 86 0 0 1-8-171 112 112 0 0 1 214-28 92 92 0 0 1 14 199z"/>
+  <!-- user -->
+  <g fill="#fff">
+    <circle cx="256" cy="252" r="40"/>
+    <path d="M182 370a74 74 0 0 1 148 0z"/>
+  </g>
+  <!-- settings sliders badge -->
+  <rect x="318" y="318" width="150" height="150" rx="40" fill="#1e293b" stroke="#f2f6fb" stroke-width="12"/>
+  <g stroke="#fff" stroke-width="10" stroke-linecap="round">
+    <path d="M348 356h90M348 393h90M348 430h90"/>
+  </g>
+  <g fill="#38bdf8">
+    <circle cx="372" cy="356" r="11"/>
+    <circle cx="414" cy="393" r="11"/>
+    <circle cx="386" cy="430" r="11"/>
+  </g>
+</svg>

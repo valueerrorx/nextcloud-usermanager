@@ -42,6 +42,7 @@ größte Korrektheitsverpflichtung des Ziels ist und vollständig spezifiziert v
 - [x] S24 Systeminfo absichern | acceptance: `fetchText` mit `redirect: 'manual'` (nichts verfolgt), Header- und Timeout-Tests, geloggter Catch; Scraper-Fehler -> Hinweis; Modul gesplittet (Main-Parser vs. Renderer-Format); ARCHITECTURE aktualisiert (freeSpace, groups.list); Details docs/steps/S24-systeminfo.md | status: **done** (1048 Tests; fetchText folgt keinem Redirect mehr, Scraper als reines Main-Modul, 2 Review-Runden wegen Doku-Drift)
 - [x] S25 CI + Fenstergröße | acceptance: appimage.yml SHA-gepinnt, `persist-credentials: false`, Publish-Job mit `contents: write`, Test+Lint-Gate, `--target`, `concurrency`; Startfenster auf Arbeitsfläche geklemmt | status: **done** (1058 Tests; Build-Job nur lesend mit Lint+Test-Gate, Release-Job schreibend ohne Checkout/npm, Actions SHA-gepinnt; Fenster auf Arbeitsfläche geklemmt)
 - [x] S26 Packaging-Guard-Test | acceptance: siehe docs/steps/S26-packaging-guard.md | status: **done** (1080 Tests; Test wird rot, wenn Main/Preload etwas importiert, das electron-builder nicht packt; 2 Review-Runden wegen Regex-Lücken bei zusammengesetzten Pfaden)
+- [x] S27 App-Icon | acceptance: siehe docs/steps/S27-app-icon.md | status: **done** (1083 Tests; AppImage-Icons byte-gleich zu `icons/`, Fenster-Icon `icons/256x256.png` im asar)
 
 ## Hinweise zur Umsetzung
 
@@ -78,6 +79,8 @@ Vier API-Fakten sind unverifiziert; der Entwurf ist darauf defensiv ausgelegt. K
 - Gruppen-Anzeigename ändern, Subadmin-Verwaltung
 - Rollback für teilweise angewandte Importe
 - S26-Rest (Review-Minors): Inline-Fälle für Bare-Specifier-Regel und Include+Exclude-Treffer, `package.json` in `beforeAll`, eingerückte Fortsetzungszeile in `files:`
+- `desktopName` in package.json (Build-Warnung; Taskleisten-Icon unter Wayland)
+- S27-Rest: `linux:`-Zeilencheck in packaging.test.js stolpert über `#`-Kommentar in Spalte 0
 - Paginierung und serverseitige Suche (erst ab deutlich über 5000 Usern nötig)
 
 ## Abnahme gegen GOAL.md (2026-10-09)

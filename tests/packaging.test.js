@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BROWSER_WINDOW_OPTIONS } from '../src/main/windowOptions.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (abs) => path.relative(ROOT, abs).split(path.sep).join('/');
@@ -136,6 +137,24 @@ describe('packaging guard', () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+});
+
+describe('app icon packaging', () => {
+  it('packs the runtime window icon and does not exclude it', () => {
+    const file = rel(BROWSER_WINDOW_OPTIONS.icon);
+    expect(file.startsWith('..')).toBe(false);
+    const { covered, excluded } = isCovered(files, file);
+    expect({ file, covered, excluded }).toEqual({ file, covered: true, excluded: false });
+  });
+
+  it('sets linux.icon to icons in electron-builder.yml', () => {
+    const lines = fs.readFileSync(path.join(ROOT, 'electron-builder.yml'), 'utf8').split(/\r?\n/);
+    const start = lines.findIndex((l) => /^linux:\s*$/.test(l));
+    expect(start).toBeGreaterThanOrEqual(0);
+    const block = [];
+    for (let i = start + 1; i < lines.length && !/^\S/.test(lines[i]); i++) block.push(lines[i]);
+    expect(block.some((l) => /^ {2}icon:\s*icons\s*$/.test(l))).toBe(true);
   });
 });
 
