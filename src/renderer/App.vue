@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import Swal from 'sweetalert2';
+import appIcon from '../../icons/64x64.png';
 import { MESSAGES } from '../shared/messages.js';
 import { uiPhase } from '../shared/connectionUi.js';
 import { startup } from './connectFlow.js';
@@ -105,7 +106,12 @@ onUnmounted(() => {
   <div class="app-layout">
     <nav class="app-sidebar">
       <div class="sidebar-brand">
-        Nextcloud User Manager
+        <img
+          class="sidebar-brand-icon"
+          :src="appIcon"
+          alt=""
+        >
+        <span>Nextcloud User Manager</span>
       </div>
       <button
         v-for="(view, key) in views"
