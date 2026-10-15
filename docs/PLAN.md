@@ -41,6 +41,7 @@ größte Korrektheitsverpflichtung des Ziels ist und vollständig spezifiziert v
 - [x] S23 Batch/IPC-Robustheit | acceptance: leere Gruppenschritte -> nicht ausgeführt statt ok (0 Requests); `groupid` Typprüfung; deutscher Satz in operations.js -> messageId; 404/998 beim Gruppen-Umbenennen verifiziert | status: **done** (1029 Tests; kein „ok“ ohne Request, Gruppen-IDs validiert, Rename-404 war unerreichbar -> 998; Info-Toast statt grünem „0 OK“)
 - [x] S24 Systeminfo absichern | acceptance: `fetchText` mit `redirect: 'manual'` (nichts verfolgt), Header- und Timeout-Tests, geloggter Catch; Scraper-Fehler -> Hinweis; Modul gesplittet (Main-Parser vs. Renderer-Format); ARCHITECTURE aktualisiert (freeSpace, groups.list); Details docs/steps/S24-systeminfo.md | status: **done** (1048 Tests; fetchText folgt keinem Redirect mehr, Scraper als reines Main-Modul, 2 Review-Runden wegen Doku-Drift)
 - [x] S25 CI + Fenstergröße | acceptance: appimage.yml SHA-gepinnt, `persist-credentials: false`, Publish-Job mit `contents: write`, Test+Lint-Gate, `--target`, `concurrency`; Startfenster auf Arbeitsfläche geklemmt | status: **done** (1058 Tests; Build-Job nur lesend mit Lint+Test-Gate, Release-Job schreibend ohne Checkout/npm, Actions SHA-gepinnt; Fenster auf Arbeitsfläche geklemmt)
+- [x] S26 Packaging-Guard-Test | acceptance: siehe docs/steps/S26-packaging-guard.md | status: **done** (1080 Tests; Test wird rot, wenn Main/Preload etwas importiert, das electron-builder nicht packt; 2 Review-Runden wegen Regex-Lücken bei zusammengesetzten Pfaden)
 
 ## Hinweise zur Umsetzung
 
@@ -76,6 +77,7 @@ Vier API-Fakten sind unverifiziert; der Entwurf ist darauf defensiv ausgelegt. K
 - Mehrere gespeicherte Server-Profile (schon in GOAL als Nicht-Ziel)
 - Gruppen-Anzeigename ändern, Subadmin-Verwaltung
 - Rollback für teilweise angewandte Importe
+- S26-Rest (Review-Minors): Inline-Fälle für Bare-Specifier-Regel und Include+Exclude-Treffer, `package.json` in `beforeAll`, eingerückte Fortsetzungszeile in `files:`
 - Paginierung und serverseitige Suche (erst ab deutlich über 5000 Usern nötig)
 
 ## Abnahme gegen GOAL.md (2026-10-09)
@@ -98,3 +100,7 @@ Commits `d8064d3` und `ad5983b` („build first version“) entstanden außerhal
 Praxisfehler vom Nutzer: CSV-Passwort `1234` funktionierte nicht, weil der Code `<Prefix>1234!` setzte -> S20.
 
 Nach S20-S25 (2026-10-14): alle Review-Befunde der Fremd-Commits behoben, alle Schritte done. Offen beim Nutzer: manuelle Abnahme (`docs/MANUAL-TEST.md`, neu u. a. #113a, #221a-f) und ein echter Release-Lauf des Workflows.
+
+## Stand 2026-10-15
+
+Nutzer-Commit `5de828d` („fix build“, außerhalb des Loops): `src/shared/**` fehlte in `electron-builder.yml` — das AppImage startete nicht, weil Main aus `src/shared` importiert. Fix korrekt, Version 0.1.4. Kein Test deckt diese Lücke ab -> Vorschlag S26 (Packaging-Guard-Test). Tests 1058 grün, Lint grün.

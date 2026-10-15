@@ -122,3 +122,5 @@ fanden (`budget >= 2` in S02, der `??`-Bug in S03). Nur die Breite wird reduzier
 - [S20] Jeder Commit baut für sich allein (keine Importe auf Dateien eines späteren Commits).
 - [S20] Keine zweite „Acceptance“-Testdatei neben der Modul-Testdatei: ein Modul, eine Testdatei (ARCHITECTURE §2/§11); Abnahmefälle gehören in die bestehende Datei, jeder Fall genau einmal — vor dem Verschieben prüfen, ob er dort schon existiert.
 - [S23/S24] Doku-Drift IPC-Tabelle (3x: S12, S23, S24): ändert sich Rückgabeform, Typ oder Fehlercode eines IPC-Kanals, wird die Zeile der IPC-Tabelle in ARCHITECTURE im selben Schritt angepasst; Coder grept nach dem Kanalnamen.
+- [5de828d] `electron-builder.yml` `files` muss jedes Verzeichnis enthalten, das Main/Preload zur Laufzeit importiert (fehlendes `src/shared/**` -> gepackte App startete nicht; Tests/Lint fingen das nicht).
+- [S26] Matcher/Regex eines Guard-Tests braucht eigene Inline-Positiv-/Negativfälle (Konkatenation, Whitespace vor `(`, Backtracking `\s*` + Lookahead); manuelle Mutationsbeweise allein sind nicht wiederholbar.
